@@ -9,15 +9,66 @@ import pandas as pd
 class SimulationConfig:
     """Configuration parameters for the simulation.
 
-    Attributes:
-        duration_years: Number of years to simulate
-        property_price: Initial price of the property ($)
-        down_payment_pct: Down payment as percentage of property price
-        mortgage_rate_annual: Annual mortgage interest rate (as percentage, e.g., 4.5 for 4.5%)
-        property_appreciation_annual: Annual property appreciation rate (as percentage)
-        equity_growth_annual: Annual equity portfolio growth rate (as percentage)
-        monthly_rent: Monthly rent payment ($)
-        rent_inflation_rate: Annual rent inflation rate (as percentage, default 3%)
+    Parameters
+    ----------
+    duration_years : int
+        Number of years to simulate.
+    property_price : float
+        Initial price of the property ($).
+    down_payment_pct : float
+        Down payment as percentage of property price.
+    mortgage_rate_annual : float
+        Annual mortgage interest rate (as percentage, e.g., 4.5 for 4.5%).
+    property_appreciation_annual : float
+        Annual property appreciation rate (as percentage).
+    equity_growth_annual : float
+        Annual equity portfolio growth rate (as percentage).
+    monthly_rent : float
+        Monthly rent payment ($).
+    rent_inflation_rate : float, optional
+        Annual rent inflation rate (as percentage). Default is 0.03 (3%).
+
+    Attributes
+    ----------
+    duration_years : int
+        Number of years to simulate.
+    property_price : float
+        Initial price of the property ($).
+    down_payment_pct : float
+        Down payment as percentage of property price.
+    mortgage_rate_annual : float
+        Annual mortgage interest rate (as percentage).
+    property_appreciation_annual : float
+        Annual property appreciation rate (as percentage).
+    equity_growth_annual : float
+        Annual equity portfolio growth rate (as percentage).
+    monthly_rent : float
+        Monthly rent payment ($).
+    rent_inflation_rate : float
+        Annual rent inflation rate (as percentage).
+
+    Raises
+    ------
+    ValueError
+        If duration_years is not positive, property_price is not positive,
+        down_payment_pct is not between 0 and 100, mortgage_rate_annual is
+        negative, or monthly_rent is not positive.
+
+    Examples
+    --------
+    >>> from simulator.models import SimulationConfig
+    >>> config = SimulationConfig(
+    ...     duration_years=30,
+    ...     property_price=500000,
+    ...     down_payment_pct=20,
+    ...     mortgage_rate_annual=4.5,
+    ...     property_appreciation_annual=3,
+    ...     equity_growth_annual=7,
+    ...     monthly_rent=2000
+    ... )
+    >>> config.duration_years
+    30
+
     """
 
     duration_years: int
@@ -30,7 +81,28 @@ class SimulationConfig:
     rent_inflation_rate: float = 0.03
 
     def __post_init__(self):
-        """Validate input parameters."""
+        """Validate input parameters.
+
+        Raises
+        ------
+        ValueError
+            If any parameter fails validation checks.
+
+        Examples
+        --------
+        >>> from simulator.models import SimulationConfig
+        >>> config = SimulationConfig(
+        ...     duration_years=30,
+        ...     property_price=500000,
+        ...     down_payment_pct=20,
+        ...     mortgage_rate_annual=4.5,
+        ...     property_appreciation_annual=3,
+        ...     equity_growth_annual=7,
+        ...     monthly_rent=2000
+        ... )
+        >>> # Validation happens automatically on instantiation
+
+        """
         if self.duration_years <= 0:
             raise ValueError("duration_years must be positive")
         if self.property_price <= 0:
@@ -47,21 +119,66 @@ class SimulationConfig:
 class SimulationResults:
     """Results from the simulation engine.
 
-    Attributes:
-        data: DataFrame containing time-series data with columns:
-            - Month: Month number (0 to duration_years * 12)
-            - Year: Year number (0 to duration_years)
-            - Home_Value: Property value over time
-            - Equity_Value: Investment portfolio value over time
-            - Mortgage_Balance: Remaining mortgage principal
-            - Outflow_Buy: Cumulative outflows for buying scenario
-            - Outflow_Rent: Cumulative outflows for renting scenario
-            - Net_Buy: Net value for buying (Home_Value - Outflow_Buy)
-            - Net_Rent: Net value for renting (Equity_Value - Outflow_Rent)
-        final_net_buy: Final net value for buying scenario
-        final_net_rent: Final net value for renting scenario
-        final_difference: Difference between buying and renting (Buy - Rent)
-        breakeven_year: Year when net values cross (None if they never cross)
+    Parameters
+    ----------
+    data : pd.DataFrame
+        DataFrame containing time-series data with columns:
+        - Month: Month number (0 to duration_years * 12)
+        - Year: Year number (0 to duration_years)
+        - Home_Value: Property value over time
+        - Equity_Value: Investment portfolio value over time
+        - Mortgage_Balance: Remaining mortgage principal
+        - Outflow_Buy: Cumulative outflows for buying scenario
+        - Outflow_Rent: Cumulative outflows for renting scenario
+        - Net_Buy: Net value for buying (Home_Value - Outflow_Buy)
+        - Net_Rent: Net value for renting (Equity_Value - Outflow_Rent)
+    final_net_buy : float
+        Final net value for buying scenario.
+    final_net_rent : float
+        Final net value for renting scenario.
+    final_difference : float
+        Difference between buying and renting (Buy - Rent).
+    breakeven_year : float | None
+        Year when net values cross (None if they never cross).
+
+    Attributes
+    ----------
+    data : pd.DataFrame
+        DataFrame containing time-series simulation data.
+    final_net_buy : float
+        Final net value for buying scenario.
+    final_net_rent : float
+        Final net value for renting scenario.
+    final_difference : float
+        Difference between buying and renting (Buy - Rent).
+    breakeven_year : float | None
+        Year when net values cross (None if they never cross).
+
+    Examples
+    --------
+    >>> from simulator.models import SimulationResults
+    >>> import pandas as pd
+    >>> df = pd.DataFrame({
+    ...     'Month': [0, 12, 24],
+    ...     'Year': [0, 1, 2],
+    ...     'Home_Value': [500000, 515000, 530450],
+    ...     'Equity_Value': [100000, 107000, 114490],
+    ...     'Mortgage_Balance': [400000, 390000, 380000],
+    ...     'Outflow_Buy': [100000, 118000, 136000],
+    ...     'Outflow_Rent': [0, 24000, 48000],
+    ...     'Net_Buy': [400000, 397000, 394450],
+    ...     'Net_Rent': [100000, 83000, 66490]
+    ... })
+    >>> results = SimulationResults(
+    ...     data=df,
+    ...     final_net_buy=394450,
+    ...     final_net_rent=66490,
+    ...     final_difference=327960,
+    ...     breakeven_year=None
+    ... )
+    >>> results.final_difference
+    327960.0
+
     """
 
     data: pd.DataFrame

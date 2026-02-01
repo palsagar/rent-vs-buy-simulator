@@ -156,3 +156,6 @@ Thumbs.db
 *.tmp
 *.bak
 *.swp
+
+# IDE and agent configs
+.cursor/

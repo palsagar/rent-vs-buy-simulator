@@ -12,3 +12,11 @@ dependencies = [
     "streamlit>=1.29.0",
     "pytest>=7.4.0",
 ]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]

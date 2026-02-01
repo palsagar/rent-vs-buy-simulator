@@ -166,6 +166,7 @@ def main():
             label="Difference (Buy - Rent)",
             value=f"${results.final_difference:,.0f}",
             delta=f"{winner} wins",
+            delta_color=delta_color,
             help="Positive means buying is better, negative means renting is better",
         )
 
@@ -273,17 +274,17 @@ def main():
     with st.expander("ℹ️ About This Tool"):
         st.markdown("""
         This simulation engine helps compare two common financial strategies:
-        
-        **Strategy A (Buy):** You purchase a property with a mortgage. Your outflows 
+
+        **Strategy A (Buy):** You purchase a property with a mortgage. Your outflows
         are the down payment and monthly mortgage payments. Your asset is the property value.
-        
-        **Strategy B (Rent):** You rent a similar property and invest the equivalent 
-        down payment into a diversified equity portfolio. Your outflows are rent payments. 
+
+        **Strategy B (Rent):** You rent a similar property and invest the equivalent
+        down payment into a diversified equity portfolio. Your outflows are rent payments.
         Your asset is the investment portfolio.
-        
-        The **Net Value** metric (Asset - Outflows) represents the actual wealth accumulation 
+
+        The **Net Value** metric (Asset - Outflows) represents the actual wealth accumulation
         after accounting for money spent. This is the key decision metric.
-        
+
         **Developed using:** Python, NumPy, Pandas, Plotly, and Streamlit
         """)
 

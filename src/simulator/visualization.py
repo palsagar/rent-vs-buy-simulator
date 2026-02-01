@@ -15,11 +15,30 @@ def create_asset_growth_chart(df: pd.DataFrame) -> go.Figure:
     Shows the growth trajectories of both the property and equity portfolio,
     along with the remaining mortgage balance as a contextual reference.
 
-    Args:
-        df: DataFrame with columns: Year, Home_Value, Equity_Value, Mortgage_Balance
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with columns: Year, Home_Value, Equity_Value, Mortgage_Balance.
 
-    Returns:
-        Plotly Figure object
+    Returns
+    -------
+    go.Figure
+        Plotly Figure object with asset growth visualization.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> from simulator.visualization import create_asset_growth_chart
+    >>> df = pd.DataFrame({
+    ...     'Year': [0, 1, 2, 3],
+    ...     'Home_Value': [500000, 515000, 530450, 546364],
+    ...     'Equity_Value': [100000, 107000, 114490, 122504],
+    ...     'Mortgage_Balance': [400000, 390000, 380000, 370000]
+    ... })
+    >>> fig = create_asset_growth_chart(df)
+    >>> fig.layout.title.text
+    'Asset Value Over Time'
+
     """
     fig = go.Figure()
 
@@ -82,11 +101,29 @@ def create_outflow_chart(df: pd.DataFrame) -> go.Figure:
     Visualizes how much cash has physically left the user's pocket
     in both buying and renting scenarios.
 
-    Args:
-        df: DataFrame with columns: Year, Outflow_Buy, Outflow_Rent
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with columns: Year, Outflow_Buy, Outflow_Rent.
 
-    Returns:
-        Plotly Figure object
+    Returns
+    -------
+    go.Figure
+        Plotly Figure object with cumulative outflows visualization.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> from simulator.visualization import create_outflow_chart
+    >>> df = pd.DataFrame({
+    ...     'Year': [0, 1, 2, 3],
+    ...     'Outflow_Buy': [100000, 118000, 136000, 154000],
+    ...     'Outflow_Rent': [0, 24000, 48000, 72000]
+    ... })
+    >>> fig = create_outflow_chart(df)
+    >>> fig.layout.title.text
+    'Cumulative Outflows: Cost of Lifestyle'
+
     """
     fig = go.Figure()
 
@@ -140,12 +177,31 @@ def create_net_value_chart(
     This is the "bottom line" chart showing Asset Value - Cumulative Outflows
     for both scenarios, with an optional breakeven annotation.
 
-    Args:
-        df: DataFrame with columns: Year, Net_Buy, Net_Rent
-        breakeven_year: Year where the scenarios cross (optional)
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with columns: Year, Net_Buy, Net_Rent.
+    breakeven_year : float | None, optional
+        Year where the scenarios cross. Default is None.
 
-    Returns:
-        Plotly Figure object
+    Returns
+    -------
+    go.Figure
+        Plotly Figure object with net value comparison visualization.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> from simulator.visualization import create_net_value_chart
+    >>> df = pd.DataFrame({
+    ...     'Year': [0, 1, 2, 3],
+    ...     'Net_Buy': [400000, 397000, 394450, 392364],
+    ...     'Net_Rent': [100000, 83000, 66490, 50504]
+    ... })
+    >>> fig = create_net_value_chart(df, breakeven_year=2.5)
+    >>> fig.layout.title.text
+    'Net Value Analysis: The Bottom Line'
+
     """
     fig = go.Figure()
 
@@ -229,12 +285,39 @@ def create_combined_dashboard(
 ) -> go.Figure:
     """Create a comprehensive dashboard with all three charts in subplots.
 
-    Args:
-        df: DataFrame with all simulation results
-        breakeven_year: Year where net values cross (optional)
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with all simulation results including Year, Home_Value,
+        Equity_Value, Mortgage_Balance, Outflow_Buy, Outflow_Rent,
+        Net_Buy, and Net_Rent columns.
+    breakeven_year : float | None, optional
+        Year where net values cross. Default is None.
 
-    Returns:
-        Plotly Figure object with subplots
+    Returns
+    -------
+    go.Figure
+        Plotly Figure object with three subplots showing asset growth,
+        cumulative outflows, and net value comparison.
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> from simulator.visualization import create_combined_dashboard
+    >>> df = pd.DataFrame({
+    ...     'Year': [0, 1, 2],
+    ...     'Home_Value': [500000, 515000, 530450],
+    ...     'Equity_Value': [100000, 107000, 114490],
+    ...     'Mortgage_Balance': [400000, 390000, 380000],
+    ...     'Outflow_Buy': [100000, 118000, 136000],
+    ...     'Outflow_Rent': [0, 24000, 48000],
+    ...     'Net_Buy': [400000, 397000, 394450],
+    ...     'Net_Rent': [100000, 83000, 66490]
+    ... })
+    >>> fig = create_combined_dashboard(df)
+    >>> len(fig.data)
+    7
+
     """
     # Create subplots: 3 rows, 1 column
     fig = make_subplots(

@@ -17,11 +17,36 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
     This function performs vectorized calculations using NumPy for performance.
     All calculations are done at monthly granularity for accuracy.
 
-    Args:
-        config: SimulationConfig object with all input parameters
+    Parameters
+    ----------
+    config : SimulationConfig
+        Configuration object with all input parameters for the simulation.
 
-    Returns:
-        SimulationResults object containing DataFrames and summary metrics
+    Returns
+    -------
+    SimulationResults
+        Results object containing DataFrame with time-series data and summary
+        metrics including final net values and breakeven year.
+
+    Examples
+    --------
+    >>> from simulator.models import SimulationConfig
+    >>> from simulator.engine import calculate_scenarios
+    >>> config = SimulationConfig(
+    ...     duration_years=5,
+    ...     property_price=500000,
+    ...     down_payment_pct=20,
+    ...     mortgage_rate_annual=4.5,
+    ...     property_appreciation_annual=3,
+    ...     equity_growth_annual=7,
+    ...     monthly_rent=2000
+    ... )
+    >>> results = calculate_scenarios(config)
+    >>> len(results.data)
+    61
+    >>> results.data.columns.tolist()
+    ['Month', 'Year', 'Home_Value', 'Equity_Value', 'Mortgage_Balance', 'Outflow_Buy', 'Outflow_Rent', 'Net_Buy', 'Net_Rent']
+
     """
     # Setup time vector (monthly granularity)
     n_months = config.duration_years * 12
@@ -136,13 +161,30 @@ def _find_breakeven(
 ) -> float | None:
     """Find the year where net_buy crosses net_rent.
 
-    Args:
-        years: Array of year values
-        net_buy: Net value array for buying scenario
-        net_rent: Net value array for renting scenario
+    Parameters
+    ----------
+    years : np.ndarray
+        Array of year values.
+    net_buy : np.ndarray
+        Net value array for buying scenario.
+    net_rent : np.ndarray
+        Net value array for renting scenario.
 
-    Returns:
-        Year of breakeven point, or None if no crossover occurs
+    Returns
+    -------
+    float | None
+        Year of breakeven point, or None if no crossover occurs.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from simulator.engine import _find_breakeven
+    >>> years = np.array([0, 1, 2, 3, 4, 5])
+    >>> net_buy = np.array([100000, 110000, 120000, 130000, 140000, 150000])
+    >>> net_rent = np.array([100000, 105000, 115000, 125000, 135000, 145000])
+    >>> _find_breakeven(years, net_buy, net_rent)
+    2.0
+
     """
     # Calculate the difference (positive when buy is winning)
     diff = net_buy - net_rent
