@@ -1,0 +1,14 @@
+[project]
+name = "simulator"
+version = "0.1.0"
+description = "Real Estate vs. Equity Simulation Engine"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=1.26.0",
+    "numpy-financial>=1.0.0",
+    "pandas>=2.1.0",
+    "plotly>=5.18.0",
+    "streamlit>=1.29.0",
+    "pytest>=7.4.0",
+]
