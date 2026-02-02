@@ -30,22 +30,25 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
 
     Examples
     --------
-    >>> from simulator.models import SimulationConfig
-    >>> from simulator.engine import calculate_scenarios
-    >>> config = SimulationConfig(
-    ...     duration_years=5,
-    ...     property_price=500000,
-    ...     down_payment_pct=20,
-    ...     mortgage_rate_annual=4.5,
-    ...     property_appreciation_annual=3,
-    ...     equity_growth_annual=7,
-    ...     monthly_rent=2000
-    ... )
-    >>> results = calculate_scenarios(config)
-    >>> len(results.data)
-    61
-    >>> results.data.columns.tolist()
-    ['Month', 'Year', 'Home_Value', 'Equity_Value', 'Mortgage_Balance', 'Outflow_Buy', 'Outflow_Rent', 'Net_Buy', 'Net_Rent']
+    Run a simulation:
+
+    .. code-block:: python
+
+        from simulator.models import SimulationConfig
+        from simulator.engine import calculate_scenarios
+
+        config = SimulationConfig(
+            duration_years=5,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3,
+            equity_growth_annual=7,
+            monthly_rent=2000
+        )
+
+        results = calculate_scenarios(config)
+        print(f"Final difference: ${results.final_difference:,.0f}")
 
     """
     # Setup time vector (monthly granularity)
@@ -83,6 +86,9 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
             mortgage_balance[i] = -npf.pv(
                 monthly_rate, remaining_months, monthly_payment
             )
+        elif remaining_months > 0 and monthly_rate == 0:
+            # With 0% interest, balance decreases linearly
+            mortgage_balance[i] = loan_amount - (monthly_payment * i)
         else:
             mortgage_balance[i] = 0
 
@@ -122,6 +128,42 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
     # Net value for renting scenario (Asset - Cumulative Outflows)
     net_val_rent = equity_value - cum_rent_outflow
 
+    # ========== SCENARIO C: RENT & INVEST MONTHLY SAVINGS ==========
+    # Only applicable when initial mortgage payment > initial rent
+    scenario_c_enabled = monthly_payment > config.monthly_rent
+
+    # Calculate monthly savings (mortgage payment - rent), capped at 0 when
+    # rent exceeds mortgage. The savings are invested each month at the same
+    # CAGR as Scenario B
+    monthly_savings = np.maximum(0, monthly_payment - rent_at_month)
+
+    # Calculate compounded value of monthly contributions
+    # Each month's contribution compounds for the remaining months
+    # savings_portfolio[t] = sum over i from 0 to t-1 of: savings[i] * (1 + r)^(t-i)
+    savings_portfolio = np.zeros(n_months + 1)
+    for t in range(1, n_months + 1):
+        # Previous portfolio value grows by one month
+        savings_portfolio[t] = savings_portfolio[t - 1] * (1 + monthly_equity_rate)
+        # Add this month's savings contribution (invested at end of month t-1)
+        if t > 0:
+            savings_portfolio[t] += monthly_savings[t - 1]
+
+    # Scenario C asset value: uninvested down payment (cash) + savings portfolio
+    asset_value_rent_savings = down_payment + savings_portfolio
+
+    # Scenario C net value: asset value - cumulative rent outflows
+    net_val_rent_savings = asset_value_rent_savings - cum_rent_outflow
+
+    # Calculate Scenario C final values and breakeven
+    final_net_rent_savings = (
+        float(net_val_rent_savings[-1]) if scenario_c_enabled else None
+    )
+    breakeven_year_vs_rent_savings = (
+        _find_breakeven(year_arr, net_val_buy, net_val_rent_savings)
+        if scenario_c_enabled
+        else None
+    )
+
     # ========== CONSTRUCT OUTPUT ==========
 
     # Create DataFrame with all time-series data
@@ -136,6 +178,8 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
             "Outflow_Rent": cum_rent_outflow,
             "Net_Buy": net_val_buy,
             "Net_Rent": net_val_rent,
+            "Savings_Portfolio_Value": savings_portfolio,
+            "Net_Rent_Savings": net_val_rent_savings,
         }
     )
 
@@ -153,6 +197,10 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
         final_net_rent=final_net_rent,
         final_difference=final_difference,
         breakeven_year=breakeven_year,
+        monthly_mortgage_payment=monthly_payment,
+        scenario_c_enabled=scenario_c_enabled,
+        final_net_rent_savings=final_net_rent_savings,
+        breakeven_year_vs_rent_savings=breakeven_year_vs_rent_savings,
     )
 
 
@@ -177,37 +225,45 @@ def _find_breakeven(
 
     Examples
     --------
-    >>> import numpy as np
-    >>> from simulator.engine import _find_breakeven
-    >>> years = np.array([0, 1, 2, 3, 4, 5])
-    >>> net_buy = np.array([100000, 110000, 120000, 130000, 140000, 150000])
-    >>> net_rent = np.array([100000, 105000, 115000, 125000, 135000, 145000])
-    >>> _find_breakeven(years, net_buy, net_rent)
-    2.0
+    Find breakeven between two scenarios:
+
+    .. code-block:: python
+
+        import numpy as np
+        from simulator.engine import _find_breakeven
+
+        years = np.array([0, 1, 2, 3, 4, 5])
+        net_buy = np.array([100000, 110000, 120000, 130000, 140000,
+                            150000])
+        net_rent = np.array([100000, 105000, 115000, 125000, 135000,
+                             145000])
+
+        breakeven = _find_breakeven(years, net_buy, net_rent)
 
     """
     # Calculate the difference (positive when buy is winning)
     diff = net_buy - net_rent
 
-    # Look for sign changes
-    sign_changes = np.diff(np.sign(diff))
-
-    # Find indices where sign changes (crossover points)
-    crossover_indices = np.where(sign_changes != 0)[0]
-
-    if len(crossover_indices) > 0:
-        # Return the first crossover point
-        # Linear interpolation for more accurate year
-        idx = crossover_indices[0]
-        # Interpolate between idx and idx+1
-        x1, x2 = years[idx], years[idx + 1]
-        y1, y2 = diff[idx], diff[idx + 1]
-
-        # Linear interpolation to find exact zero crossing
-        if y2 != y1:
-            breakeven = x1 - y1 * (x2 - x1) / (y2 - y1)
-            return float(breakeven)
-        else:
-            return float(x1)
+    # Find where diff crosses zero (changes sign)
+    # Skip the first point if it's zero, to handle initial equality
+    start_idx = 1 if diff[0] == 0 else 0
+    
+    # Look for sign changes in the difference
+    for i in range(start_idx, len(diff) - 1):
+        # Check if diff crosses zero between i and i+1
+        if diff[i] * diff[i + 1] < 0:
+            # Found a crossover: interpolate to find exact zero crossing
+            x1, x2 = years[i], years[i + 1]
+            y1, y2 = diff[i], diff[i + 1]
+            
+            if y2 != y1:
+                breakeven = x1 - y1 * (x2 - x1) / (y2 - y1)
+                return float(breakeven)
+            else:
+                # Both are zero (shouldn't happen with < 0 check, but handle it)
+                return float(x1)
+        elif diff[i] == 0 and i > 0:
+            # Exact match at this point
+            return float(years[i])
 
     return None

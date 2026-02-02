@@ -1,0 +1,6 @@
+---
+globs: **/*.py
+alwaysApply: false
+---
+
+Use numpy-style docstrings with .rst flavor code blocks, which provide a brief example of how to invoke the function or instantiate the class in question. Always respect the line character limit specified in the pyproject.toml file of the project.

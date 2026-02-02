@@ -1,8 +1,9 @@
 # Real Estate vs. Equity Simulation Engine
 
-A financial simulation application that compares two capital allocation strategies over time:
+A financial simulation application that compares three capital allocation strategies over time:
 - **Strategy A (Buy):** Purchase property with a mortgage
-- **Strategy B (Rent):** Rent and invest the down payment in equities
+- **Strategy B (Rent & Invest):** Rent and invest the down payment in equities
+- **Strategy C (Rent & Invest Savings):** Rent, keep down payment as cash, and invest monthly savings
 
 ## Features
 
@@ -10,35 +11,69 @@ A financial simulation application that compares two capital allocation strategi
 - 📊 **Interactive Visualizations:** Beautiful Plotly charts with hover details and breakeven analysis
 - ⚡ **High Performance:** Vectorized NumPy calculations for fast simulations
 - 🎯 **Key Metrics:** Net value analysis, cumulative outflows, and asset growth comparisons
+- 🔄 **Three-Way Comparison:** Includes Scenario C for investing monthly savings when mortgage exceeds rent
 - 📱 **User-Friendly Interface:** Clean Streamlit UI with intuitive parameter controls
 
-## Installation
+## Installation & Usage
 
-### Prerequisites
+Choose the method that best fits your needs:
 
+| Method | Use Case | Requirements |
+|--------|----------|--------------|
+| **Local Docker** | Quick trial, no Python needed | Docker |
+| **Python/uv** | Development, customization | Python 3.12+ |
+| **Production Docker** | Cloud deployment | Docker |
+
+### Option 1: Local Docker (Recommended for Quick Start)
+
+The easiest way to run the application locally without installing Python:
+
+1. Make sure Docker is installed and running on your system
+
+2. Run the application:
+```bash
+docker compose up --build
+```
+
+3. Open your browser and navigate to `http://localhost:8501`
+
+4. To stop the application, press `Ctrl+C` and run:
+```bash
+docker compose down
+```
+
+### Option 2: Python/uv (For Development)
+
+Best for developers who want to modify the code or use the simulator as a library.
+
+**Prerequisites:**
 - Python 3.12 or higher
 - pip or uv package manager
 
-### Setup
+**Setup:**
 
-1. Clone or navigate to the repository:
+1. Install `uv` if you haven't already:
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+2. Clone or navigate to the repository:
 ```bash
 cd simulator
 ```
 
-2. Install dependencies:
+3. Create virtual environment and install dependencies:
 ```bash
-pip install -e .
+uv sync
 ```
 
-Or if using `uv`:
+This will create a `.venv` directory, install all dependencies, and install the package in editable mode, as shown below : 
+
 ```bash
 uv pip install -e .
 ```
 
-## Usage
-
-### Running the Web Application
+**Running the Web Application:**
 
 Start the Streamlit application:
 
@@ -47,6 +82,17 @@ streamlit run app.py
 ```
 
 The application will open in your browser at `http://localhost:8501`.
+
+### Option 3: Production Docker (For Cloud Deployment)
+
+For deploying to cloud platforms (AWS, GCP, Azure, etc.):
+
+```bash
+docker build -t rent-vs-buy-simulator .
+docker run -p 8501:8501 rent-vs-buy-simulator
+```
+
+The production `Dockerfile` includes additional security flags for public-facing deployments.
 
 ### Using as a Library
 
@@ -77,6 +123,13 @@ print(f"Difference: ${results.final_difference:,.0f}")
 
 if results.breakeven_year:
     print(f"Breakeven at: {results.breakeven_year:.1f} years")
+
+# Access Scenario C results (if applicable)
+if results.scenario_c_enabled:
+    print(f"\nScenario C (Rent + Invest Savings):")
+    print(f"Final net value: ${results.final_net_rent_savings:,.0f}")
+    if results.breakeven_year_vs_rent_savings:
+        print(f"Breakeven vs Buy: {results.breakeven_year_vs_rent_savings:.1f} years")
 ```
 
 ## Project Structure
@@ -127,46 +180,44 @@ pytest tests/ --cov=src/simulator --cov-report=html
 - **Equity Growth (CAGR):** Expected annual investment returns (0-15%)
 - **Rent Inflation:** Annual rent increase rate (0-10%)
 
+### Scenario C: Rent & Invest Savings
+- **Availability:** Only when mortgage payment > initial rent
+- **Strategy:** Keep down payment as cash (0% return) and invest monthly savings (mortgage - rent) at equity CAGR
+- **Use Case:** Conservative approach that maintains liquidity while capturing upside from monthly savings
+
 ## Formulas & Methodology
 
-### Mortgage Calculation
-Monthly payment uses standard amortization:
-```
-PMT = P × [r(1+r)^n] / [(1+r)^n - 1]
-```
-Where P = loan amount, r = monthly rate, n = total months
+For detailed mathematical formulas, derivations, and methodology used in the simulation engine, see the **[Mathematical Reference (FORMULAS.md)](FORMULAS.md)**.
 
-### Property Value
-```
-V_p(t) = P_initial × (1 + c/12)^month
-```
-
-### Equity Portfolio Value
-```
-V_e(t) = D × (1 + e/12)^month
-```
-
-### Net Value
-```
-Net Value = Asset Value - Cumulative Outflows
-```
+**Key concepts:**
+- Monthly mortgage payment using standard amortization formula
+- Compound monthly appreciation for property values and equity portfolios
+- Inflation-adjusted rent calculations with geometric series
+- Net value comparison: Asset Value - Cumulative Outflows
+- Breakeven analysis using linear interpolation
+- Scenario C: Monthly savings investment with compounding (see FORMULAS.md for details)
 
 ## Assumptions
 
-- Calculations use monthly granularity for accuracy
-- Mortgage payments are fixed (standard amortization)
-- Property appreciation and equity growth compound monthly
-- Rent increases with inflation annually
-- No transaction costs, property taxes, or maintenance costs included
-- No taxes on investment gains considered
+The model makes several simplifying assumptions for comparison purposes:
+
+- **Constant Growth Rates:** Property appreciation, equity returns, and rent inflation are constant
+- **Monthly Granularity:** All calculations compound monthly for accuracy
+- **Fixed Mortgage:** Standard amortization with fixed interest rate
+- **No Transaction Costs:** Excludes closing costs, realtor fees, and moving expenses
+- **No Property Costs:** Excludes property taxes, insurance, HOA fees, and maintenance
+- **No Tax Effects:** Ignores mortgage interest deduction and capital gains taxes
+- **Full Liquidity:** Assumes assets can be sold/liquidated at market value instantly
+
+For a complete discussion of assumptions and limitations, see the [Mathematical Reference](FORMULAS.md).
 
 ## Visualization Outputs
 
 The application generates three main charts:
 
-1. **Asset Value Over Time:** Shows property value, equity portfolio value, and remaining mortgage balance
+1. **Asset Value Over Time:** Shows property value, equity portfolio value, remaining mortgage balance, and (when applicable) Scenario C assets
 2. **Cumulative Outflows:** Compares total money spent in each scenario
-3. **Net Value Analysis:** The "bottom line" showing asset value minus cumulative outflows
+3. **Net Value Analysis:** The "bottom line" showing asset value minus cumulative outflows for all applicable scenarios
 
 ## Technical Stack
 

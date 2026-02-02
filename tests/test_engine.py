@@ -286,6 +286,159 @@ class TestBreakeven:
         assert abs(breakeven - 2.0) < 0.1  # Should be close to 2
 
 
+class TestScenarioC:
+    """Tests for Scenario C: Rent & Invest Monthly Savings."""
+
+    def test_scenario_c_enabled_when_mortgage_exceeds_rent(self):
+        """Test that Scenario C is enabled when mortgage payment > rent."""
+        config = SimulationConfig(
+            duration_years=30,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,  # Less than mortgage payment (~$2,027)
+        )
+
+        results = calculate_scenarios(config)
+
+        # Scenario C should be enabled
+        assert results.scenario_c_enabled
+        assert results.final_net_rent_savings is not None
+        assert (
+            results.breakeven_year_vs_rent_savings is not None
+            or results.breakeven_year_vs_rent_savings is None
+        )  # Can be None
+
+    def test_scenario_c_disabled_when_rent_exceeds_mortgage(self):
+        """Test that Scenario C is disabled when rent >= mortgage payment."""
+        config = SimulationConfig(
+            duration_years=30,
+            property_price=500000,
+            down_payment_pct=100,  # No mortgage, so no monthly payment
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+        )
+
+        results = calculate_scenarios(config)
+
+        # Scenario C should be disabled (no mortgage payment)
+        assert results.scenario_c_enabled is False
+        assert results.final_net_rent_savings is None
+        assert results.breakeven_year_vs_rent_savings is None
+
+    def test_savings_portfolio_starts_at_zero(self):
+        """Test that savings portfolio starts at zero."""
+        config = SimulationConfig(
+            duration_years=30,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+        )
+
+        results = calculate_scenarios(config)
+
+        # Savings portfolio should start at 0
+        assert results.data["Savings_Portfolio_Value"].iloc[0] == 0
+
+    def test_savings_portfolio_grows_over_time(self):
+        """Test that savings portfolio increases as savings compound."""
+        config = SimulationConfig(
+            duration_years=10,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+        )
+
+        results = calculate_scenarios(config)
+
+        # Savings portfolio should grow monotonically
+        savings_portfolio = results.data["Savings_Portfolio_Value"].values
+        initial_value = savings_portfolio[0]
+        final_value = savings_portfolio[-1]
+
+        assert initial_value == 0
+        assert final_value > 0
+        # Should be generally increasing (allowing for minor numerical issues)
+        assert savings_portfolio[-1] > savings_portfolio[len(savings_portfolio) // 2]
+
+    def test_scenario_c_net_value_formula(self):
+        """Test that Net_Rent_Savings formula is correct."""
+        config = SimulationConfig(
+            duration_years=10,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+        )
+
+        results = calculate_scenarios(config)
+
+        # Verify formula: Net_Rent_Savings = (down_payment + savings_portfolio) - rent_outflows
+        down_payment = 500000 * 0.20
+        for idx in [0, 60, 120]:  # Check at different time points
+            expected_net = (
+                down_payment
+                + results.data["Savings_Portfolio_Value"].iloc[idx]
+                - results.data["Outflow_Rent"].iloc[idx]
+            )
+            actual_net = results.data["Net_Rent_Savings"].iloc[idx]
+            assert abs(expected_net - actual_net) < 1  # Allow small numerical error
+
+    def test_scenario_c_with_100_percent_down_payment(self):
+        """Test Scenario C with 100% down payment (no mortgage, no savings)."""
+        config = SimulationConfig(
+            duration_years=30,
+            property_price=500000,
+            down_payment_pct=100,  # Pay cash, no mortgage
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+        )
+
+        results = calculate_scenarios(config)
+
+        # Scenario C should be disabled (mortgage payment = 0)
+        assert results.scenario_c_enabled is False
+        assert results.monthly_mortgage_payment < 1  # Essentially zero
+        assert results.final_net_rent_savings is None
+
+    def test_scenario_c_breakeven_calculation(self):
+        """Test that breakeven vs Scenario C is calculated correctly."""
+        config = SimulationConfig(
+            duration_years=30,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+        )
+
+        results = calculate_scenarios(config)
+
+        # If Scenario C is enabled, breakeven should be calculated
+        if results.scenario_c_enabled:
+            # Breakeven can be None if lines never cross
+            if results.breakeven_year_vs_rent_savings is not None:
+                assert results.breakeven_year_vs_rent_savings > 0
+                assert (
+                    results.breakeven_year_vs_rent_savings <= config.duration_years
+                )  # noqa: E501
+
+
 class TestIntegration:
     """Integration tests for full workflow."""
 

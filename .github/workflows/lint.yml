@@ -1,0 +1,31 @@
+name: Linting & Formatting
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  lint-format:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Run linting checks
+        run: |
+          uvx ruff check --output-format=github .
+
+      - name: Run formatting checks
+        run: |
+          uvx ruff format --check .
