@@ -6,9 +6,11 @@ This document provides detailed mathematical formulas and methodology used in th
 
 All calculations use monthly granularity for accuracy:
 
-$$t \in \{0, 1, 2, \ldots, n_{\text{months}}\} \quad \text{where} \quad n_{\text{months}} = \text{duration}_{\text{years}} \times 12$$
+```
+t ∈ {0, 1, 2, ..., n_months} where n_months = duration_years × 12
 
-$$\text{year} = \frac{t}{12}$$
+year = t / 12
+```
 
 ## Scenario A: Buy Property with Mortgage
 
@@ -16,74 +18,92 @@ $$\text{year} = \frac{t}{12}$$
 
 **Down Payment:**
 
-$$D = P_{\text{property}} \times \frac{\text{down\_payment}_\%}{100}$$
+```
+D = P_property × (down_payment_% / 100)
+```
 
 **Loan Amount:**
 
-$$L = P_{\text{property}} - D$$
+```
+L = P_property - D
+```
 
 **Monthly Interest Rate:**
 
-$$r = \frac{\text{rate}_{\text{annual}}}{100 \times 12}$$
+```
+r = rate_annual / (100 × 12)
+```
 
 ### 2. Monthly Mortgage Payment
 
 Using the standard amortization formula:
 
-$$\text{PMT} = L \cdot \frac{r(1 + r)^n}{(1 + r)^n - 1}$$
+```
+PMT = L × [r(1 + r)^n] / [(1 + r)^n - 1]
+```
 
 Where:
-- $\text{PMT}$ = Monthly payment (principal + interest)
-- $L$ = Loan amount
-- $r$ = Monthly interest rate
-- $n$ = Total number of months
+- `PMT` = Monthly payment (principal + interest)
+- `L` = Loan amount
+- `r` = Monthly interest rate
+- `n` = Total number of months
 
 **Special Cases:**
-- If $r = 0$: $\text{PMT} = \frac{L}{n}$ (no interest, just principal)
-- If $L = 0$: $\text{PMT} = 0$ (100% down payment)
+- If `r = 0`: `PMT = L / n` (no interest, just principal)
+- If `L = 0`: `PMT = 0` (100% down payment)
 
 ### 3. Property Value Over Time
 
 Property appreciates with monthly compounding:
 
-$$V_p(t) = P_{\text{property}} \times \left(1 + \frac{a}{12}\right)^t$$
+```
+V_p(t) = P_property × (1 + a/12)^t
+```
 
 Where:
-- $V_p(t)$ = Property value at month $t$
-- $P_{\text{property}}$ = Initial property price
-- $a$ = Annual appreciation rate (as decimal)
-- $t$ = Month number
+- `V_p(t)` = Property value at month t
+- `P_property` = Initial property price
+- `a` = Annual appreciation rate (as decimal)
+- `t` = Month number
 
 ### 4. Remaining Mortgage Balance
 
-The outstanding principal at any time $t$ is the present value of remaining payments:
+The outstanding principal at any time t is the present value of remaining payments:
 
-$$B(t) = \text{PMT} \times \frac{(1 + r)^{n-t} - 1}{r(1 + r)^{n-t}}$$
+```
+B(t) = PMT × [(1 + r)^(n-t) - 1] / [r(1 + r)^(n-t)]
+```
 
 Where:
-- $B(t)$ = Remaining balance at month $t$
-- $n - t$ = Remaining months
-- At $t = n$ (end): $B(n) = 0$ (mortgage paid off)
+- `B(t)` = Remaining balance at month t
+- `n - t` = Remaining months
+- At `t = n` (end): `B(n) = 0` (mortgage paid off)
 
 This can also be expressed using the present value formula:
 
-$$B(t) = -\text{PV}(r, n-t, \text{PMT})$$
+```
+B(t) = -PV(r, n-t, PMT)
+```
 
 ### 5. Cumulative Outflows
 
-Total cash spent by month $t$:
+Total cash spent by month t:
 
-$$O_{\text{buy}}(t) = D + (\text{PMT} \times t)$$
+```
+O_buy(t) = D + (PMT × t)
+```
 
 **Components:**
-- $D$: One-time down payment at $t = 0$
-- $\text{PMT} \times t$: Cumulative mortgage payments
+- `D`: One-time down payment at t = 0
+- `PMT × t`: Cumulative mortgage payments
 
 ### 6. Net Value for Buying
 
-$$N_{\text{buy}}(t) = V_p(t) - O_{\text{buy}}(t)$$
+```
+N_buy(t) = V_p(t) - O_buy(t)
 
-$$= P_{\text{property}} \times \left(1 + \frac{a}{12}\right)^t - \left[D + (\text{PMT} \times t)\right]$$
+         = P_property × (1 + a/12)^t - [D + (PMT × t)]
+```
 
 This represents: **Asset Value - Money Spent**
 
@@ -93,54 +113,68 @@ This represents: **Asset Value - Money Spent**
 
 The same down payment is invested in equities:
 
-$$I_0 = D \quad \text{(from Scenario A)}$$
+```
+I_0 = D  (from Scenario A)
+```
 
 ### 2. Investment Portfolio Value
 
 Portfolio grows with monthly compounding:
 
-$$V_e(t) = I_0 \times \left(1 + \frac{e}{12}\right)^t$$
+```
+V_e(t) = I_0 × (1 + e/12)^t
+```
 
 Where:
-- $V_e(t)$ = Portfolio value at month $t$
-- $I_0$ = Initial investment
-- $e$ = Annual equity growth rate (as decimal)
-- $t$ = Month number
+- `V_e(t)` = Portfolio value at month t
+- `I_0` = Initial investment
+- `e` = Annual equity growth rate (as decimal)
+- `t` = Month number
 
 ### 3. Rent Payments with Inflation
 
 Rent increases with monthly compounding inflation:
 
-$$\text{Rent}(t) = \text{Rent}_0 \times \left(1 + \frac{i}{12}\right)^t$$
+```
+Rent(t) = Rent_0 × (1 + i/12)^t
+```
 
 Where:
-- $\text{Rent}(t)$ = Rent at month $t$
-- $\text{Rent}_0$ = Initial monthly rent
-- $i$ = Annual rent inflation rate (as decimal)
+- `Rent(t)` = Rent at month t
+- `Rent_0` = Initial monthly rent
+- `i` = Annual rent inflation rate (as decimal)
 
 ### 4. Cumulative Rent Outflows
 
-Total rent paid by month $t$ is calculated as the cumulative sum:
+Total rent paid by month t is calculated as the cumulative sum:
 
-$$O_{\text{rent}}(t) = \sum_{k=0}^{t-1} \text{Rent}(k) = \sum_{k=0}^{t-1} \left[\text{Rent}_0 \times \left(1 + \frac{i}{12}\right)^k\right]$$
+```
+O_rent(t) = Σ(k=0 to t-1) Rent(k) = Σ(k=0 to t-1) [Rent_0 × (1 + i/12)^k]
+```
 
 This is a geometric series. The closed-form solution is:
 
-**If** $i = 0$ (no inflation):
+**If** `i = 0` (no inflation):
 
-$$O_{\text{rent}}(t) = \text{Rent}_0 \times t$$
+```
+O_rent(t) = Rent_0 × t
+```
 
-**If** $i > 0$:
+**If** `i > 0`:
 
-$$O_{\text{rent}}(t) = \text{Rent}_0 \times \frac{\left(1 + \frac{i}{12}\right)^t - 1}{\frac{i}{12}}$$
+```
+O_rent(t) = Rent_0 × [(1 + i/12)^t - 1] / (i/12)
+```
 
 **Implementation Note:** The engine uses cumulative sum (`np.cumsum`) for numerical accuracy rather than the closed-form geometric series formula.
 
 ### 5. Net Value for Renting
 
-$$N_{\text{rent}}(t) = V_e(t) - O_{\text{rent}}(t)$$
+```
+N_rent(t) = V_e(t) - O_rent(t)
 
-$$= I_0 \times \left(1 + \frac{e}{12}\right)^t - \sum_{k=0}^{t-1} \text{Rent}(k)$$
+          = I_0 × (1 + e/12)^t - Σ(k=0 to t-1) Rent(k)
+```
 
 This represents: **Portfolio Value - Money Spent on Rent**
 
@@ -150,28 +184,34 @@ This represents: **Portfolio Value - Money Spent on Rent**
 
 The fundamental comparison metric:
 
-$$\Delta(t) = N_{\text{buy}}(t) - N_{\text{rent}}(t)$$
+```
+Δ(t) = N_buy(t) - N_rent(t)
+```
 
 **Decision Rule:**
-- If $\Delta(t) > 0$: Buying is better at time $t$
-- If $\Delta(t) < 0$: Renting is better at time $t$
-- If $\Delta(t) = 0$: Break-even point
+- If `Δ(t) > 0`: Buying is better at time t
+- If `Δ(t) < 0`: Renting is better at time t
+- If `Δ(t) = 0`: Break-even point
 
 ### Breakeven Point
 
-The breakeven time $t^*$ is when net values are equal:
+The breakeven time t* is when net values are equal:
 
-$$N_{\text{buy}}(t^*) = N_{\text{rent}}(t^*) \quad \Leftrightarrow \quad \Delta(t^*) = 0$$
+```
+N_buy(t*) = N_rent(t*)  ⟺  Δ(t*) = 0
+```
 
 Since we calculate discrete monthly values, we find the breakeven using **linear interpolation**:
 
-Given indices $i$ and $i+1$ where $\Delta$ changes sign:
+Given indices i and i+1 where Δ changes sign:
 
-$$t^* = t_i - \Delta_i \cdot \frac{t_{i+1} - t_i}{\Delta_{i+1} - \Delta_i}$$
+```
+t* = t_i - Δ_i × [(t_(i+1) - t_i) / (Δ_(i+1) - Δ_i)]
+```
 
 Where:
-- $t_i, t_{i+1}$ = Time values at indices $i$ and $i+1$
-- $\Delta_i, \Delta_{i+1}$ = Difference values at those indices
+- `t_i`, `t_(i+1)` = Time values at indices i and i+1
+- `Δ_i`, `Δ_(i+1)` = Difference values at those indices
 - This gives the approximate zero-crossing point
 
 ## Key Relationships
@@ -180,11 +220,15 @@ Where:
 
 With a mortgage, you control an asset worth more than your initial investment:
 
-$$\text{Leverage Ratio} = \frac{P_{\text{property}}}{D}$$
+```
+Leverage Ratio = P_property / D
+```
 
 **Example:** $500k property with 20% down
 
-$$\text{Leverage} = \frac{\$500,000}{\$100,000} = 5\times$$
+```
+Leverage = $500,000 / $100,000 = 5×
+```
 
 This amplifies both:
 - **Gains:** If property appreciates, you gain on the full value
@@ -196,11 +240,15 @@ By not buying, you keep capital liquid and invest it. The trade-off:
 
 **Opportunity Benefit:**
 
-$$\text{Benefit} = (e - a) \times I_0 \quad \text{(when equity growth exceeds property appreciation)}$$
+```
+Benefit = (e - a) × I_0  (when equity growth exceeds property appreciation)
+```
 
 **Opportunity Cost:**
 
-$$\text{Cost} = O_{\text{rent}}(t) \quad \text{(money gone forever, no asset accumulation)}$$
+```
+Cost = O_rent(t)  (money gone forever, no asset accumulation)
+```
 
 ## Example Calculation
 
@@ -218,37 +266,47 @@ Let's work through a concrete example:
 
 **Step 1: Calculate Monthly Values**
 
-$$L = \$500,000 - \$100,000 = \$400,000$$
+```
+L = $500,000 - $100,000 = $400,000
 
-$$r = \frac{4.5\%}{12} = 0.375\% = 0.00375$$
+r = 4.5% / 12 = 0.375% = 0.00375
 
-$$n = 30 \times 12 = 360 \text{ months}$$
+n = 30 × 12 = 360 months
+```
 
 **Step 2: Monthly Mortgage Payment**
 
-$$\text{PMT} = \$400,000 \times \frac{0.00375(1.00375)^{360}}{(1.00375)^{360} - 1} \approx \$2,027$$
+```
+PMT = $400,000 × [0.00375(1.00375)^360] / [(1.00375)^360 - 1] ≈ $2,027
+```
 
 **Step 3: After 30 Years**
 
 **Scenario A (Buy):**
 
-$$V_p(360) = \$500,000 \times (1.0025)^{360} \approx \$1,214,000$$
+```
+V_p(360) = $500,000 × (1.0025)^360 ≈ $1,214,000
 
-$$O_{\text{buy}}(360) = \$100,000 + (\$2,027 \times 360) \approx \$829,720$$
+O_buy(360) = $100,000 + ($2,027 × 360) ≈ $829,720
 
-$$N_{\text{buy}}(360) = \$1,214,000 - \$829,720 = \$384,280$$
+N_buy(360) = $1,214,000 - $829,720 = $384,280
+```
 
 **Scenario B (Rent):**
 
-$$V_e(360) = \$100,000 \times (1.00583)^{360} \approx \$761,226$$
+```
+V_e(360) = $100,000 × (1.00583)^360 ≈ $761,226
 
-$$O_{\text{rent}}(360) \approx \$972,000 \quad \text{(geometric series sum)}$$
+O_rent(360) ≈ $972,000  (geometric series sum)
 
-$$N_{\text{rent}}(360) = \$761,226 - \$972,000 = -\$210,774$$
+N_rent(360) = $761,226 - $972,000 = -$210,774
+```
 
 **Result:**
 
-$$\Delta(360) = \$384,280 - (-\$210,774) = \$595,054$$
+```
+Δ(360) = $384,280 - (-$210,774) = $595,054
+```
 
 **Buying wins by $595,054 in this scenario!**
 
@@ -283,7 +341,7 @@ Tax implications ignored:
 - Capital gains exclusion on primary residence sale (up to $250k/$500k)
 
 ### 5. No Down Payment Assistance
-Both scenarios start with identical capital ($D$). In reality:
+Both scenarios start with identical capital (D). In reality:
 - Some buyers receive gift funds
 - FHA/VA loans allow lower down payments
 - Some may have more/less liquid capital available
@@ -297,7 +355,7 @@ The model assumes:
 
 ### 7. Full Reinvestment (Scenario B)
 The model assumes:
-- The down payment is invested as a lump sum at $t=0$
+- The down payment is invested as a lump sum at t=0
 - No additional monthly investments from rent savings
 - In reality, if mortgage payment > rent, the difference could be invested
 
@@ -309,7 +367,7 @@ Both property appreciation and investment growth compound monthly rather than an
 
 ## How to Interpret Results
 
-### If Buying Wins ($\Delta > 0$)
+### If Buying Wins (Δ > 0)
 Factors contributing to this outcome:
 - Property appreciation is strong relative to equity returns
 - Mortgage rates are favorable (low interest)
@@ -317,7 +375,7 @@ Factors contributing to this outcome:
 - Long time horizon allows appreciation to compound
 - Rent is high relative to mortgage payment
 
-### If Renting Wins ($\Delta < 0$)
+### If Renting Wins (Δ < 0)
 Factors contributing to this outcome:
 - Equity returns significantly exceed property appreciation
 - Rent is low relative to property price (high price-to-rent ratio)
@@ -325,25 +383,25 @@ Factors contributing to this outcome:
 - Avoiding leverage risk and transaction costs pays off
 - Short to medium time horizon
 
-### The Breakeven Point ($t^*$)
+### The Breakeven Point (t*)
 
 The breakeven year provides critical insights:
 
 | Breakeven Time | Interpretation |
 |----------------|----------------|
-| $t^* < 10$ years | Buying is clearly advantageous for long-term holders |
-| $10 \leq t^* \leq 20$ years | Strategies are competitive; personal factors matter |
-| $t^* > 20$ years | Renting may be preferable unless very long holding period |
+| t* < 10 years | Buying is clearly advantageous for long-term holders |
+| 10 ≤ t* ≤ 20 years | Strategies are competitive; personal factors matter |
+| t* > 20 years | Renting may be preferable unless very long holding period |
 | No breakeven | One strategy dominates entirely across all time horizons |
 
 ### Sensitivity Analysis
 
 Key variables to test:
-1. **Property Appreciation Rate ($a$):** Most uncertain input
-2. **Equity Growth Rate ($e$):** Historical average is ~7-10% for stocks
-3. **Rent Inflation ($i$):** Varies greatly by market
-4. **Down Payment ($D$):** Affects leverage ratio
-5. **Duration ($n$):** Longer periods favor appreciation/compounding
+1. **Property Appreciation Rate (a):** Most uncertain input
+2. **Equity Growth Rate (e):** Historical average is ~7-10% for stocks
+3. **Rent Inflation (i):** Varies greatly by market
+4. **Down Payment (D):** Affects leverage ratio
+5. **Duration (n):** Longer periods favor appreciation/compounding
 
 ## Implementation Notes
 

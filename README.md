@@ -50,17 +50,23 @@ Best for developers who want to modify the code or use the simulator as a librar
 
 **Setup:**
 
-1. Clone or navigate to the repository:
+1. Install `uv` if you haven't already:
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+2. Clone or navigate to the repository:
 ```bash
 cd simulator
 ```
 
-2. Install dependencies:
+3. Create virtual environment and install dependencies:
 ```bash
-pip install -e .
+uv sync
 ```
 
-Or if using `uv`:
+This will create a `.venv` directory, install all dependencies, and install the package in editable mode, as shown below : 
+
 ```bash
 uv pip install -e .
 ```
