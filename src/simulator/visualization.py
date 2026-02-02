@@ -27,17 +27,22 @@ def create_asset_growth_chart(df: pd.DataFrame) -> go.Figure:
 
     Examples
     --------
-    >>> import pandas as pd
-    >>> from simulator.visualization import create_asset_growth_chart
-    >>> df = pd.DataFrame({
-    ...     'Year': [0, 1, 2, 3],
-    ...     'Home_Value': [500000, 515000, 530450, 546364],
-    ...     'Equity_Value': [100000, 107000, 114490, 122504],
-    ...     'Mortgage_Balance': [400000, 390000, 380000, 370000]
-    ... })
-    >>> fig = create_asset_growth_chart(df)
-    >>> fig.layout.title.text
-    'Asset Value Over Time'
+    Create an asset growth chart:
+
+    .. code-block:: python
+
+        import pandas as pd
+        from simulator.visualization import create_asset_growth_chart
+        
+        df = pd.DataFrame({
+            'Year': [0, 1, 2, 3],
+            'Home_Value': [500000, 515000, 530450, 546364],
+            'Equity_Value': [100000, 107000, 114490, 122504],
+            'Mortgage_Balance': [400000, 390000, 380000, 370000]
+        })
+        
+        fig = create_asset_growth_chart(df)
+        fig.show()
 
     """
     fig = go.Figure()
@@ -113,16 +118,21 @@ def create_outflow_chart(df: pd.DataFrame) -> go.Figure:
 
     Examples
     --------
-    >>> import pandas as pd
-    >>> from simulator.visualization import create_outflow_chart
-    >>> df = pd.DataFrame({
-    ...     'Year': [0, 1, 2, 3],
-    ...     'Outflow_Buy': [100000, 118000, 136000, 154000],
-    ...     'Outflow_Rent': [0, 24000, 48000, 72000]
-    ... })
-    >>> fig = create_outflow_chart(df)
-    >>> fig.layout.title.text
-    'Cumulative Outflows: Cost of Lifestyle'
+    Create a cumulative outflow chart:
+
+    .. code-block:: python
+
+        import pandas as pd
+        from simulator.visualization import create_outflow_chart
+        
+        df = pd.DataFrame({
+            'Year': [0, 1, 2, 3],
+            'Outflow_Buy': [100000, 118000, 136000, 154000],
+            'Outflow_Rent': [0, 24000, 48000, 72000]
+        })
+        
+        fig = create_outflow_chart(df)
+        fig.show()
 
     """
     fig = go.Figure()
@@ -191,16 +201,21 @@ def create_net_value_chart(
 
     Examples
     --------
-    >>> import pandas as pd
-    >>> from simulator.visualization import create_net_value_chart
-    >>> df = pd.DataFrame({
-    ...     'Year': [0, 1, 2, 3],
-    ...     'Net_Buy': [400000, 397000, 394450, 392364],
-    ...     'Net_Rent': [100000, 83000, 66490, 50504]
-    ... })
-    >>> fig = create_net_value_chart(df, breakeven_year=2.5)
-    >>> fig.layout.title.text
-    'Net Value Analysis: The Bottom Line'
+    Create a net value comparison chart:
+
+    .. code-block:: python
+
+        import pandas as pd
+        from simulator.visualization import create_net_value_chart
+        
+        df = pd.DataFrame({
+            'Year': [0, 1, 2, 3],
+            'Net_Buy': [400000, 397000, 394450, 392364],
+            'Net_Rent': [100000, 83000, 66490, 50504]
+        })
+        
+        fig = create_net_value_chart(df, breakeven_year=2.5)
+        fig.show()
 
     """
     fig = go.Figure()
@@ -305,21 +320,26 @@ def create_combined_dashboard(
 
     Examples
     --------
-    >>> import pandas as pd
-    >>> from simulator.visualization import create_combined_dashboard
-    >>> df = pd.DataFrame({
-    ...     'Year': [0, 1, 2],
-    ...     'Home_Value': [500000, 515000, 530450],
-    ...     'Equity_Value': [100000, 107000, 114490],
-    ...     'Mortgage_Balance': [400000, 390000, 380000],
-    ...     'Outflow_Buy': [100000, 118000, 136000],
-    ...     'Outflow_Rent': [0, 24000, 48000],
-    ...     'Net_Buy': [400000, 397000, 394450],
-    ...     'Net_Rent': [100000, 83000, 66490]
-    ... })
-    >>> fig = create_combined_dashboard(df)
-    >>> len(fig.data)
-    7
+    Create a comprehensive dashboard:
+
+    .. code-block:: python
+
+        import pandas as pd
+        from simulator.visualization import create_combined_dashboard
+        
+        df = pd.DataFrame({
+            'Year': [0, 1, 2],
+            'Home_Value': [500000, 515000, 530450],
+            'Equity_Value': [100000, 107000, 114490],
+            'Mortgage_Balance': [400000, 390000, 380000],
+            'Outflow_Buy': [100000, 118000, 136000],
+            'Outflow_Rent': [0, 24000, 48000],
+            'Net_Buy': [400000, 397000, 394450],
+            'Net_Rent': [100000, 83000, 66490]
+        })
+        
+        fig = create_combined_dashboard(df)
+        fig.show()
 
     """
     # Create subplots: 3 rows, 1 column

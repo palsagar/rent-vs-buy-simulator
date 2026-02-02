@@ -30,23 +30,25 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
 
     Examples
     --------
-    >>> from simulator.models import SimulationConfig
-    >>> from simulator.engine import calculate_scenarios
-    >>> config = SimulationConfig(
-    ...     duration_years=5,
-    ...     property_price=500000,
-    ...     down_payment_pct=20,
-    ...     mortgage_rate_annual=4.5,
-    ...     property_appreciation_annual=3,
-    ...     equity_growth_annual=7,
-    ...     monthly_rent=2000
-    ... )
-    >>> results = calculate_scenarios(config)
-    >>> len(results.data)
-    61
-    >>> results.data.columns.tolist()
-    ['Month', 'Year', 'Home_Value', 'Equity_Value', 'Mortgage_Balance',
-     'Outflow_Buy', 'Outflow_Rent', 'Net_Buy', 'Net_Rent']
+    Run a simulation:
+
+    .. code-block:: python
+
+        from simulator.models import SimulationConfig
+        from simulator.engine import calculate_scenarios
+        
+        config = SimulationConfig(
+            duration_years=5,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3,
+            equity_growth_annual=7,
+            monthly_rent=2000
+        )
+        
+        results = calculate_scenarios(config)
+        print(f"Final difference: ${results.final_difference:,.0f}")
 
     """
     # Setup time vector (monthly granularity)
@@ -178,13 +180,20 @@ def _find_breakeven(
 
     Examples
     --------
-    >>> import numpy as np
-    >>> from simulator.engine import _find_breakeven
-    >>> years = np.array([0, 1, 2, 3, 4, 5])
-    >>> net_buy = np.array([100000, 110000, 120000, 130000, 140000, 150000])
-    >>> net_rent = np.array([100000, 105000, 115000, 125000, 135000, 145000])
-    >>> _find_breakeven(years, net_buy, net_rent)
-    2.0
+    Find breakeven between two scenarios:
+
+    .. code-block:: python
+
+        import numpy as np
+        from simulator.engine import _find_breakeven
+        
+        years = np.array([0, 1, 2, 3, 4, 5])
+        net_buy = np.array([100000, 110000, 120000, 130000, 140000,
+                            150000])
+        net_rent = np.array([100000, 105000, 115000, 125000, 135000,
+                             145000])
+        
+        breakeven = _find_breakeven(years, net_buy, net_rent)
 
     """
     # Calculate the difference (positive when buy is winning)

@@ -56,18 +56,21 @@ class SimulationConfig:
 
     Examples
     --------
-    >>> from simulator.models import SimulationConfig
-    >>> config = SimulationConfig(
-    ...     duration_years=30,
-    ...     property_price=500000,
-    ...     down_payment_pct=20,
-    ...     mortgage_rate_annual=4.5,
-    ...     property_appreciation_annual=3,
-    ...     equity_growth_annual=7,
-    ...     monthly_rent=2000
-    ... )
-    >>> config.duration_years
-    30
+    Create a simulation configuration:
+
+    .. code-block:: python
+
+        from simulator.models import SimulationConfig
+        
+        config = SimulationConfig(
+            duration_years=30,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3,
+            equity_growth_annual=7,
+            monthly_rent=2000
+        )
 
     """
 
@@ -90,17 +93,22 @@ class SimulationConfig:
 
         Examples
         --------
-        >>> from simulator.models import SimulationConfig
-        >>> config = SimulationConfig(
-        ...     duration_years=30,
-        ...     property_price=500000,
-        ...     down_payment_pct=20,
-        ...     mortgage_rate_annual=4.5,
-        ...     property_appreciation_annual=3,
-        ...     equity_growth_annual=7,
-        ...     monthly_rent=2000
-        ... )
-        >>> # Validation happens automatically on instantiation
+        Validation happens automatically on instantiation:
+
+        .. code-block:: python
+
+            from simulator.models import SimulationConfig
+            
+            config = SimulationConfig(
+                duration_years=30,
+                property_price=500000,
+                down_payment_pct=20,
+                mortgage_rate_annual=4.5,
+                property_appreciation_annual=3,
+                equity_growth_annual=7,
+                monthly_rent=2000
+            )
+            # Validation passed successfully
 
         """
         if self.duration_years <= 0:
@@ -156,28 +164,32 @@ class SimulationResults:
 
     Examples
     --------
-    >>> from simulator.models import SimulationResults
-    >>> import pandas as pd
-    >>> df = pd.DataFrame({
-    ...     'Month': [0, 12, 24],
-    ...     'Year': [0, 1, 2],
-    ...     'Home_Value': [500000, 515000, 530450],
-    ...     'Equity_Value': [100000, 107000, 114490],
-    ...     'Mortgage_Balance': [400000, 390000, 380000],
-    ...     'Outflow_Buy': [100000, 118000, 136000],
-    ...     'Outflow_Rent': [0, 24000, 48000],
-    ...     'Net_Buy': [400000, 397000, 394450],
-    ...     'Net_Rent': [100000, 83000, 66490]
-    ... })
-    >>> results = SimulationResults(
-    ...     data=df,
-    ...     final_net_buy=394450,
-    ...     final_net_rent=66490,
-    ...     final_difference=327960,
-    ...     breakeven_year=None
-    ... )
-    >>> results.final_difference
-    327960.0
+    Create simulation results:
+
+    .. code-block:: python
+
+        from simulator.models import SimulationResults
+        import pandas as pd
+        
+        df = pd.DataFrame({
+            'Month': [0, 12, 24],
+            'Year': [0, 1, 2],
+            'Home_Value': [500000, 515000, 530450],
+            'Equity_Value': [100000, 107000, 114490],
+            'Mortgage_Balance': [400000, 390000, 380000],
+            'Outflow_Buy': [100000, 118000, 136000],
+            'Outflow_Rent': [0, 24000, 48000],
+            'Net_Buy': [400000, 397000, 394450],
+            'Net_Rent': [100000, 83000, 66490]
+        })
+        
+        results = SimulationResults(
+            data=df,
+            final_net_buy=394450,
+            final_net_rent=66490,
+            final_difference=327960,
+            breakeven_year=None
+        )
 
     """
 
