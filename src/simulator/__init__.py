@@ -11,7 +11,7 @@ Basic usage:
 .. code-block:: python
 
     from simulator import SimulationConfig, calculate_scenarios
-    
+
     config = SimulationConfig(
         duration_years=30,
         property_price=500000,
@@ -21,7 +21,7 @@ Basic usage:
         equity_growth_annual=7,
         monthly_rent=2000
     )
-    
+
     results = calculate_scenarios(config)
     print(f"Final difference: ${results.final_difference:,.0f}")
 

@@ -30,7 +30,8 @@ select = ["E", "F", "B", "I", "C90", "N", "UP", "RUF"]
 # Ignore specific rules
 ignore = [
     # Add any rules you want to ignore
-    "E203", # Whitespace before ':' (conflicts with Black)
+    "E203",   # Whitespace before ':' (conflicts with Black)
+    "RUF001", # Allow emoji characters in strings (intentional for UI)
 ]
 
 # Allow autofix for all enabled rules

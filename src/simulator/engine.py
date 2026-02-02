@@ -36,7 +36,7 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
 
         from simulator.models import SimulationConfig
         from simulator.engine import calculate_scenarios
-        
+
         config = SimulationConfig(
             duration_years=5,
             property_price=500000,
@@ -46,7 +46,7 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
             equity_growth_annual=7,
             monthly_rent=2000
         )
-        
+
         results = calculate_scenarios(config)
         print(f"Final difference: ${results.final_difference:,.0f}")
 
@@ -125,6 +125,42 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
     # Net value for renting scenario (Asset - Cumulative Outflows)
     net_val_rent = equity_value - cum_rent_outflow
 
+    # ========== SCENARIO C: RENT & INVEST MONTHLY SAVINGS ==========
+    # Only applicable when initial mortgage payment > initial rent
+    scenario_c_enabled = monthly_payment > config.monthly_rent
+
+    # Calculate monthly savings (mortgage payment - rent), capped at 0 when
+    # rent exceeds mortgage. The savings are invested each month at the same
+    # CAGR as Scenario B
+    monthly_savings = np.maximum(0, monthly_payment - rent_at_month)
+
+    # Calculate compounded value of monthly contributions
+    # Each month's contribution compounds for the remaining months
+    # savings_portfolio[t] = sum over i from 0 to t-1 of: savings[i] * (1 + r)^(t-i)
+    savings_portfolio = np.zeros(n_months + 1)
+    for t in range(1, n_months + 1):
+        # Previous portfolio value grows by one month
+        savings_portfolio[t] = savings_portfolio[t - 1] * (1 + monthly_equity_rate)
+        # Add this month's savings contribution (invested at end of month t-1)
+        if t > 0:
+            savings_portfolio[t] += monthly_savings[t - 1]
+
+    # Scenario C asset value: uninvested down payment (cash) + savings portfolio
+    asset_value_rent_savings = down_payment + savings_portfolio
+
+    # Scenario C net value: asset value - cumulative rent outflows
+    net_val_rent_savings = asset_value_rent_savings - cum_rent_outflow
+
+    # Calculate Scenario C final values and breakeven
+    final_net_rent_savings = (
+        float(net_val_rent_savings[-1]) if scenario_c_enabled else None
+    )
+    breakeven_year_vs_rent_savings = (
+        _find_breakeven(year_arr, net_val_buy, net_val_rent_savings)
+        if scenario_c_enabled
+        else None
+    )
+
     # ========== CONSTRUCT OUTPUT ==========
 
     # Create DataFrame with all time-series data
@@ -139,6 +175,8 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
             "Outflow_Rent": cum_rent_outflow,
             "Net_Buy": net_val_buy,
             "Net_Rent": net_val_rent,
+            "Savings_Portfolio_Value": savings_portfolio,
+            "Net_Rent_Savings": net_val_rent_savings,
         }
     )
 
@@ -156,6 +194,10 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
         final_net_rent=final_net_rent,
         final_difference=final_difference,
         breakeven_year=breakeven_year,
+        monthly_mortgage_payment=monthly_payment,
+        scenario_c_enabled=scenario_c_enabled,
+        final_net_rent_savings=final_net_rent_savings,
+        breakeven_year_vs_rent_savings=breakeven_year_vs_rent_savings,
     )
 
 
@@ -186,13 +228,13 @@ def _find_breakeven(
 
         import numpy as np
         from simulator.engine import _find_breakeven
-        
+
         years = np.array([0, 1, 2, 3, 4, 5])
         net_buy = np.array([100000, 110000, 120000, 130000, 140000,
                             150000])
         net_rent = np.array([100000, 105000, 115000, 125000, 135000,
                              145000])
-        
+
         breakeven = _find_breakeven(years, net_buy, net_rent)
 
     """
