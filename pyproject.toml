@@ -13,10 +13,32 @@ dependencies = [
     "pytest>=7.4.0",
 ]
 
+# Ruff global configuration for linting & formatting
+# --------------------------------------------------------
 [tool.ruff]
-line-length = 88
+# Target Python version
 target-version = "py312"
 
+# Line length (black formatter convention)
+line-length = 88
+
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP"]
-ignore = ["E501"]
+# Enable flake8-bugbear (`B`) and Ruff-specific rules (`RUF`)
+# Plus isort (`I`), pycodestyle (`E`), and more common rulesets
+select = ["E", "F", "B", "I", "C90", "N", "UP", "RUF"]
+
+# Ignore specific rules
+ignore = [
+    # Add any rules you want to ignore
+    "E203", # Whitespace before ':' (conflicts with Black)
+]
+
+# Allow autofix for all enabled rules
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.format]
+# Quote style
+quote-style = "double"
+# Indent style
+indent-style = "space"
