@@ -12,14 +12,43 @@ A financial simulation application that compares two capital allocation strategi
 - 🎯 **Key Metrics:** Net value analysis, cumulative outflows, and asset growth comparisons
 - 📱 **User-Friendly Interface:** Clean Streamlit UI with intuitive parameter controls
 
-## Installation
+## Installation & Usage
 
-### Prerequisites
+Choose the method that best fits your needs:
 
+| Method | Use Case | Requirements |
+|--------|----------|--------------|
+| **Local Docker** | Quick trial, no Python needed | Docker |
+| **Python/uv** | Development, customization | Python 3.12+ |
+| **Production Docker** | Cloud deployment | Docker |
+
+### Option 1: Local Docker (Recommended for Quick Start)
+
+The easiest way to run the application locally without installing Python:
+
+1. Make sure Docker is installed and running on your system
+
+2. Run the application:
+```bash
+docker compose up --build
+```
+
+3. Open your browser and navigate to `http://localhost:8501`
+
+4. To stop the application, press `Ctrl+C` and run:
+```bash
+docker compose down
+```
+
+### Option 2: Python/uv (For Development)
+
+Best for developers who want to modify the code or use the simulator as a library.
+
+**Prerequisites:**
 - Python 3.12 or higher
 - pip or uv package manager
 
-### Setup
+**Setup:**
 
 1. Clone or navigate to the repository:
 ```bash
@@ -36,9 +65,7 @@ Or if using `uv`:
 uv pip install -e .
 ```
 
-## Usage
-
-### Running the Web Application
+**Running the Web Application:**
 
 Start the Streamlit application:
 
@@ -47,6 +74,17 @@ streamlit run app.py
 ```
 
 The application will open in your browser at `http://localhost:8501`.
+
+### Option 3: Production Docker (For Cloud Deployment)
+
+For deploying to cloud platforms (AWS, GCP, Azure, etc.):
+
+```bash
+docker build -t rent-vs-buy-simulator .
+docker run -p 8501:8501 rent-vs-buy-simulator
+```
+
+The production `Dockerfile` includes additional security flags for public-facing deployments.
 
 ### Using as a Library
 
@@ -129,36 +167,28 @@ pytest tests/ --cov=src/simulator --cov-report=html
 
 ## Formulas & Methodology
 
-### Mortgage Calculation
-Monthly payment uses standard amortization:
-```
-PMT = P × [r(1+r)^n] / [(1+r)^n - 1]
-```
-Where P = loan amount, r = monthly rate, n = total months
+For detailed mathematical formulas, derivations, and methodology used in the simulation engine, see the **[Mathematical Reference (FORMULAS.md)](FORMULAS.md)**.
 
-### Property Value
-```
-V_p(t) = P_initial × (1 + c/12)^month
-```
-
-### Equity Portfolio Value
-```
-V_e(t) = D × (1 + e/12)^month
-```
-
-### Net Value
-```
-Net Value = Asset Value - Cumulative Outflows
-```
+**Key concepts:**
+- Monthly mortgage payment using standard amortization formula
+- Compound monthly appreciation for property values and equity portfolios
+- Inflation-adjusted rent calculations with geometric series
+- Net value comparison: Asset Value - Cumulative Outflows
+- Breakeven analysis using linear interpolation
 
 ## Assumptions
 
-- Calculations use monthly granularity for accuracy
-- Mortgage payments are fixed (standard amortization)
-- Property appreciation and equity growth compound monthly
-- Rent increases with inflation annually
-- No transaction costs, property taxes, or maintenance costs included
-- No taxes on investment gains considered
+The model makes several simplifying assumptions for comparison purposes:
+
+- **Constant Growth Rates:** Property appreciation, equity returns, and rent inflation are constant
+- **Monthly Granularity:** All calculations compound monthly for accuracy
+- **Fixed Mortgage:** Standard amortization with fixed interest rate
+- **No Transaction Costs:** Excludes closing costs, realtor fees, and moving expenses
+- **No Property Costs:** Excludes property taxes, insurance, HOA fees, and maintenance
+- **No Tax Effects:** Ignores mortgage interest deduction and capital gains taxes
+- **Full Liquidity:** Assumes assets can be sold/liquidated at market value instantly
+
+For a complete discussion of assumptions and limitations, see the [Mathematical Reference](FORMULAS.md).
 
 ## Visualization Outputs
 
