@@ -45,7 +45,8 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
     >>> len(results.data)
     61
     >>> results.data.columns.tolist()
-    ['Month', 'Year', 'Home_Value', 'Equity_Value', 'Mortgage_Balance', 'Outflow_Buy', 'Outflow_Rent', 'Net_Buy', 'Net_Rent']
+    ['Month', 'Year', 'Home_Value', 'Equity_Value', 'Mortgage_Balance',
+     'Outflow_Buy', 'Outflow_Rent', 'Net_Buy', 'Net_Rent']
 
     """
     # Setup time vector (monthly granularity)

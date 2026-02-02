@@ -251,7 +251,10 @@ def create_net_value_chart(
                 mode="markers",
                 marker=dict(size=10, color="red", symbol="star"),
                 name="Breakeven Point",
-                hovertemplate=f"Year: {breakeven_year:.1f}<br>Value: ${net_at_breakeven:,.0f}<extra></extra>",
+                hovertemplate=(
+                    f"Year: {breakeven_year:.1f}<br>"
+                    f"Value: ${net_at_breakeven:,.0f}<extra></extra>"
+                ),
             )
         )
 
