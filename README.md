@@ -1,8 +1,9 @@
 # Real Estate vs. Equity Simulation Engine
 
-A financial simulation application that compares two capital allocation strategies over time:
+A financial simulation application that compares three capital allocation strategies over time:
 - **Strategy A (Buy):** Purchase property with a mortgage
-- **Strategy B (Rent):** Rent and invest the down payment in equities
+- **Strategy B (Rent & Invest):** Rent and invest the down payment in equities
+- **Strategy C (Rent & Invest Savings):** Rent, keep down payment as cash, and invest monthly savings
 
 ## Features
 
@@ -10,6 +11,7 @@ A financial simulation application that compares two capital allocation strategi
 - 📊 **Interactive Visualizations:** Beautiful Plotly charts with hover details and breakeven analysis
 - ⚡ **High Performance:** Vectorized NumPy calculations for fast simulations
 - 🎯 **Key Metrics:** Net value analysis, cumulative outflows, and asset growth comparisons
+- 🔄 **Three-Way Comparison:** Includes Scenario C for investing monthly savings when mortgage exceeds rent
 - 📱 **User-Friendly Interface:** Clean Streamlit UI with intuitive parameter controls
 
 ## Installation & Usage
@@ -121,6 +123,13 @@ print(f"Difference: ${results.final_difference:,.0f}")
 
 if results.breakeven_year:
     print(f"Breakeven at: {results.breakeven_year:.1f} years")
+
+# Access Scenario C results (if applicable)
+if results.scenario_c_enabled:
+    print(f"\nScenario C (Rent + Invest Savings):")
+    print(f"Final net value: ${results.final_net_rent_savings:,.0f}")
+    if results.breakeven_year_vs_rent_savings:
+        print(f"Breakeven vs Buy: {results.breakeven_year_vs_rent_savings:.1f} years")
 ```
 
 ## Project Structure
@@ -171,6 +180,11 @@ pytest tests/ --cov=src/simulator --cov-report=html
 - **Equity Growth (CAGR):** Expected annual investment returns (0-15%)
 - **Rent Inflation:** Annual rent increase rate (0-10%)
 
+### Scenario C: Rent & Invest Savings
+- **Availability:** Only when mortgage payment > initial rent
+- **Strategy:** Keep down payment as cash (0% return) and invest monthly savings (mortgage - rent) at equity CAGR
+- **Use Case:** Conservative approach that maintains liquidity while capturing upside from monthly savings
+
 ## Formulas & Methodology
 
 For detailed mathematical formulas, derivations, and methodology used in the simulation engine, see the **[Mathematical Reference (FORMULAS.md)](FORMULAS.md)**.
@@ -181,6 +195,7 @@ For detailed mathematical formulas, derivations, and methodology used in the sim
 - Inflation-adjusted rent calculations with geometric series
 - Net value comparison: Asset Value - Cumulative Outflows
 - Breakeven analysis using linear interpolation
+- Scenario C: Monthly savings investment with compounding (see FORMULAS.md for details)
 
 ## Assumptions
 
@@ -200,9 +215,9 @@ For a complete discussion of assumptions and limitations, see the [Mathematical 
 
 The application generates three main charts:
 
-1. **Asset Value Over Time:** Shows property value, equity portfolio value, and remaining mortgage balance
+1. **Asset Value Over Time:** Shows property value, equity portfolio value, remaining mortgage balance, and (when applicable) Scenario C assets
 2. **Cumulative Outflows:** Compares total money spent in each scenario
-3. **Net Value Analysis:** The "bottom line" showing asset value minus cumulative outflows
+3. **Net Value Analysis:** The "bottom line" showing asset value minus cumulative outflows for all applicable scenarios
 
 ## Technical Stack
 

@@ -178,20 +178,131 @@ N_rent(t) = V_e(t) - O_rent(t)
 
 This represents: **Portfolio Value - Money Spent on Rent**
 
+## Scenario C: Rent & Invest Monthly Savings
+
+### Overview
+
+Scenario C is a hybrid strategy that combines elements of both renting and investing. It's only applicable when the mortgage payment exceeds the initial rent payment.
+
+**Key Characteristics:**
+- Down payment is kept as cash (0% return) for liquidity
+- Monthly savings (mortgage payment - rent) are invested at equity CAGR
+- Provides a middle ground between Scenarios A and B
+
+### 1. Applicability Condition
+
+Scenario C is only enabled when:
+
+```
+PMT > Rent_0
+```
+
+Where:
+- `PMT` = Monthly mortgage payment (from Scenario A)
+- `Rent_0` = Initial monthly rent
+
+### 2. Monthly Savings
+
+The amount saved each month (when rent is less than mortgage):
+
+```
+S(t) = max(0, PMT - Rent(t))
+```
+
+Where:
+- `S(t)` = Savings at month t
+- `Rent(t)` = Rent at month t (with inflation)
+
+As rent increases due to inflation, the monthly savings may decrease over time.
+
+### 3. Savings Portfolio Value
+
+The savings are invested each month and compound at the equity growth rate:
+
+```
+P_s(t) = Σ(k=0 to t-1) [S(k) × (1 + e/12)^(t-k)]
+```
+
+**Recursive formulation:**
+
+```
+P_s(0) = 0
+
+P_s(t) = P_s(t-1) × (1 + e/12) + S(t-1)  for t > 0
+```
+
+Where:
+- `P_s(t)` = Savings portfolio value at month t
+- `e` = Annual equity growth rate (as decimal)
+- Each month's contribution compounds for the remaining time
+
+### 4. Total Asset Value
+
+The total assets in Scenario C consist of:
+
+```
+A_c(t) = D + P_s(t)
+```
+
+Where:
+- `A_c(t)` = Total asset value at month t
+- `D` = Down payment (held as cash, no growth)
+- `P_s(t)` = Savings portfolio value
+
+**Note:** Unlike Scenario B, the down payment does NOT earn returns in Scenario C. This represents a more conservative approach that maintains liquidity.
+
+### 5. Net Value for Scenario C
+
+```
+N_c(t) = A_c(t) - O_rent(t)
+
+       = D + P_s(t) - O_rent(t)
+```
+
+This represents: **Cash + Savings Portfolio - Money Spent on Rent**
+
+### 6. Breakeven vs Buying
+
+The breakeven between Scenario C and buying occurs when:
+
+```
+N_buy(t*) = N_c(t*)
+```
+
+This is calculated using the same linear interpolation method as the Buy vs Rent breakeven.
+
 ## Decision Metric: Net Value Comparison
 
 ### The Bottom Line
 
-The fundamental comparison metric:
+The fundamental comparison metrics:
+
+**Buy vs Rent (Scenario A vs B):**
 
 ```
-Δ(t) = N_buy(t) - N_rent(t)
+Δ_AB(t) = N_buy(t) - N_rent(t)
 ```
 
-**Decision Rule:**
+**Buy vs Rent+Savings (Scenario A vs C):**
+
+```
+Δ_AC(t) = N_buy(t) - N_c(t)
+```
+
+**Decision Rules:**
 - If `Δ(t) > 0`: Buying is better at time t
-- If `Δ(t) < 0`: Renting is better at time t
+- If `Δ(t) < 0`: The alternative scenario is better at time t
 - If `Δ(t) = 0`: Break-even point
+
+**Three-Way Comparison:**
+
+The optimal strategy at time t is:
+
+```
+Optimal(t) = argmax(N_buy(t), N_rent(t), N_c(t))
+```
+
+Where `N_c(t)` is only considered if Scenario C is enabled (PMT > Rent_0).
 
 ### Breakeven Point
 
@@ -302,13 +413,32 @@ O_rent(360) ≈ $972,000  (geometric series sum)
 N_rent(360) = $761,226 - $972,000 = -$210,774
 ```
 
+**Scenario C (Rent + Invest Savings):**
+
+Since PMT ($2,027) > Rent_0 ($2,000), Scenario C is applicable.
+
+```
+Initial monthly savings: S(0) = $2,027 - $2,000 = $27
+
+Savings portfolio after compounding: P_s(360) ≈ $25,235
+
+Total assets: A_c(360) = $100,000 + $25,235 = $125,235
+
+N_c(360) = $125,235 - $972,000 = -$846,765
+```
+
 **Result:**
 
 ```
-Δ(360) = $384,280 - (-$210,774) = $595,054
+Δ_AB(360) = $384,280 - (-$210,774) = $595,054  (Buy vs Rent)
+
+Δ_AC(360) = $384,280 - (-$846,765) = $1,231,045  (Buy vs Rent+Savings)
 ```
 
-**Buying wins by $595,054 in this scenario!**
+**In this scenario:**
+- **Buying wins overall** with the highest net value
+- **Scenario B (Rent & Invest)** is second best
+- **Scenario C (Rent + Invest Savings)** performs worst due to down payment earning 0% return
 
 ## Assumptions & Limitations
 
@@ -353,11 +483,17 @@ The model assumes:
 - Investments can be liquidated without penalty
 - No forced sales during downturns
 
-### 7. Full Reinvestment (Scenario B)
-The model assumes:
+### 7. Investment Strategy Assumptions
+
+**Scenario B:**
 - The down payment is invested as a lump sum at t=0
-- No additional monthly investments from rent savings
-- In reality, if mortgage payment > rent, the difference could be invested
+- Earns equity returns throughout the simulation period
+
+**Scenario C:**
+- The down payment is kept as cash (0% return) for liquidity
+- Only monthly savings (mortgage - rent) are invested
+- Provides a more conservative approach with maintained liquidity
+- Only applicable when mortgage payment > initial rent
 
 ### 8. Monthly Compounding
 Both property appreciation and investment growth compound monthly rather than annually or continuously. This is a standard approximation that:
@@ -382,6 +518,14 @@ Factors contributing to this outcome:
 - Flexibility value is high (ability to relocate, no maintenance burden)
 - Avoiding leverage risk and transaction costs pays off
 - Short to medium time horizon
+
+### If Scenario C Wins
+Factors contributing to this outcome:
+- Mortgage payment significantly exceeds rent (large monthly savings)
+- Equity returns are strong, allowing savings to compound effectively
+- Liquidity is valued (down payment kept as cash)
+- Rent inflation is moderate (savings remain positive over time)
+- Middle ground between full investment (Scenario B) and property ownership (Scenario A)
 
 ### The Breakeven Point (t*)
 

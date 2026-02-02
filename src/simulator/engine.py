@@ -86,6 +86,9 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
             mortgage_balance[i] = -npf.pv(
                 monthly_rate, remaining_months, monthly_payment
             )
+        elif remaining_months > 0 and monthly_rate == 0:
+            # With 0% interest, balance decreases linearly
+            mortgage_balance[i] = loan_amount - (monthly_payment * i)
         else:
             mortgage_balance[i] = 0
 
@@ -241,25 +244,26 @@ def _find_breakeven(
     # Calculate the difference (positive when buy is winning)
     diff = net_buy - net_rent
 
-    # Look for sign changes
-    sign_changes = np.diff(np.sign(diff))
-
-    # Find indices where sign changes (crossover points)
-    crossover_indices = np.where(sign_changes != 0)[0]
-
-    if len(crossover_indices) > 0:
-        # Return the first crossover point
-        # Linear interpolation for more accurate year
-        idx = crossover_indices[0]
-        # Interpolate between idx and idx+1
-        x1, x2 = years[idx], years[idx + 1]
-        y1, y2 = diff[idx], diff[idx + 1]
-
-        # Linear interpolation to find exact zero crossing
-        if y2 != y1:
-            breakeven = x1 - y1 * (x2 - x1) / (y2 - y1)
-            return float(breakeven)
-        else:
-            return float(x1)
+    # Find where diff crosses zero (changes sign)
+    # Skip the first point if it's zero, to handle initial equality
+    start_idx = 1 if diff[0] == 0 else 0
+    
+    # Look for sign changes in the difference
+    for i in range(start_idx, len(diff) - 1):
+        # Check if diff crosses zero between i and i+1
+        if diff[i] * diff[i + 1] < 0:
+            # Found a crossover: interpolate to find exact zero crossing
+            x1, x2 = years[i], years[i + 1]
+            y1, y2 = diff[i], diff[i + 1]
+            
+            if y2 != y1:
+                breakeven = x1 - y1 * (x2 - x1) / (y2 - y1)
+                return float(breakeven)
+            else:
+                # Both are zero (shouldn't happen with < 0 check, but handle it)
+                return float(x1)
+        elif diff[i] == 0 and i > 0:
+            # Exact match at this point
+            return float(years[i])
 
     return None
