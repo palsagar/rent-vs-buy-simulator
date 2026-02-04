@@ -33,6 +33,22 @@ def main():  # noqa: C901
 
     # Title and description
     st.title("🏠 Financial Simulator: Buy vs. Rent")
+
+    # GitHub star link
+    st.markdown(
+        """
+        <a href="https://github.com/palsagar/rent-vs-buy-simulator" target="_blank"
+           style="text-decoration: none;">
+            <img src="https://img.shields.io/github/stars/palsagar/rent-vs-buy-simulator?style=social"
+                 alt="GitHub stars">
+        </a>
+        <span style="color: #666; font-size: 0.9em; margin-left: 8px;">
+            Found this useful? Give it a ⭐ on GitHub!
+        </span>
+        """,
+        unsafe_allow_html=True,
+    )
+
     st.markdown("""
     Compare capital allocation strategies over time:
     - **Strategy A (Buy):** Purchase property with a mortgage
@@ -386,6 +402,13 @@ def main():  # noqa: C901
 
         **Developed using:** Python, NumPy, Pandas, Plotly, and Streamlit
         """)
+
+    # Privacy and hosting notice
+    st.caption(
+        "🔒 **Privacy:** This app does not track any user data, use cookies, "
+        "or perform any analytics. Self-hosted on a tiny VPS via "
+        "[Coolify](https://coolify.io/)."
+    )
 
 
 if __name__ == "__main__":
