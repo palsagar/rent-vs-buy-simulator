@@ -5,6 +5,7 @@ Run with: streamlit run app.py
 """
 
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
@@ -14,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from simulator.engine import calculate_scenarios
 from simulator.models import SimulationConfig
+from simulator.utils import generate_pdf_report
 from simulator.visualization import (
     create_asset_growth_chart,
     create_net_value_chart,
@@ -264,6 +266,61 @@ def main():  # noqa: C901
     else:
         st.info(
             "🎯 **No breakeven point** - One strategy dominates for the entire period."
+        )
+
+    # PDF Report Generation Section
+    st.markdown("")  # Small spacing
+    show_c = show_scenario_c and results.scenario_c_enabled
+
+    # Initialize session state for PDF if not exists
+    if "pdf_data" not in st.session_state:
+        st.session_state.pdf_data = None
+
+    # Button to trigger PDF generation
+    if st.button(
+        "📄 Generate PDF Report",
+        help="Click to generate a comprehensive PDF report with charts",
+    ):
+        with st.spinner(
+            "Generating PDF report with charts... This may take a few seconds."
+        ):
+            # Generate charts for PDF only when button is clicked
+            fig_assets_pdf = create_asset_growth_chart(
+                results.data,
+                show_scenario_c=show_c,
+                down_payment=down_payment,
+            )
+            fig_outflows_pdf = create_outflow_chart(results.data)
+            fig_net_pdf = create_net_value_chart(
+                results.data,
+                breakeven_year=results.breakeven_year,
+                show_scenario_c=show_c,
+                breakeven_year_vs_rent_savings=results.breakeven_year_vs_rent_savings,
+            )
+
+            # Generate PDF with charts
+            pdf_bytes = generate_pdf_report(
+                config,
+                results,
+                show_c,
+                fig_assets=fig_assets_pdf,
+                fig_outflows=fig_outflows_pdf,
+                fig_net=fig_net_pdf,
+            )
+
+            # Store in session state
+            st.session_state.pdf_data = pdf_bytes
+            st.success("✅ PDF report generated successfully!")
+
+    # Show download button if PDF has been generated
+    if st.session_state.pdf_data is not None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        st.download_button(
+            label="⬇️ Download PDF Report",
+            data=st.session_state.pdf_data,
+            file_name=f"simulation_report_{timestamp}.pdf",
+            mime="application/pdf",
+            help="Download the generated PDF report",
         )
 
     st.divider()
