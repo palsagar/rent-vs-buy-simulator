@@ -290,7 +290,7 @@ def create_net_value_chart(
     # Add breakeven annotation for Buy vs Rent (Scenario A vs B)
     if breakeven_year is not None and 0 < breakeven_year < df["Year"].max():
         # Interpolate net value at breakeven
-        net_at_breakeven = df[df["Year"] <= breakeven_year]["Net_Buy"].iloc[-1]
+        net_at_breakeven = df[df["Year"] <= breakeven_year]["Net_Buy"].iloc[-1]  # pyright: ignore[reportAttributeAccessIssue]
 
         # Add vertical line at breakeven
         fig.add_vline(
@@ -324,7 +324,7 @@ def create_net_value_chart(
     ):
         net_at_breakeven_c = df[df["Year"] <= breakeven_year_vs_rent_savings][
             "Net_Buy"
-        ].iloc[-1]
+        ].iloc[-1]  # pyright: ignore[reportAttributeAccessIssue]
 
         # Add vertical line at breakeven (different style to distinguish)
         fig.add_vline(
