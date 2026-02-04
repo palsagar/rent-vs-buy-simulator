@@ -385,7 +385,8 @@ class TestScenarioC:
 
         results = calculate_scenarios(config)
 
-        # Verify formula: Net_Rent_Savings = (down_payment + savings_portfolio) - rent_outflows
+        # Verify formula: Net_Rent_Savings = (down_payment + savings_portfolio)
+        # - rent_outflows
         down_payment = 500000 * 0.20
         for idx in [0, 60, 120]:  # Check at different time points
             expected_net = (
@@ -434,9 +435,7 @@ class TestScenarioC:
             # Breakeven can be None if lines never cross
             if results.breakeven_year_vs_rent_savings is not None:
                 assert results.breakeven_year_vs_rent_savings > 0
-                assert (
-                    results.breakeven_year_vs_rent_savings <= config.duration_years
-                )  # noqa: E501
+                assert results.breakeven_year_vs_rent_savings <= config.duration_years
 
 
 class TestIntegration:

@@ -197,8 +197,8 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
         final_net_rent=final_net_rent,
         final_difference=final_difference,
         breakeven_year=breakeven_year,
-        monthly_mortgage_payment=monthly_payment,
-        scenario_c_enabled=scenario_c_enabled,
+        monthly_mortgage_payment=monthly_payment,  # pyright: ignore[reportArgumentType]
+        scenario_c_enabled=scenario_c_enabled,  # pyright: ignore[reportArgumentType]
         final_net_rent_savings=final_net_rent_savings,
         breakeven_year_vs_rent_savings=breakeven_year_vs_rent_savings,
     )
@@ -247,7 +247,7 @@ def _find_breakeven(
     # Find where diff crosses zero (changes sign)
     # Skip the first point if it's zero, to handle initial equality
     start_idx = 1 if diff[0] == 0 else 0
-    
+
     # Look for sign changes in the difference
     for i in range(start_idx, len(diff) - 1):
         # Check if diff crosses zero between i and i+1
@@ -255,7 +255,7 @@ def _find_breakeven(
             # Found a crossover: interpolate to find exact zero crossing
             x1, x2 = years[i], years[i + 1]
             y1, y2 = diff[i], diff[i + 1]
-            
+
             if y2 != y1:
                 breakeven = x1 - y1 * (x2 - x1) / (y2 - y1)
                 return float(breakeven)
