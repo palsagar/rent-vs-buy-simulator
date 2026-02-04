@@ -1,6 +1,14 @@
 # Real Estate vs. Equity Simulation Engine
 
+[![Tests](https://github.com/palsagar/rent-vs-buy-simulator/actions/workflows/test.yml/badge.svg)](https://github.com/palsagar/rent-vs-buy-simulator/actions/workflows/test.yml)
+[![Linting](https://github.com/palsagar/rent-vs-buy-simulator/actions/workflows/lint.yml/badge.svg)](https://github.com/palsagar/rent-vs-buy-simulator/actions/workflows/lint.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+**[🚀 Try the Live App](https://rent-or-buy-sim.com/)**
+
 A financial simulation application that compares three capital allocation strategies over time:
+
 - **Strategy A (Buy):** Purchase property with a mortgage
 - **Strategy B (Rent & Invest):** Rent and invest the down payment in equities
 - **Strategy C (Rent & Invest Savings):** Rent, keep down payment as cash, and invest monthly savings
@@ -18,11 +26,11 @@ A financial simulation application that compares three capital allocation strate
 
 Choose the method that best fits your needs:
 
-| Method | Use Case | Requirements |
-|--------|----------|--------------|
-| **Local Docker** | Quick trial, no Python needed | Docker |
-| **Python/uv** | Development, customization | Python 3.12+ |
-| **Production Docker** | Cloud deployment | Docker |
+| Method                | Use Case                      | Requirements |
+| --------------------- | ----------------------------- | ------------ |
+| **Local Docker**      | Quick trial, no Python needed | Docker       |
+| **Python/uv**         | Development, customization    | Python 3.12+ |
+| **Production Docker** | Cloud deployment              | Docker       |
 
 ### Option 1: Local Docker (Recommended for Quick Start)
 
@@ -31,6 +39,7 @@ The easiest way to run the application locally without installing Python:
 1. Make sure Docker is installed and running on your system
 
 2. Run the application:
+
 ```bash
 docker compose up --build
 ```
@@ -38,6 +47,7 @@ docker compose up --build
 3. Open your browser and navigate to `http://localhost:8501`
 
 4. To stop the application, press `Ctrl+C` and run:
+
 ```bash
 docker compose down
 ```
@@ -47,27 +57,31 @@ docker compose down
 Best for developers who want to modify the code or use the simulator as a library.
 
 **Prerequisites:**
+
 - Python 3.12 or higher
 - pip or uv package manager
 
 **Setup:**
 
 1. Install `uv` if you haven't already:
+
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 2. Clone or navigate to the repository:
+
 ```bash
 cd simulator
 ```
 
 3. Create virtual environment and install dependencies:
+
 ```bash
 uv sync
 ```
 
-This will create a `.venv` directory, install all dependencies, and install the package in editable mode, as shown below : 
+This will create a `.venv` directory, install all dependencies, and install the package in editable mode, as shown below :
 
 ```bash
 uv pip install -e .
@@ -167,20 +181,24 @@ pytest tests/ --cov=src/simulator --cov-report=html
 ## Key Parameters
 
 ### Common Settings
+
 - **Duration (Years):** Simulation time horizon (10-40 years)
 
 ### Scenario A: Buy
+
 - **Property Price:** Initial purchase price
 - **Down Payment %:** Down payment as percentage (5-50%)
 - **Mortgage Rate:** Annual interest rate (1-10%)
 - **Property Appreciation:** Expected annual value increase (0-10%)
 
 ### Scenario B: Rent & Invest
+
 - **Monthly Rent:** Rent payment amount
 - **Equity Growth (CAGR):** Expected annual investment returns (0-15%)
 - **Rent Inflation:** Annual rent increase rate (0-10%)
 
 ### Scenario C: Rent & Invest Savings
+
 - **Availability:** Only when mortgage payment > initial rent
 - **Strategy:** Keep down payment as cash (0% return) and invest monthly savings (mortgage - rent) at equity CAGR
 - **Use Case:** Conservative approach that maintains liquidity while capturing upside from monthly savings
@@ -190,6 +208,7 @@ pytest tests/ --cov=src/simulator --cov-report=html
 For detailed mathematical formulas, derivations, and methodology used in the simulation engine, see the **[Mathematical Reference (FORMULAS.md)](FORMULAS.md)**.
 
 **Key concepts:**
+
 - Monthly mortgage payment using standard amortization formula
 - Compound monthly appreciation for property values and equity portfolios
 - Inflation-adjusted rent calculations with geometric series
