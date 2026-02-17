@@ -33,6 +33,26 @@ class TestSimulationConfig:
         assert config.duration_years == 30
         assert config.property_price == 500000
 
+    def test_valid_config_with_tax_params(self):
+        """Test that valid configuration with tax parameters is accepted."""
+        config = SimulationConfig(
+            duration_years=30,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+            tax_bracket=24.0,
+            enable_mortgage_deduction=True,
+            enable_capital_gains_exclusion=True,
+            capital_gains_exemption_limit=250000,
+            property_tax_rate=1.2,
+        )
+        assert config.tax_bracket == 24.0
+        assert config.enable_mortgage_deduction is True
+        assert config.capital_gains_exemption_limit == 250000
+
     def test_negative_duration_raises_error(self):
         """Test that negative duration raises ValueError."""
         with pytest.raises(ValueError, match="duration_years must be positive"):
@@ -72,6 +92,50 @@ class TestSimulationConfig:
                 property_appreciation_annual=3.0,
                 equity_growth_annual=7.0,
                 monthly_rent=2000,
+            )
+
+    def test_invalid_tax_bracket_raises_error(self):
+        """Test that invalid tax bracket raises ValueError."""
+        with pytest.raises(ValueError, match="tax_bracket must be between 0 and 100"):
+            SimulationConfig(
+                duration_years=30,
+                property_price=500000,
+                down_payment_pct=20,
+                mortgage_rate_annual=4.5,
+                property_appreciation_annual=3.0,
+                equity_growth_annual=7.0,
+                monthly_rent=2000,
+                tax_bracket=150,
+            )
+
+    def test_negative_tax_bracket_raises_error(self):
+        """Test that negative tax bracket raises ValueError."""
+        with pytest.raises(ValueError, match="tax_bracket must be between 0 and 100"):
+            SimulationConfig(
+                duration_years=30,
+                property_price=500000,
+                down_payment_pct=20,
+                mortgage_rate_annual=4.5,
+                property_appreciation_annual=3.0,
+                equity_growth_annual=7.0,
+                monthly_rent=2000,
+                tax_bracket=-10,
+            )
+
+    def test_negative_exemption_limit_raises_error(self):
+        """Test that negative capital gains exemption limit raises ValueError."""
+        with pytest.raises(
+            ValueError, match="capital_gains_exemption_limit cannot be negative"
+        ):
+            SimulationConfig(
+                duration_years=30,
+                property_price=500000,
+                down_payment_pct=20,
+                mortgage_rate_annual=4.5,
+                property_appreciation_annual=3.0,
+                equity_growth_annual=7.0,
+                monthly_rent=2000,
+                capital_gains_exemption_limit=-100000,
             )
 
 
@@ -123,6 +187,32 @@ class TestCalculateScenarios:
         final_equity = results.data["Equity_Value"].iloc[-1]
         assert final_equity > initial_equity
 
+    def test_tax_columns_exist(self):
+        """Test that tax-related columns exist when tax benefits enabled."""
+        config = SimulationConfig(
+            duration_years=30,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+            tax_bracket=24.0,
+            enable_mortgage_deduction=True,
+        )
+
+        results = calculate_scenarios(config)
+
+        tax_cols = [
+            "Annual_Interest",
+            "Annual_Property_Tax",
+            "Annual_Tax_Savings",
+            "Cumulative_Tax_Savings",
+            "Net_Buy_Tax_Adjusted",
+        ]
+        for col in tax_cols:
+            assert col in results.data.columns
+
     def test_zero_interest_rate(self):
         """Test calculation with 0% mortgage interest rate."""
         config = SimulationConfig(
@@ -146,6 +236,9 @@ class TestCalculateScenarios:
         final_balance = results.data["Mortgage_Balance"].iloc[-1]
         assert initial_balance > final_balance
         assert final_balance < 1  # Should be paid off
+
+        # With 0% interest, no tax savings from mortgage deduction
+        assert results.total_tax_savings == 0 or results.data["Annual_Tax_Savings"].sum() == 0
 
     def test_zero_appreciation(self):
         """Test calculation with 0% property appreciation."""
@@ -245,6 +338,217 @@ class TestCalculateScenarios:
 
         # Should be nearly zero at the end
         assert balances[-1] < 1
+
+
+class TestTaxCalculations:
+    """Tests for tax benefit calculations."""
+
+    def test_tax_savings_with_deductions(self):
+        """Test that tax savings are calculated correctly with deductions."""
+        config = SimulationConfig(
+            duration_years=10,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+            tax_bracket=24.0,
+            enable_mortgage_deduction=True,
+            property_tax_rate=1.2,
+        )
+
+        results = calculate_scenarios(config)
+
+        # Tax savings should be positive
+        assert results.total_tax_savings > 0
+
+        # Cumulative tax savings should be non-decreasing
+        cumulative = results.data["Cumulative_Tax_Savings"].values
+        assert all(cumulative[i] <= cumulative[i + 1] for i in range(len(cumulative) - 1))
+
+    def test_no_tax_savings_when_disabled(self):
+        """Test that no tax savings when deductions disabled."""
+        config = SimulationConfig(
+            duration_years=10,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+            tax_bracket=24.0,
+            enable_mortgage_deduction=False,
+            property_tax_rate=1.2,
+        )
+
+        results = calculate_scenarios(config)
+
+        # Tax savings should be zero
+        assert results.total_tax_savings == 0
+        assert results.data["Annual_Tax_Savings"].sum() == 0
+
+    def test_tax_savings_with_zero_tax_bracket(self):
+        """Test that no tax savings with 0% tax bracket."""
+        config = SimulationConfig(
+            duration_years=10,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+            tax_bracket=0.0,
+            enable_mortgage_deduction=True,
+            property_tax_rate=1.2,
+        )
+
+        results = calculate_scenarios(config)
+
+        # Tax savings should be zero with 0% tax rate
+        assert results.total_tax_savings == 0
+
+    def test_tax_adjusted_net_value(self):
+        """Test that tax-adjusted net value is higher than regular net value."""
+        config = SimulationConfig(
+            duration_years=10,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+            tax_bracket=24.0,
+            enable_mortgage_deduction=True,
+            property_tax_rate=1.2,
+        )
+
+        results = calculate_scenarios(config)
+
+        # Tax-adjusted net value should be higher than regular net value
+        assert results.final_net_buy_tax_adjusted > results.final_net_buy
+
+        # The difference should equal total tax savings
+        diff = results.final_net_buy_tax_adjusted - results.final_net_buy
+        assert abs(diff - results.total_tax_savings) < 1
+
+    def test_annual_interest_calculation(self):
+        """Test that annual interest is calculated correctly."""
+        config = SimulationConfig(
+            duration_years=5,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+            tax_bracket=24.0,
+            enable_mortgage_deduction=True,
+        )
+
+        results = calculate_scenarios(config)
+
+        # Annual interest should be positive for first few years
+        annual_interest = results.data["Annual_Interest"].values
+        assert annual_interest[12] > 0  # End of year 1
+        assert annual_interest[24] > 0  # End of year 2
+
+        # Interest should decrease over time as principal is paid down
+        assert annual_interest[24] < annual_interest[12]
+
+    def test_property_tax_calculation(self):
+        """Test that property tax is calculated correctly."""
+        config = SimulationConfig(
+            duration_years=5,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+            property_tax_rate=1.2,  # 1.2% annual
+        )
+
+        results = calculate_scenarios(config)
+
+        # Annual property tax should be approximately 1.2% of home value
+        year1_tax = results.data["Annual_Property_Tax"].iloc[12]
+        expected_tax = 500000 * 0.012  # ~$6,000
+        assert abs(year1_tax - expected_tax) < 500  # Allow for appreciation
+
+    def test_capital_gains_exclusion(self):
+        """Test capital gains tax exclusion calculation."""
+        config = SimulationConfig(
+            duration_years=10,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=5.0,  # Higher appreciation for gains
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+            tax_bracket=24.0,
+            enable_capital_gains_exclusion=True,
+            capital_gains_exemption_limit=250000,
+        )
+
+        results = calculate_scenarios(config)
+
+        # Capital gains tax saved should be non-negative
+        assert results.capital_gains_tax_saved >= 0
+
+    def test_capital_gains_no_exclusion_when_disabled(self):
+        """Test no capital gains exclusion when disabled."""
+        config = SimulationConfig(
+            duration_years=10,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=5.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+            tax_bracket=24.0,
+            enable_capital_gains_exclusion=False,
+            capital_gains_exemption_limit=250000,
+        )
+
+        results = calculate_scenarios(config)
+
+        # Capital gains tax saved should be zero when disabled
+        assert results.capital_gains_tax_saved == 0
+
+    def test_married_filing_status_higher_exemption(self):
+        """Test that married filing status allows higher exemption."""
+        config_single = SimulationConfig(
+            duration_years=20,
+            property_price=800000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=4.0,
+            equity_growth_annual=7.0,
+            monthly_rent=3000,
+            tax_bracket=24.0,
+            enable_capital_gains_exclusion=True,
+            capital_gains_exemption_limit=250000,  # Single
+        )
+
+        config_married = SimulationConfig(
+            duration_years=20,
+            property_price=800000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=4.0,
+            equity_growth_annual=7.0,
+            monthly_rent=3000,
+            tax_bracket=24.0,
+            enable_capital_gains_exclusion=True,
+            capital_gains_exemption_limit=500000,  # Married
+        )
+
+        results_single = calculate_scenarios(config_single)
+        results_married = calculate_scenarios(config_married)
+
+        # Married couples should save more in capital gains tax (or equal)
+        assert results_married.capital_gains_tax_saved >= results_single.capital_gains_tax_saved
 
 
 class TestBreakeven:
@@ -453,6 +757,9 @@ class TestIntegration:
             equity_growth_annual=7.0,
             monthly_rent=2000,
             rent_inflation_rate=0.03,
+            tax_bracket=24.0,
+            enable_mortgage_deduction=True,
+            property_tax_rate=1.2,
         )
 
         results = calculate_scenarios(config)
@@ -463,6 +770,10 @@ class TestIntegration:
         assert (
             results.final_difference == results.final_net_buy - results.final_net_rent
         )
+
+        # Tax benefits should be positive
+        assert results.total_tax_savings > 0
+        assert results.final_net_buy_tax_adjusted > results.final_net_buy
 
         # In typical scenarios with 7% equity returns vs 3% property appreciation,
         # renting usually wins due to higher returns on invested capital
@@ -488,3 +799,26 @@ class TestIntegration:
         # With very high property appreciation, buying should win
         assert results.final_net_buy > results.final_net_rent
         assert results.final_difference > 0
+
+    def test_high_tax_bracket_increases_benefit(self):
+        """Test that higher tax bracket increases tax benefits."""
+        base_config = {
+            "duration_years": 15,
+            "property_price": 600000,
+            "down_payment_pct": 20,
+            "mortgage_rate_annual": 4.5,
+            "property_appreciation_annual": 3.0,
+            "equity_growth_annual": 7.0,
+            "monthly_rent": 2500,
+            "enable_mortgage_deduction": True,
+            "property_tax_rate": 1.2,
+        }
+
+        config_low_tax = SimulationConfig(**base_config, tax_bracket=12.0)
+        config_high_tax = SimulationConfig(**base_config, tax_bracket=35.0)
+
+        results_low = calculate_scenarios(config_low_tax)
+        results_high = calculate_scenarios(config_high_tax)
+
+        # Higher tax bracket should result in more tax savings
+        assert results_high.total_tax_savings > results_low.total_tax_savings
