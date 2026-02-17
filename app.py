@@ -62,6 +62,53 @@ def main():  # noqa: C901
     # Sidebar for inputs
     st.sidebar.header("📊 Simulation Parameters")
 
+    # Preset scenarios
+    st.sidebar.subheader("⚡ Quick Presets")
+    preset = st.sidebar.selectbox(
+        "Load a preset scenario",
+        options=[
+            "Custom",
+            "High Interest Rate (2024-2025)",
+            "Bull Market Optimistic",
+            "Conservative Planning",
+            "First-Time Buyer",
+        ],
+        help="Select a preset to quickly configure realistic scenarios",
+    )
+
+    # Define preset values
+    preset_values = {
+        "Custom": {},
+        "High Interest Rate (2024-2025)": {
+            "mortgage_rate": 7.0,
+            "prop_appreciation": 2.5,
+            "equity_growth": 6.0,
+            "rent_inflation": 3.5,
+        },
+        "Bull Market Optimistic": {
+            "mortgage_rate": 4.0,
+            "prop_appreciation": 5.0,
+            "equity_growth": 10.0,
+            "rent_inflation": 2.5,
+        },
+        "Conservative Planning": {
+            "mortgage_rate": 5.5,
+            "prop_appreciation": 2.0,
+            "equity_growth": 5.0,
+            "rent_inflation": 2.0,
+        },
+        "First-Time Buyer": {
+            "down_pmt_pct": 10,
+            "mortgage_rate": 6.5,
+            "prop_appreciation": 3.0,
+            "equity_growth": 7.0,
+            "rent_inflation": 3.0,
+        },
+    }
+
+    # Get preset values with fallback to defaults
+    p = preset_values.get(preset, {})
+
     # Common parameters
     st.sidebar.subheader("Common Settings")
     years = st.sidebar.slider(
@@ -88,7 +135,7 @@ def main():  # noqa: C901
         "Down Payment (%)",
         min_value=5,
         max_value=50,
-        value=20,
+        value=p.get("down_pmt_pct", 20),
         step=1,
         help="Down payment as percentage of property price",
     )
@@ -97,7 +144,7 @@ def main():  # noqa: C901
         "Mortgage Rate (% Annual)",
         min_value=1.0,
         max_value=10.0,
-        value=4.5,
+        value=p.get("mortgage_rate", 4.5),
         step=0.1,
         help="Annual interest rate on the mortgage",
     )
@@ -106,7 +153,7 @@ def main():  # noqa: C901
         "Property Appreciation (% Annual)",
         min_value=0.0,
         max_value=10.0,
-        value=3.0,
+        value=p.get("prop_appreciation", 3.0),
         step=0.1,
         help="Expected annual property value appreciation",
     )
@@ -126,7 +173,7 @@ def main():  # noqa: C901
         "Equity Growth (CAGR % Annual)",
         min_value=0.0,
         max_value=15.0,
-        value=7.0,
+        value=p.get("equity_growth", 7.0),
         step=0.1,
         help="Expected annual return on equity investments",
     )
@@ -135,7 +182,7 @@ def main():  # noqa: C901
         "Rent Inflation (% Annual)",
         min_value=0.0,
         max_value=10.0,
-        value=3.0,
+        value=p.get("rent_inflation", 3.0),
         step=0.1,
         help="Expected annual rent increase",
     )
