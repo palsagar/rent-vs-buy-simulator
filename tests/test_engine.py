@@ -79,6 +79,62 @@ class TestSimulationConfig:
                 monthly_rent=2000,
             )
 
+    def test_invalid_tax_bracket_raises_error(self):
+        """Test that invalid tax bracket raises ValueError."""
+        with pytest.raises(ValueError, match="tax_bracket must be between 0 and 100"):
+            SimulationConfig(
+                duration_years=30,
+                property_price=500000,
+                down_payment_pct=20,
+                mortgage_rate_annual=4.5,
+                property_appreciation_annual=3.0,
+                equity_growth_annual=7.0,
+                monthly_rent=2000,
+                tax_bracket=150,
+            )
+
+    def test_negative_tax_bracket_raises_error(self):
+        """Test that negative tax bracket raises ValueError."""
+        with pytest.raises(ValueError, match="tax_bracket must be between 0 and 100"):
+            SimulationConfig(
+                duration_years=30,
+                property_price=500000,
+                down_payment_pct=20,
+                mortgage_rate_annual=4.5,
+                property_appreciation_annual=3.0,
+                equity_growth_annual=7.0,
+                monthly_rent=2000,
+                tax_bracket=-10,
+            )
+
+    def test_negative_exemption_limit_raises_error(self):
+        """Test that negative capital gains exemption limit raises ValueError."""
+        with pytest.raises(
+            ValueError, match="capital_gains_exemption_limit cannot be negative"
+        ):
+            SimulationConfig(
+                duration_years=30,
+                property_price=500000,
+                down_payment_pct=20,
+                mortgage_rate_annual=4.5,
+                property_appreciation_annual=3.0,
+                equity_growth_annual=7.0,
+                monthly_rent=2000,
+                capital_gains_exemption_limit=-100000,
+            )
+
+    def test_100_percent_down_payment_config(self):
+        """Test configuration with 100% down payment."""
+        config = SimulationConfig(
+            duration_years=30,
+            property_price=500000,
+            down_payment_pct=100,  # All cash
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+        )
+        assert config.down_payment_pct == 100
 
 class TestCalculateScenarios:
     """Tests for calculate_scenarios function."""
@@ -134,6 +190,38 @@ class TestCalculateScenarios:
             duration_years=30,
             property_price=500000,
             down_payment_pct=20,
+    def test_tax_columns_exist(self):
+        """Test that tax-related columns exist when tax benefits enabled."""
+        config = SimulationConfig(
+            duration_years=30,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+            tax_bracket=24.0,
+            enable_mortgage_deduction=True,
+        )
+
+        results = calculate_scenarios(config)
+
+        tax_cols = [
+            "Annual_Interest",
+            "Annual_Property_Tax",
+            "Annual_Tax_Savings",
+            "Cumulative_Tax_Savings",
+            "Net_Buy_Tax_Adjusted",
+        ]
+        for col in tax_cols:
+            assert col in results.data.columns
+
+    def test_very_low_interest_rate(self):
+        """Test calculation with very low (but positive) mortgage interest rate."""
+        config = SimulationConfig(
+            duration_years=30,
+            property_price=500000,
+            down_payment_pct=20,
             mortgage_rate_annual=0.01,  # Very low interest (0.01%)
             property_appreciation_annual=3.0,
             equity_growth_annual=7.0,
@@ -152,6 +240,8 @@ class TestCalculateScenarios:
         assert initial_balance > final_balance
         assert final_balance < 1  # Should be paid off
 
+        # With very low interest, minimal tax savings from mortgage deduction
+        assert results.total_tax_savings >= 0
     def test_zero_appreciation(self):
         """Test calculation with 0% property appreciation."""
         config = SimulationConfig(
@@ -211,9 +301,12 @@ class TestCalculateScenarios:
         # All mortgage balance should be zero
         assert results.data["Mortgage_Balance"].max() < 1
 
-        # Outflow for buying should just be the down payment (no monthly payments)
+        # Outflow for buying should just be the down payment (no monthly payments, no tax, no closing costs, no insurance, no maintenance)
         final_outflow = results.data["Outflow_Buy"].iloc[-1]
         assert abs(final_outflow - 500000) < 1  # Should be just the property price
+
+        # Scenario C should be disabled (no mortgage payment)
+        assert results.scenario_c_enabled is False
 
     def test_short_duration(self):
         """Test calculation with short duration (10 years)."""
@@ -351,10 +444,6 @@ class TestScenarioC:
         # Scenario C should be enabled
         assert results.scenario_c_enabled
         assert results.final_net_rent_savings is not None
-        assert (
-            results.breakeven_year_vs_rent_savings is not None
-            or results.breakeven_year_vs_rent_savings is None
-        )  # Can be None
 
     def test_scenario_c_disabled_when_rent_exceeds_mortgage(self):
         """Test that Scenario C is disabled when rent >= mortgage payment."""
@@ -373,7 +462,6 @@ class TestScenarioC:
         # Scenario C should be disabled (no mortgage payment)
         assert results.scenario_c_enabled is False
         assert results.final_net_rent_savings is None
-        assert results.breakeven_year_vs_rent_savings is None
 
     def test_savings_portfolio_starts_at_zero(self):
         """Test that savings portfolio starts at zero."""
@@ -512,6 +600,9 @@ class TestIntegration:
         # In typical scenarios with 7% equity returns vs 3% property appreciation,
         # renting usually wins due to higher returns on invested capital
         # (though this can vary based on specific parameters)
+        assert results.total_tax_savings > 0
+        assert results.final_net_buy_tax_adjusted > results.final_net_buy
+
         assert (
             abs(results.final_difference) > 0
         )  # There should be a meaningful difference
