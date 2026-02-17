@@ -497,12 +497,12 @@ class TestEdgeCases:
         """Test negative equity growth (property value decreases)."""
         config = SimulationConfig(
             duration_years=10,
-            property_price=500000,
+            property_price=300000,  # Lower property price
             down_payment_pct=20,
             mortgage_rate_annual=4.5,
             property_appreciation_annual=-2.0,  # Negative appreciation (depreciation)
             equity_growth_annual=7.0,
-            monthly_rent=3000,  # Higher rent so mortgage < rent (disables Scenario C)
+            monthly_rent=2500,  # Higher rent so mortgage < rent (disables Scenario C)
             rent_inflation_rate=0.02,
         )
 
@@ -514,7 +514,7 @@ class TestEdgeCases:
         assert final_home < initial_home
 
         # Scenario C should be disabled since rent > mortgage
-        assert results.scenario_c_enabled is False
+        assert not results.scenario_c_enabled
 
         # With property depreciation and high rent, verify calculations work
         assert results.final_net_buy is not None
