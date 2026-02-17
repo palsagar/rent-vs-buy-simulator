@@ -5,11 +5,13 @@ This module contains helper functions for generating PDF reports with charts.
 
 import io
 from datetime import datetime
+from typing import List, Optional
 
 import plotly.graph_objects as go
 from fpdf import FPDF
 
 from simulator.models import SimulationConfig, SimulationResults
+from simulator.scenario_manager import SavedScenario, create_comparison_table, create_comparison_table
 
 
 def generate_pdf_report(  # noqa: C901
@@ -19,6 +21,8 @@ def generate_pdf_report(  # noqa: C901
     fig_assets: go.Figure | None = None,
     fig_outflows: go.Figure | None = None,
     fig_net: go.Figure | None = None,
+    comparison_charts: tuple | None = None,
+    saved_scenarios: List[SavedScenario] | None = None,
 ) -> bytes:
     """Generate a multi-page PDF summary of the simulation with charts.
 
@@ -36,6 +40,11 @@ def generate_pdf_report(  # noqa: C901
         Cumulative outflows chart figure. Default is None.
     fig_net : go.Figure | None, optional
         Net value comparison chart figure. Default is None.
+    comparison_charts : tuple | None, optional
+        Tuple of comparison chart figures (fig_final, fig_breakeven, fig_trajectory).
+        Default is None.
+    saved_scenarios : List[SavedScenario] | None, optional
+        List of saved scenarios for comparison table. Default is None.
 
     Returns
     -------
@@ -215,8 +224,46 @@ def generate_pdf_report(  # noqa: C901
     for assumption in assumptions:
         pdf.cell(0, 4, f"  - {assumption}", ln=True)
 
+    # Add Scenario Comparison section if we have saved scenarios
+    if saved_scenarios and len(saved_scenarios) > 0:
+        pdf.add_page()
+        pdf.set_font("Arial", "B", 14)
+        pdf.cell(0, 10, "Scenario Comparison", ln=True, align="C")
+        pdf.ln(5)
+
+        # Comparison table
+        pdf.set_font("Arial", "B", 11)
+        pdf.cell(0, 6, "Saved Scenarios Summary", ln=True)
+        pdf.ln(2)
+
+        # Create comparison table
+        comparison_df = create_comparison_table(saved_scenarios)
+        
+        # Add table header
+        pdf.set_font("Arial", "B", 8)
+        col_widths = [35, 30, 30, 30, 30]
+        headers = ["Scenario", "Final Buy", "Final Rent", "Diff", "Breakeven"]
+        
+        for i, header in enumerate(headers):
+            pdf.cell(col_widths[i], 6, header, 1, 0, "C")
+        pdf.ln()
+
+        # Add table rows
+        pdf.set_font("Arial", "", 7)
+        for _, row in comparison_df.iterrows():
+            pdf.cell(col_widths[0], 5, str(row["Scenario Name"])[:15], 1, 0, "L")
+            pdf.cell(col_widths[1], 5, f"${row['Final Net Value - Buy ($)']:,.0f}", 1, 0, "R")
+            pdf.cell(col_widths[2], 5, f"${row['Final Net Value - Rent ($)']:,.0f}", 1, 0, "R")
+            pdf.cell(col_widths[3], 5, f"${row['Difference - Buy vs Rent ($)']:,.0f}", 1, 0, "R")
+            breakeven = row['Breakeven - Buy vs Rent (Years)']
+            breakeven_str = f"{breakeven:.1f}y" if breakeven else "N/A"
+            pdf.cell(col_widths[4], 5, breakeven_str, 1, 0, "R")
+            pdf.ln()
+
+        pdf.ln(5)
+
     # Add visualization charts if provided
-    if fig_assets or fig_outflows or fig_net:
+    if fig_assets or fig_outflows or fig_net or comparison_charts:
         # Add a new page for charts
         pdf.add_page()
         pdf.set_font("Arial", "B", 14)
@@ -278,6 +325,43 @@ def generate_pdf_report(  # noqa: C901
 
             # Add image to PDF
             pdf.image(img_stream, x=15, w=chart_width)
+
+        # Add comparison charts if available
+        if comparison_charts and any(c is not None for c in comparison_charts):
+            pdf.add_page()
+            pdf.set_font("Arial", "B", 14)
+            pdf.cell(0, 10, "Scenario Comparison Charts", ln=True, align="C")
+            pdf.ln(5)
+
+            fig_final, fig_breakeven, fig_trajectory = comparison_charts
+
+            # Final Values Comparison
+            if fig_final:
+                pdf.set_font("Arial", "B", 11)
+                pdf.cell(0, 6, "4. Final Values Comparison", ln=True)
+                pdf.ln(2)
+
+                img_bytes = fig_final.to_image(
+                    format="png", width=1200, height=700, scale=2
+                )
+                img_stream = io.BytesIO(img_bytes)
+                pdf.image(img_stream, x=15, w=chart_width)
+                pdf.ln(5)
+
+            # Breakeven Comparison
+            if fig_breakeven:
+                if pdf.get_y() > 200:
+                    pdf.add_page()
+
+                pdf.set_font("Arial", "B", 11)
+                pdf.cell(0, 6, "5. Breakeven Points Comparison", ln=True)
+                pdf.ln(2)
+
+                img_bytes = fig_breakeven.to_image(
+                    format="png", width=1200, height=700, scale=2
+                )
+                img_stream = io.BytesIO(img_bytes)
+                pdf.image(img_stream, x=15, w=chart_width)
 
     # Convert PDF to bytes
     return bytes(pdf.output())

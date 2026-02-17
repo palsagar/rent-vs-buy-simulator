@@ -45,7 +45,7 @@ def create_asset_growth_chart(
         df = pd.DataFrame({
             'Year': [0, 1, 2, 3],
             'Home_Value': [500000, 515000, 530450, 546364],
-            'Equity_Value': [100000, 107000, 114490, 122504],
+            'Equity_Value': [100000, 107000, 122504, 131080],
             'Mortgage_Balance': [400000, 390000, 380000, 370000]
         })
 
@@ -149,7 +149,7 @@ def create_outflow_chart(df: pd.DataFrame) -> go.Figure:
 
         df = pd.DataFrame({
             'Year': [0, 1, 2, 3],
-            'Outflow_Buy': [100000, 118000, 136000, 154000],
+            'Outflow_Buy': [100000, 124000, 148000, 172000],
             'Outflow_Rent': [0, 24000, 48000, 72000]
         })
 
@@ -159,29 +159,26 @@ def create_outflow_chart(df: pd.DataFrame) -> go.Figure:
     """
     fig = go.Figure()
 
-    # Cumulative Mortgage Payments (red line with transparent fill)
+    # Cumulative Mortgage Payments (red line)
     fig.add_trace(
         go.Scatter(
             x=df["Year"],
             y=df["Outflow_Buy"],
-            name="Total Cost: Buy (Down Payment + Mortgage)",
+            name="Total Cost: Buy (Down Payment + Mortgage + Property Tax)",
             line=dict(color="#e74c3c", width=3),
-            fill="tozeroy",
-            fillcolor="rgba(231, 76, 60, 0.2)",
+            fill="tonexty",
             mode="lines",
             hovertemplate="$%{y:,.0f}<extra></extra>",
         )
     )
 
-    # Cumulative Rent Payments (orange line with transparent fill)
+    # Cumulative Rent Payments (orange line)
     fig.add_trace(
         go.Scatter(
             x=df["Year"],
             y=df["Outflow_Rent"],
             name="Total Cost: Rent",
             line=dict(color="#f39c12", width=3),
-            fill="tozeroy",
-            fillcolor="rgba(243, 156, 18, 0.2)",
             mode="lines",
             hovertemplate="$%{y:,.0f}<extra></extra>",
         )
@@ -209,6 +206,8 @@ def create_net_value_chart(
     breakeven_year: float | None = None,
     show_scenario_c: bool = False,
     breakeven_year_vs_rent_savings: float | None = None,
+    show_tax_adjusted: bool = False,
+    breakeven_tax_adjusted: float | None = None,
 ) -> go.Figure:
     """Create a chart showing net value comparison.
 
@@ -219,13 +218,17 @@ def create_net_value_chart(
     ----------
     df : pd.DataFrame
         DataFrame with columns: Year, Net_Buy, Net_Rent, and optionally
-        Net_Rent_Savings for Scenario C.
+        Net_Rent_Savings and Net_Buy_Tax_Adjusted for Scenario C and tax-adjusted.
     breakeven_year : float | None, optional
         Year where Buy and Rent scenarios cross. Default is None.
     show_scenario_c : bool, optional
         Whether to show Scenario C trace. Default is False.
     breakeven_year_vs_rent_savings : float | None, optional
         Year where Buy and Rent+Savings scenarios cross. Default is None.
+    show_tax_adjusted : bool, optional
+        Whether to show tax-adjusted net value for buying. Default is False.
+    breakeven_tax_adjusted : float | None, optional
+        Year where tax-adjusted Buy crosses Rent. Default is None.
 
     Returns
     -------
@@ -264,6 +267,19 @@ def create_net_value_chart(
             hovertemplate="$%{y:,.0f}<extra></extra>",
         )
     )
+
+    # Tax-adjusted Net Buy trace (dark green solid line)
+    if show_tax_adjusted and "Net_Buy_Tax_Adjusted" in df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=df["Year"],
+                y=df["Net_Buy_Tax_Adjusted"],
+                name="Net Value: Buy (Tax-Adjusted)",
+                line=dict(color="#27ae60", width=3),
+                mode="lines",
+                hovertemplate="$%{y:,.0f}<extra></extra>",
+            )
+        )
 
     # Net Rent trace (blue line)
     fig.add_trace(
@@ -315,6 +331,38 @@ def create_net_value_chart(
                 hovertemplate=(
                     f"Year: {breakeven_year:.1f}<br>"
                     f"Value: ${net_at_breakeven:,.0f}<extra></extra>"
+                ),
+            )
+        )
+
+    # Add breakeven annotation for tax-adjusted Buy vs Rent
+    if (
+        show_tax_adjusted
+        and breakeven_tax_adjusted is not None
+        and 0 < breakeven_tax_adjusted < df["Year"].max()
+    ):
+        net_at_breakeven_tax = df[df["Year"] <= breakeven_tax_adjusted][
+            "Net_Buy_Tax_Adjusted"
+        ].iloc[-1]  # pyright: ignore[reportAttributeAccessIssue]
+
+        fig.add_vline(
+            x=breakeven_tax_adjusted,
+            line_dash="dash",
+            line_color="#27ae60",
+            annotation_text=f"Tax-Adj A vs B: {breakeven_tax_adjusted:.1f}y",
+            annotation_position="bottom",
+        )
+
+        fig.add_trace(
+            go.Scatter(
+                x=[breakeven_tax_adjusted],
+                y=[net_at_breakeven_tax],
+                mode="markers",
+                marker=dict(size=10, color="#27ae60", symbol="star"),
+                name="Breakeven (Tax-Adj A vs B)",
+                hovertemplate=(
+                    f"Year: {breakeven_tax_adjusted:.1f}<br>"
+                    f"Value: ${net_at_breakeven_tax:,.0f}<extra></extra>"
                 ),
             )
         )
@@ -378,6 +426,126 @@ def create_net_value_chart(
     return fig
 
 
+def create_tax_savings_chart(df: pd.DataFrame) -> go.Figure:
+    """Create a chart showing tax savings over time.
+
+    Visualizes the cumulative tax savings from mortgage interest and
+    property tax deductions.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame with columns: Year, Annual_Tax_Savings, Cumulative_Tax_Savings,
+        Annual_Interest, Annual_Property_Tax.
+
+    Returns
+    -------
+    go.Figure
+        Plotly Figure object with tax savings visualization.
+
+    Examples
+    --------
+    Create a tax savings chart:
+
+    .. code-block:: python
+
+        import pandas as pd
+        from simulator.visualization import create_tax_savings_chart
+
+        df = pd.DataFrame({
+            'Year': [0, 1, 2, 3],
+            'Annual_Tax_Savings': [0, 5280, 5160, 4900],
+            'Cumulative_Tax_Savings': [0, 5280, 10440, 15340],
+            'Annual_Interest': [0, 16000, 15500, 15000],
+            'Annual_Property_Tax': [0, 6000, 6000, 6000],
+        })
+
+        fig = create_tax_savings_chart(df)
+        fig.show()
+
+    """
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        subplot_titles=("Annual Tax Savings Components", "Cumulative Tax Savings"),
+        vertical_spacing=0.15,
+    )
+
+    # Annual Interest (for reference)
+    if "Annual_Interest" in df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=df["Year"],
+                y=df["Annual_Interest"],
+                name="Annual Mortgage Interest",
+                line=dict(color="#e74c3c", width=2),
+                hovertemplate="$%{y:,.0f}<extra></extra>",
+            ),
+            row=1,
+            col=1,
+        )
+
+    # Annual Property Tax (for reference)
+    if "Annual_Property_Tax" in df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=df["Year"],
+                y=df["Annual_Property_Tax"],
+                name="Annual Property Tax",
+                line=dict(color="#f39c12", width=2),
+                hovertemplate="$%{y:,.0f}<extra></extra>",
+            ),
+            row=1,
+            col=1,
+        )
+
+    # Annual Tax Savings
+    if "Annual_Tax_Savings" in df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=df["Year"],
+                y=df["Annual_Tax_Savings"],
+                name="Annual Tax Savings",
+                line=dict(color="#2ecc71", width=3),
+                fill="tozeroy",
+                hovertemplate="$%{y:,.0f}<extra></extra>",
+            ),
+            row=1,
+            col=1,
+        )
+
+    # Cumulative Tax Savings
+    if "Cumulative_Tax_Savings" in df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=df["Year"],
+                y=df["Cumulative_Tax_Savings"],
+                name="Cumulative Tax Savings",
+                line=dict(color="#3498db", width=3),
+                fill="tozeroy",
+                hovertemplate="$%{y:,.0f}<extra></extra>",
+            ),
+            row=2,
+            col=1,
+        )
+
+    # Update layout
+    fig.update_layout(
+        title="Tax Savings Analysis",
+        hovermode="x unified",
+        template="plotly_white",
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        height=700,
+    )
+
+    # Update y-axes to currency format
+    fig.update_yaxes(tickformat="$,.0f")
+    fig.update_xaxes(title_text="Years", row=2, col=1)
+
+    return fig
+
+
 def create_combined_dashboard(
     df: pd.DataFrame, breakeven_year: float | None = None
 ) -> go.Figure:
@@ -412,7 +580,7 @@ def create_combined_dashboard(
             'Home_Value': [500000, 515000, 530450],
             'Equity_Value': [100000, 107000, 114490],
             'Mortgage_Balance': [400000, 390000, 380000],
-            'Outflow_Buy': [100000, 118000, 136000],
+            'Outflow_Buy': [100000, 124000, 148000],
             'Outflow_Rent': [0, 24000, 48000],
             'Net_Buy': [400000, 397000, 394450],
             'Net_Rent': [100000, 83000, 66490]
