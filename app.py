@@ -8,6 +8,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 
 # Add src to path to import our modules
@@ -15,6 +16,13 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from simulator.engine import calculate_scenarios
 from simulator.models import SimulationConfig
+from simulator.scenario_manager import (
+    ScenarioManager,
+    SavedScenario,
+    create_comparison_chart,
+    create_comparison_table,
+    export_comparison_csv,
+)
 from simulator.utils import generate_pdf_report
 from simulator.visualization import (
     create_asset_growth_chart,
@@ -22,10 +30,200 @@ from simulator.visualization import (
     create_outflow_chart,
 )
 
+# Constants
+MAX_SAVED_SCENARIOS = 5
+
+
+def init_session_state():
+    """Initialize session state variables."""
+    if "saved_scenarios" not in st.session_state:
+        st.session_state.saved_scenarios = []
+    if "pdf_data" not in st.session_state:
+        st.session_state.pdf_data = None
+    if "scenario_manager" not in st.session_state:
+        st.session_state.scenario_manager = ScenarioManager(max_scenarios=MAX_SAVED_SCENARIOS)
+
+
+def render_scenario_saver(config: SimulationConfig, results):
+    """Render the scenario saving UI in the sidebar."""
+    st.sidebar.divider()
+    st.sidebar.subheader("💾 Save Scenario")
+    
+    manager = st.session_state.scenario_manager
+    
+    if manager.is_full():
+        st.sidebar.warning(f"⚠️ Maximum {MAX_SAVED_SCENARIOS} scenarios saved. Delete one to save more.")
+    else:
+        scenario_name = st.sidebar.text_input(
+            "Scenario Name",
+            value=f"Scenario {len(manager.scenarios) + 1}",
+            max_chars=30,
+            help="Give your scenario a descriptive name",
+        )
+        
+        if st.sidebar.button("💾 Save Current Scenario", use_container_width=True):
+            created_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+            success = manager.add_scenario(scenario_name, config, results, created_at)
+            if success:
+                st.session_state.saved_scenarios = manager.to_dict_list()
+                st.sidebar.success(f"✅ Saved '{scenario_name}'")
+                st.rerun()
+            else:
+                st.sidebar.error("❌ Failed to save scenario")
+
+
+def render_saved_scenarios_sidebar():
+    """Render saved scenarios management in the sidebar."""
+    manager = st.session_state.scenario_manager
+    
+    if not manager.scenarios:
+        return
+    
+    st.sidebar.divider()
+    st.sidebar.subheader("📁 Saved Scenarios")
+    st.sidebar.caption(f"{len(manager.scenarios)}/{MAX_SAVED_SCENARIOS} scenarios saved")
+    
+    for scenario in manager.scenarios:
+        col1, col2 = st.sidebar.columns([3, 1])
+        with col1:
+            st.caption(f"📊 {scenario.name}")
+        with col2:
+            if st.button("🗑️", key=f"delete_{scenario.name}", help=f"Delete {scenario.name}"):
+                manager.remove_scenario(scenario.name)
+                st.session_state.saved_scenarios = manager.to_dict_list()
+                st.rerun()
+    
+    if st.sidebar.button("🗑️ Clear All Scenarios", use_container_width=True):
+        manager.clear_all()
+        st.session_state.saved_scenarios = []
+        st.rerun()
+
+
+def render_scenario_comparison():
+    """Render the scenario comparison section."""
+    manager = st.session_state.scenario_manager
+    
+    if not manager.scenarios:
+        return
+    
+    st.divider()
+    
+    with st.expander("📊 Compare Scenarios", expanded=False):
+        st.header("📊 Scenario Comparison")
+        st.caption("Compare saved scenarios side-by-side")
+        
+        # Comparison table
+        st.subheader("Comparison Table")
+        comparison_df = create_comparison_table(manager.scenarios)
+        
+        # Format the dataframe for display
+        st.dataframe(
+            comparison_df,
+            use_container_width=True,
+            hide_index=True,
+        )
+        
+        # Export comparison CSV
+        csv_data = export_comparison_csv(manager.scenarios)
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            st.download_button(
+                label="📥 Export Comparison CSV",
+                data=csv_data,
+                file_name=f"scenario_comparison_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+        
+        st.divider()
+        
+        # Comparison charts
+        st.subheader("Visual Comparison")
+        
+        chart_type = st.selectbox(
+            "Select Comparison View",
+            options=[
+                ("final_values", "Final Net Values"),
+                ("net_value", "Net Value Trajectories"),
+                ("breakeven", "Breakeven Points"),
+            ],
+            format_func=lambda x: x[1],
+        )
+        
+        fig_comparison = create_comparison_chart(manager.scenarios, metric=chart_type[0])
+        st.plotly_chart(fig_comparison, use_container_width=True)
+        
+        # Quick load section
+        st.divider()
+        st.subheader("🔄 Quick Load Saved Scenario")
+        st.caption("Click a scenario to load its parameters")
+        
+        cols = st.columns(min(len(manager.scenarios), 3))
+        for idx, scenario in enumerate(manager.scenarios):
+            with cols[idx % 3]:
+                with st.container(border=True):
+                    st.caption(f"**{scenario.name}**")
+                    st.caption(f"Property: ${scenario.config.property_price:,.0f}")
+                    st.caption(f"Duration: {scenario.config.duration_years} years")
+                    
+                    # Show winner
+                    if scenario.results.final_difference > 0:
+                        winner = "🏆 Buy"
+                        winner_color = "green"
+                    else:
+                        winner = "🏆 Rent"
+                        winner_color = "blue"
+                    
+                    st.caption(f":{winner_color}[{winner} wins]")
+                    
+                    if st.button("📂 Load", key=f"load_{scenario.name}", use_container_width=True):
+                        # Store selected scenario parameters in session state
+                        st.session_state["load_scenario"] = {
+                            "duration_years": scenario.config.duration_years,
+                            "property_price": scenario.config.property_price,
+                            "down_payment_pct": scenario.config.down_payment_pct,
+                            "mortgage_rate_annual": scenario.config.mortgage_rate_annual,
+                            "property_appreciation_annual": scenario.config.property_appreciation_annual,
+                            "equity_growth_annual": scenario.config.equity_growth_annual,
+                            "monthly_rent": scenario.config.monthly_rent,
+                            "rent_inflation_rate": scenario.config.rent_inflation_rate,
+                        }
+                        st.rerun()
+
+
+def render_comparison_in_pdf(config, results, show_c):
+    """Generate comparison charts for PDF report."""
+    manager = st.session_state.scenario_manager
+    
+    if not manager.scenarios or len(manager.scenarios) < 2:
+        return None, None, None
+    
+    # Create comparison charts for PDF
+    fig_final = create_comparison_chart(manager.scenarios, metric="final_values")
+    fig_breakeven = create_comparison_chart(manager.scenarios, metric="breakeven")
+    fig_trajectory = create_comparison_chart(manager.scenarios, metric="net_value")
+    
+    return fig_final, fig_breakeven, fig_trajectory
+
 
 def main():  # noqa: C901
     """Main application entry point."""
-
+    
+    # Initialize session state
+    init_session_state()
+    
+    # Restore scenarios from session state if needed
+    manager = st.session_state.scenario_manager
+    if not manager.scenarios and st.session_state.saved_scenarios:
+        try:
+            restored_manager = ScenarioManager.from_dict_list(
+                st.session_state.saved_scenarios, max_scenarios=MAX_SAVED_SCENARIOS
+            )
+            st.session_state.scenario_manager = restored_manager
+            manager = restored_manager
+        except Exception:
+            pass
+    
     # Page configuration
     st.set_page_config(
         layout="wide",
@@ -59,16 +257,30 @@ def main():  # noqa: C901
       invest monthly savings
     """)
 
+    # Check for scenario to load
+    load_params = st.session_state.get("load_scenario", None)
+
     # Sidebar for inputs
     st.sidebar.header("📊 Simulation Parameters")
 
     # Common parameters
     st.sidebar.subheader("Common Settings")
+    
+    # Use loaded values if available
+    default_years = load_params["duration_years"] if load_params else 30
+    default_price = load_params["property_price"] if load_params else 500000
+    default_down_pct = load_params["down_payment_pct"] if load_params else 20
+    default_mortgage_rate = load_params["mortgage_rate_annual"] if load_params else 4.5
+    default_appreciation = load_params["property_appreciation_annual"] if load_params else 3.0
+    default_equity_growth = load_params["equity_growth_annual"] if load_params else 7.0
+    default_rent = load_params["monthly_rent"] if load_params else 2000
+    default_rent_inflation = load_params["rent_inflation_rate"] * 100 if load_params else 3.0
+    
     years = st.sidebar.slider(
         "Duration (Years)",
         min_value=10,
         max_value=40,
-        value=30,
+        value=int(default_years),
         step=1,
         help="How many years to simulate",
     )
@@ -79,7 +291,7 @@ def main():  # noqa: C901
         "Property Price ($)",
         min_value=50000,
         max_value=5000000,
-        value=500000,
+        value=int(default_price),
         step=10000,
         help="Initial purchase price of the property",
     )
@@ -88,7 +300,7 @@ def main():  # noqa: C901
         "Down Payment (%)",
         min_value=5,
         max_value=50,
-        value=20,
+        value=int(default_down_pct),
         step=1,
         help="Down payment as percentage of property price",
     )
@@ -97,7 +309,7 @@ def main():  # noqa: C901
         "Mortgage Rate (% Annual)",
         min_value=1.0,
         max_value=10.0,
-        value=4.5,
+        value=float(default_mortgage_rate),
         step=0.1,
         help="Annual interest rate on the mortgage",
     )
@@ -106,7 +318,7 @@ def main():  # noqa: C901
         "Property Appreciation (% Annual)",
         min_value=0.0,
         max_value=10.0,
-        value=3.0,
+        value=float(default_appreciation),
         step=0.1,
         help="Expected annual property value appreciation",
     )
@@ -117,7 +329,7 @@ def main():  # noqa: C901
         "Monthly Rent ($)",
         min_value=500,
         max_value=20000,
-        value=2000,
+        value=int(default_rent),
         step=100,
         help="Monthly rent payment",
     )
@@ -126,7 +338,7 @@ def main():  # noqa: C901
         "Equity Growth (CAGR % Annual)",
         min_value=0.0,
         max_value=15.0,
-        value=7.0,
+        value=float(default_equity_growth),
         step=0.1,
         help="Expected annual return on equity investments",
     )
@@ -135,10 +347,14 @@ def main():  # noqa: C901
         "Rent Inflation (% Annual)",
         min_value=0.0,
         max_value=10.0,
-        value=3.0,
+        value=float(default_rent_inflation),
         step=0.1,
         help="Expected annual rent increase",
     )
+
+    # Clear load_params after using it
+    if load_params:
+        del st.session_state["load_scenario"]
 
     # Calculate preliminary values to determine if Scenario C is available
     down_payment = prop_price * (down_pmt_pct / 100)
@@ -199,6 +415,10 @@ def main():  # noqa: C901
         except Exception as e:
             st.error(f"Error running simulation: {e}")
             st.stop()
+
+    # Render scenario saver in sidebar
+    render_scenario_saver(config, results)
+    render_saved_scenarios_sidebar()
 
     # Display key metrics at the top
     st.header("📈 Summary Metrics")
@@ -298,6 +518,11 @@ def main():  # noqa: C901
                 breakeven_year_vs_rent_savings=results.breakeven_year_vs_rent_savings,
             )
 
+            # Generate comparison charts if we have saved scenarios
+            comparison_charts = None
+            if len(manager.scenarios) >= 2:
+                comparison_charts = render_comparison_in_pdf(config, results, show_c)
+
             # Generate PDF with charts
             pdf_bytes = generate_pdf_report(
                 config,
@@ -306,6 +531,8 @@ def main():  # noqa: C901
                 fig_assets=fig_assets_pdf,
                 fig_outflows=fig_outflows_pdf,
                 fig_net=fig_net_pdf,
+                comparison_charts=comparison_charts,
+                saved_scenarios=manager.scenarios,
             )
 
             # Store in session state
@@ -322,6 +549,9 @@ def main():  # noqa: C901
             mime="application/pdf",
             help="Download the generated PDF report",
         )
+
+    # Render scenario comparison section
+    render_scenario_comparison()
 
     st.divider()
 
