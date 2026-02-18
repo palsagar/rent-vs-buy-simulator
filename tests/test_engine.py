@@ -502,7 +502,7 @@ class TestEdgeCases:
             mortgage_rate_annual=4.5,
             property_appreciation_annual=-2.0,  # Negative appreciation (depreciation)
             equity_growth_annual=7.0,
-            monthly_rent=3000,  # Higher rent so mortgage < rent (disables Scenario C)
+            monthly_rent=4500,  # Higher rent so mortgage < rent (disables Scenario C)
             rent_inflation_rate=0.02,
         )
 
@@ -514,7 +514,7 @@ class TestEdgeCases:
         assert final_home < initial_home
 
         # Scenario C should be disabled since rent > mortgage
-        assert results.scenario_c_enabled is False
+        assert results.scenario_c_enabled == False
 
         # With property depreciation and high rent, verify calculations work
         assert results.final_net_buy is not None

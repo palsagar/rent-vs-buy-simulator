@@ -170,7 +170,7 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
 
     # Option 2: Rent with inflation (more realistic)
     # We need to calculate cumulative sum of inflating rent
-    monthly_rent_inflation = (config.rent_inflation_rate * 100) / 12
+    monthly_rent_inflation = config.rent_inflation_rate / 12
 
     # Calculate rent at each month
     rent_at_month = config.monthly_rent * (1 + monthly_rent_inflation) ** month_arr
