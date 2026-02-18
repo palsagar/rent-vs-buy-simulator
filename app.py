@@ -268,6 +268,43 @@ def main():  # noqa: C901
             "🎯 **No breakeven point** - One strategy dominates for the entire period."
         )
 
+    # Edge Case Metrics Section
+    with st.expander("📊 Edge Case Metrics", expanded=False):
+        st.markdown("Additional metrics for analyzing risk and edge cases:")
+
+        edge_col1, edge_col2, edge_col3 = st.columns(3)
+
+        with edge_col1:
+            st.metric(
+                label="Negative Equity Months",
+                value=f"{results.negative_equity_months}",
+                help="Number of months where mortgage balance exceeds home value (underwater)",
+            )
+
+        with edge_col2:
+            equity_delta_color = "normal" if results.min_equity_achieved >= 0 else "inverse"
+            st.metric(
+                label="Minimum Equity Achieved",
+                value=f"${results.min_equity_achieved:,.0f}",
+                delta="Risky" if results.min_equity_achieved < 0 else "Safe",
+                delta_color=equity_delta_color,
+                help="Lowest equity amount during the simulation (negative = underwater)",
+            )
+
+        with edge_col3:
+            ltv_pct = results.final_ltv_ratio * 100
+            st.metric(
+                label="Final LTV Ratio",
+                value=f"{ltv_pct:.1f}%",
+                help="Loan-to-Value ratio at end of simulation (0% = fully paid off)",
+            )
+
+        st.caption(
+            "ℹ️ **LTV (Loan-to-Value)** ratio shows how much of the property is still "
+            "financed vs. owned. Lower is better. Negative equity means you owe more "
+            "than the property is worth."
+        )
+
     # PDF Report Generation Section
     st.markdown("")  # Small spacing
     show_c = show_scenario_c and results.scenario_c_enabled
