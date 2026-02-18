@@ -140,6 +140,64 @@ def main():  # noqa: C901
         help="Expected annual rent increase",
     )
 
+    # Advanced Costs Section
+    with st.sidebar.expander("💰 Advanced Costs", expanded=False):
+        st.caption("Closing costs and homeownership expenses")
+
+        closing_cost_buyer_pct = st.slider(
+            "Buyer's Closing Costs (%)",
+            min_value=0.0,
+            max_value=10.0,
+            value=3.0,
+            step=0.5,
+            help="Closing costs paid when buying (loan fees, inspection, title, etc.)",
+        )
+
+        closing_cost_seller_pct = st.slider(
+            "Seller's Closing Costs (%)",
+            min_value=0.0,
+            max_value=10.0,
+            value=6.0,
+            step=0.5,
+            help="Closing costs when selling (agent commissions, fees, etc.)",
+        )
+
+        property_tax_rate = st.slider(
+            "Property Tax Rate (% Annual)",
+            min_value=0.0,
+            max_value=5.0,
+            value=1.2,
+            step=0.1,
+            help="Annual property tax as % of property value",
+        )
+
+        annual_home_insurance = st.number_input(
+            "Annual Home Insurance ($)",
+            min_value=0,
+            max_value=10000,
+            value=1200,
+            step=100,
+            help="Annual homeowners insurance premium",
+        )
+
+        annual_maintenance_pct = st.slider(
+            "Maintenance (% Annual)",
+            min_value=0.0,
+            max_value=5.0,
+            value=1.0,
+            step=0.1,
+            help="Annual maintenance costs as % of property value",
+        )
+
+        cost_inflation_rate = st.slider(
+            "Cost Inflation (% Annual)",
+            min_value=0.0,
+            max_value=10.0,
+            value=2.5,
+            step=0.1,
+            help="Annual inflation rate for insurance and maintenance costs",
+        )
+
     # Calculate preliminary values to determine if Scenario C is available
     down_payment = prop_price * (down_pmt_pct / 100)
     loan_amount = prop_price - down_payment
@@ -190,6 +248,12 @@ def main():  # noqa: C901
         equity_growth_annual=equity_growth,
         monthly_rent=monthly_rent,
         rent_inflation_rate=rent_inflation / 100,
+        closing_cost_buyer_pct=closing_cost_buyer_pct,
+        closing_cost_seller_pct=closing_cost_seller_pct,
+        property_tax_rate=property_tax_rate,
+        annual_home_insurance=annual_home_insurance,
+        annual_maintenance_pct=annual_maintenance_pct,
+        cost_inflation_rate=cost_inflation_rate / 100,
     )
 
     # Run simulation

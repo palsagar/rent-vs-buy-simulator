@@ -179,6 +179,15 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
     monthly_property_tax_rate = (config.property_tax_rate / 100) / 12
     monthly_property_tax = home_value * monthly_property_tax_rate
 
+    # Calculate insurance costs (with inflation)
+    monthly_cost_inflation_rate = config.cost_inflation_rate / 12
+    insurance_inflation_factor = (1 + monthly_cost_inflation_rate) ** month_arr
+    monthly_insurance = (config.annual_home_insurance / 12) * insurance_inflation_factor
+
+    # Calculate maintenance costs (% of property value, with inflation)
+    monthly_maintenance_base = home_value * (config.annual_maintenance_pct / 100) / 12
+    monthly_maintenance = monthly_maintenance_base * insurance_inflation_factor
+
     # Calculate annual property tax paid
     annual_property_tax = np.zeros(n_months + 1)
     for i in range(1, n_months + 1):
@@ -234,11 +243,18 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
                 if prev_december > 0:
                     cumulative_tax_savings[i] = cumulative_tax_savings[prev_december]
 
-    # Cumulative outflows for buying (include property tax and closing costs)
+    # Cumulative outflows for buying (include property tax, insurance, maintenance)
     cum_mortgage_outflow = initial_outflow + (monthly_payment * month_arr)
     cum_property_tax = np.cumsum(monthly_property_tax)
     cum_property_tax = np.concatenate([[0], cum_property_tax[:-1]])  # Adjust for t=0
-    total_cum_outflow_buy = cum_mortgage_outflow + cum_property_tax
+    cum_insurance = np.cumsum(monthly_insurance)
+    cum_insurance = np.concatenate([[0], cum_insurance[:-1]])
+    cum_maintenance = np.cumsum(monthly_maintenance)
+    cum_maintenance = np.concatenate([[0], cum_maintenance[:-1]])
+    total_cum_outflow_buy = cum_mortgage_outflow + cum_property_tax + cum_insurance + cum_maintenance
+
+    # Add seller closing costs at sale (applied to final home value)
+    final_home_value_with_seller_costs = home_value[-1] * (1 - config.closing_cost_seller_pct / 100)
 
     # Net value for buying scenario (Asset - Cumulative Outflows)
     net_val_buy = home_value - total_cum_outflow_buy
@@ -256,7 +272,7 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
     equity_value = down_payment * (1 + monthly_equity_rate) ** month_arr
 
     # Calculate cumulative rent outflows
-    monthly_rent_inflation = (config.rent_inflation_rate * 100) / 12
+    monthly_rent_inflation = config.rent_inflation_rate / 12
 
     # Calculate rent at each month
     rent_at_month = config.monthly_rent * (1 + monthly_rent_inflation) ** month_arr
@@ -326,6 +342,17 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
         exempted_gains = capital_gains - taxable_gains
         capital_gains_tax_saved = exempted_gains * lt_cap_gains_rate
 
+    # Calculate cumulative costs for DataFrame
+    cum_property_tax_df = np.cumsum(monthly_property_tax)
+    cum_insurance_df = np.cumsum(monthly_insurance)
+    cum_maintenance_df = np.cumsum(monthly_maintenance)
+
+    # Closing costs tracking (buyer paid at start, seller deducted at end)
+    closing_costs_buyer_arr = np.zeros(n_months + 1)
+    closing_costs_buyer_arr[0] = config.property_price * (config.closing_cost_buyer_pct / 100)
+    closing_costs_seller_arr = np.zeros(n_months + 1)
+    closing_costs_seller_arr[-1] = home_value[-1] * (config.closing_cost_seller_pct / 100)
+
     # ========== CONSTRUCT OUTPUT ==========
 
     # Create DataFrame with all time-series data
@@ -347,11 +374,18 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
             "Annual_Tax_Savings": annual_tax_savings,
             "Cumulative_Tax_Savings": cumulative_tax_savings,
             "Net_Buy_Tax_Adjusted": net_val_buy_tax_adjusted,
+            "Property_Tax_Paid": cum_property_tax_df,
+            "Insurance_Paid": cum_insurance_df,
+            "Maintenance_Paid": cum_maintenance_df,
+            "Closing_Costs_Buyer": closing_costs_buyer_arr,
+            "Closing_Costs_Seller": closing_costs_seller_arr,
         }
     )
 
     # Calculate summary metrics
-    final_net_buy = float(net_val_buy[-1])
+    # Deduct seller closing costs from final buy net value
+    seller_closing_costs = home_value[-1] * (config.closing_cost_seller_pct / 100)
+    final_net_buy = float(net_val_buy[-1]) - seller_closing_costs
     final_net_rent = float(net_val_rent[-1])
     final_difference = final_net_buy - final_net_rent
 
@@ -360,7 +394,7 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
 
     # Tax-adjusted metrics
     total_tax_savings = float(cumulative_tax_savings[-1])
-    final_net_buy_tax_adjusted = float(net_val_buy_tax_adjusted[-1])
+    final_net_buy_tax_adjusted = float(net_val_buy_tax_adjusted[-1]) - seller_closing_costs
     tax_adjusted_difference = final_net_buy_tax_adjusted - final_net_rent
 
     # Calculate edge case metrics
@@ -385,6 +419,12 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
     avg_monthly_property_tax = float(np.mean(monthly_property_tax))
     max_monthly_payment = max(monthly_payment + avg_monthly_property_tax, max_rent)
 
+    # Calculate total costs for reporting
+    total_closing_costs_buyer = config.property_price * (config.closing_cost_buyer_pct / 100)
+    total_property_tax_paid = float(np.sum(monthly_property_tax))
+    total_insurance_paid = float(np.sum(monthly_insurance))
+    total_maintenance_paid = float(np.sum(monthly_maintenance))
+
     return SimulationResults(
         data=df,
         final_net_buy=final_net_buy,
@@ -399,6 +439,11 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
         capital_gains_tax_saved=capital_gains_tax_saved,
         final_net_buy_tax_adjusted=final_net_buy_tax_adjusted,
         tax_adjusted_difference=tax_adjusted_difference,
+        total_closing_costs_buyer=total_closing_costs_buyer,
+        total_closing_costs_seller=seller_closing_costs,
+        total_property_tax_paid=total_property_tax_paid,
+        total_insurance_paid=total_insurance_paid,
+        total_maintenance_paid=total_maintenance_paid,
         negative_equity_months=negative_equity_months,
         min_equity_achieved=min_equity_achieved,
         final_ltv_ratio=final_ltv_ratio,

@@ -181,12 +181,11 @@ class SimulationConfig:
                 "Use 100% for an all-cash purchase."
             )
 
-        # Validate mortgage_rate_annual (must be > 0 to avoid numerical issues)
-        if self.mortgage_rate_annual <= 0:
+        # Validate mortgage_rate_annual (must be >= 0)
+        if self.mortgage_rate_annual < 0:
             raise ValueError(
-                f"mortgage_rate_annual must be positive (got {self.mortgage_rate_annual}). "
-                "Please specify a rate greater than 0%. "
-                "For very low rates, use a small positive value like 0.01%."
+                f"mortgage_rate_annual must be non-negative (got {self.mortgage_rate_annual}). "
+                "Please specify a rate greater than or equal to 0%."
             )
 
         # Validate monthly_rent

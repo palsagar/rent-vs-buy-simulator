@@ -82,7 +82,7 @@ class TestSimulationConfig:
     def test_invalid_down_payment_pct_raises_error(self):
         """Test that invalid down payment percentage raises ValueError."""
         with pytest.raises(
-            ValueError, match="down_payment_pct must be between 0 and 100"
+            ValueError, match="down_payment_pct must be between 5 and 100"
         ):
             SimulationConfig(
                 duration_years=30,
@@ -223,6 +223,7 @@ class TestCalculateScenarios:
             property_appreciation_annual=3.0,
             equity_growth_annual=7.0,
             monthly_rent=2000,
+            property_tax_rate=0.0,  # No property tax to avoid tax savings
         )
 
         results = calculate_scenarios(config)
@@ -237,8 +238,8 @@ class TestCalculateScenarios:
         assert initial_balance > final_balance
         assert final_balance < 1  # Should be paid off
 
-        # With 0% interest, no tax savings from mortgage deduction
-        assert results.total_tax_savings == 0 or results.data["Annual_Tax_Savings"].sum() == 0
+        # With 0% interest and no property tax, no tax savings
+        assert results.total_tax_savings == 0
 
     def test_zero_appreciation(self):
         """Test calculation with 0% property appreciation."""
@@ -269,6 +270,10 @@ class TestCalculateScenarios:
             property_appreciation_annual=3.0,
             equity_growth_annual=7.0,
             monthly_rent=2000,
+            closing_cost_buyer_pct=0.0,  # No closing costs for simplicity
+            property_tax_rate=0.0,
+            annual_home_insurance=0.0,
+            annual_maintenance_pct=0.0,
         )
 
         results = calculate_scenarios(config)
