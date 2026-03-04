@@ -263,18 +263,64 @@ def main():  # noqa: C901
     # Sidebar for inputs
     st.sidebar.header("📊 Simulation Parameters")
 
+    # Preset scenarios — provide quick-start configurations
+    st.sidebar.subheader("⚡ Quick Presets")
+    preset = st.sidebar.selectbox(
+        "Load a preset scenario",
+        options=[
+            "Custom",
+            "High Interest Rate (2024-2025)",
+            "Bull Market Optimistic",
+            "Conservative Planning",
+            "First-Time Buyer",
+        ],
+        help="Select a preset to quickly configure realistic scenarios",
+    )
+
+    preset_values = {
+        "Custom": {},
+        "High Interest Rate (2024-2025)": {
+            "mortgage_rate": 7.0,
+            "prop_appreciation": 2.5,
+            "equity_growth": 6.0,
+            "rent_inflation": 3.5,
+        },
+        "Bull Market Optimistic": {
+            "mortgage_rate": 4.0,
+            "prop_appreciation": 5.0,
+            "equity_growth": 10.0,
+            "rent_inflation": 2.5,
+        },
+        "Conservative Planning": {
+            "mortgage_rate": 5.5,
+            "prop_appreciation": 2.0,
+            "equity_growth": 5.0,
+            "rent_inflation": 2.0,
+        },
+        "First-Time Buyer": {
+            "down_pmt_pct": 10,
+            "mortgage_rate": 6.5,
+            "prop_appreciation": 3.0,
+            "equity_growth": 7.0,
+            "rent_inflation": 3.0,
+        },
+    }
+
+    # Loaded scenario takes priority over preset; preset overrides hardcoded defaults
+    p = preset_values.get(preset, {})
+
     # Common parameters
     st.sidebar.subheader("Common Settings")
-    
+
     # Use loaded values if available
     default_years = load_params["duration_years"] if load_params else 30
     default_price = load_params["property_price"] if load_params else 500000
-    default_down_pct = load_params["down_payment_pct"] if load_params else 20
-    default_mortgage_rate = load_params["mortgage_rate_annual"] if load_params else 4.5
-    default_appreciation = load_params["property_appreciation_annual"] if load_params else 3.0
-    default_equity_growth = load_params["equity_growth_annual"] if load_params else 7.0
+    default_down_pct = load_params["down_payment_pct"] if load_params else p.get("down_pmt_pct", 20)
+    default_mortgage_rate = load_params["mortgage_rate_annual"] if load_params else p.get("mortgage_rate", 4.5)
+    default_appreciation = load_params["property_appreciation_annual"] if load_params else p.get("prop_appreciation", 3.0)
+    default_equity_growth = load_params["equity_growth_annual"] if load_params else p.get("equity_growth", 7.0)
     default_rent = load_params["monthly_rent"] if load_params else 2000
-    default_rent_inflation = load_params["rent_inflation_rate"] * 100 if load_params else 3.0
+    default_rent_inflation = load_params["rent_inflation_rate"] * 100 if load_params else p.get("rent_inflation", 3.0)
     
     years = st.sidebar.slider(
         "Duration (Years)",
