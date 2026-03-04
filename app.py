@@ -455,6 +455,53 @@ def main():  # noqa: C901
     if load_params:
         del st.session_state["load_scenario"]
 
+    # Tax Benefits Section
+    st.sidebar.subheader("💰 Tax Benefits")
+    tax_bracket = st.sidebar.selectbox(
+        "Federal Tax Bracket (%)",
+        options=[0, 12, 22, 24, 32, 35, 37],
+        index=3,
+        help="Marginal federal income tax rate for deduction calculations",
+    )
+
+    enable_mortgage_deduction = st.sidebar.checkbox(
+        "Enable Mortgage Interest Deduction",
+        value=True,
+        help="Deduct mortgage interest from taxable income",
+    )
+
+    enable_capital_gains_exclusion = st.sidebar.checkbox(
+        "Enable Capital Gains Exclusion",
+        value=True,
+        help="Exclude capital gains on primary residence sale (Section 121)",
+    )
+
+    capital_gains_exemption_limit = st.sidebar.selectbox(
+        "Capital Gains Exemption Limit",
+        options=[250000, 500000],
+        format_func=lambda x: f"${x:,.0f} ({'Single' if x == 250000 else 'Married'})",
+        index=0,
+        help="Maximum capital gains exclusion amount",
+    )
+
+    property_tax_rate = st.sidebar.slider(
+        "Property Tax Rate (% Annual)",
+        min_value=0.0,
+        max_value=5.0,
+        value=1.2,
+        step=0.1,
+        help="Annual property tax as percentage of property value",
+    )
+
+    salt_cap = st.sidebar.number_input(
+        "SALT Deduction Cap ($)",
+        min_value=0,
+        max_value=50000,
+        value=10000,
+        step=1000,
+        help="State and Local Tax deduction cap (set to $0 for pre-2018 behavior)",
+    )
+
     # Calculate preliminary values to determine if Scenario C is available
     down_payment = prop_price * (down_pmt_pct / 100)
     loan_amount = prop_price - down_payment
@@ -507,10 +554,15 @@ def main():  # noqa: C901
         rent_inflation_rate=rent_inflation / 100,
         closing_cost_buyer_pct=closing_cost_buyer_pct,
         closing_cost_seller_pct=closing_cost_seller_pct,
-        property_tax_rate=property_tax_rate,
         annual_home_insurance=float(annual_home_insurance),
         annual_maintenance_pct=annual_maintenance_pct,
         cost_inflation_rate=cost_inflation_rate / 100,
+        tax_bracket=float(tax_bracket),
+        enable_mortgage_deduction=enable_mortgage_deduction,
+        enable_capital_gains_exclusion=enable_capital_gains_exclusion,
+        capital_gains_exemption_limit=float(capital_gains_exemption_limit),
+        property_tax_rate=property_tax_rate,
+        salt_cap=float(salt_cap),
     )
 
     # Run simulation
@@ -592,6 +644,82 @@ def main():  # noqa: C901
         st.info(
             "🎯 **No breakeven point** - One strategy dominates for the entire period."
         )
+
+    # Tax Benefits Summary
+    if tax_bracket > 0 and (enable_mortgage_deduction or enable_capital_gains_exclusion):
+        st.header("💰 Tax Benefits Summary")
+        tax_col1, tax_col2, tax_col3, tax_col4 = st.columns(4)
+
+        with tax_col1:
+            st.metric(
+                label="Total Tax Savings",
+                value=f"${results.total_tax_savings:,.0f}",
+                help="Cumulative tax savings from mortgage interest and property tax deductions",
+            )
+
+        with tax_col2:
+            st.metric(
+                label="Capital Gains Tax Saved",
+                value=f"${results.capital_gains_tax_saved:,.0f}",
+                help="Tax saved through primary residence capital gains exclusion",
+            )
+
+        with tax_col3:
+            st.metric(
+                label="Tax-Adjusted Net Value (Buy)",
+                value=f"${results.final_net_buy_tax_adjusted:,.0f}",
+                help="Net value including tax savings",
+            )
+
+        with tax_col4:
+            delta_color_tax = "normal" if results.tax_adjusted_difference > 0 else "inverse"
+            winner_tax = "Buy (A)" if results.tax_adjusted_difference > 0 else "Rent (B)"
+            st.metric(
+                label="Tax-Adjusted Difference",
+                value=f"${results.tax_adjusted_difference:,.0f}",
+                delta=f"{winner_tax} wins",
+                delta_color=delta_color_tax,
+                help="Tax-adjusted comparison (positive = buying is better)",
+            )
+
+    # Edge Case Metrics Section
+    with st.expander("📊 Edge Case Metrics", expanded=False):
+        st.markdown("Additional metrics for analyzing risk and edge cases:")
+
+        edge_col1, edge_col2, edge_col3, edge_col4 = st.columns(4)
+
+        with edge_col1:
+            st.metric(
+                label="Negative Equity Months",
+                value=f"{results.negative_equity_months}",
+                help="Months where mortgage balance exceeds home value (underwater)",
+            )
+
+        with edge_col2:
+            equity_delta_color = (
+                "normal" if results.min_equity_achieved >= 0 else "inverse"
+            )
+            st.metric(
+                label="Minimum Equity Achieved",
+                value=f"${results.min_equity_achieved:,.0f}",
+                delta="Safe" if results.min_equity_achieved >= 0 else "Risky",
+                delta_color=equity_delta_color,
+                help="Lowest equity observed during the simulation",
+            )
+
+        with edge_col3:
+            st.metric(
+                label="Final LTV Ratio",
+                value=f"{results.final_ltv_ratio * 100:.1f}%",
+                help="Loan-to-value ratio at the end of the simulation",
+            )
+
+        with edge_col4:
+            st.metric(
+                label="Max Monthly Payment",
+                value=f"${results.max_monthly_payment:,.0f}",
+                help="Highest monthly housing payment obligation across scenarios",
+            )
 
     # PDF Report Generation Section
     st.markdown("")  # Small spacing
