@@ -181,22 +181,28 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
 
     # Tax deduction savings (mortgage interest + property tax, subject to SALT cap)
     tax_rate = config.tax_bracket / 100
+    annual_interest = np.zeros(n_months + 1)
+    annual_property_tax = np.zeros(n_months + 1)
+    annual_tax_savings = np.zeros(n_months + 1)
     cumulative_tax_savings = np.zeros(n_months + 1)
-    if config.enable_mortgage_deduction and not _is_close_to_zero(tax_rate):
-        for yr in range(1, config.duration_years + 1):
-            yr_end = yr * 12
-            yr_start = yr_end - 11
-            year_interest = float(np.sum(monthly_interest[yr_start : yr_end + 1]))
-            year_property_tax = float(
-                np.sum(monthly_property_tax[yr_start : yr_end + 1])
-            )
-            # SALT cap limits property tax deductibility
+    for yr in range(1, config.duration_years + 1):
+        yr_end = yr * 12
+        yr_start = yr_end - 11
+
+        year_interest = float(np.sum(monthly_interest[yr_start : yr_end + 1]))
+        year_property_tax = float(np.sum(monthly_property_tax[yr_start : yr_end + 1]))
+
+        annual_interest[yr_start : yr_end + 1] = year_interest
+        annual_property_tax[yr_start : yr_end + 1] = year_property_tax
+
+        yr_savings = 0.0
+        if config.enable_mortgage_deduction and not _is_close_to_zero(tax_rate):
             deductible_prop_tax = min(year_property_tax, config.salt_cap)
             yr_savings = (year_interest + deductible_prop_tax) * tax_rate
-            # Accumulate savings from prior years
-            prior = cumulative_tax_savings[yr_start - 1] if yr_start > 1 else 0.0
-            # Fill the whole year with the running cumulative value
-            cumulative_tax_savings[yr_start : yr_end + 1] = prior + yr_savings
+
+        annual_tax_savings[yr_start : yr_end + 1] = yr_savings
+        prior = cumulative_tax_savings[yr_start - 1] if yr_start > 1 else 0.0
+        cumulative_tax_savings[yr_start : yr_end + 1] = prior + yr_savings
 
     # Capital gains exclusion on sale (primary residence benefit)
     capital_gains_tax_saved = 0.0
@@ -300,6 +306,11 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
             "Outflow_Rent": cum_rent_outflow,
             "Net_Buy": net_val_buy,
             "Net_Rent": net_val_rent,
+            "Annual_Interest": annual_interest,
+            "Annual_Property_Tax": annual_property_tax,
+            "Annual_Tax_Savings": annual_tax_savings,
+            "Cumulative_Tax_Savings": cumulative_tax_savings,
+            "Net_Buy_Tax_Adjusted": net_val_buy_tax_adjusted,
             "Savings_Portfolio_Value": savings_portfolio,
             "Net_Rent_Savings": net_val_rent_savings,
             "Property_Tax_Paid": cum_property_tax,

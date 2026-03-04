@@ -199,6 +199,23 @@ class SimulationConfig:
                 "For no inflation, use 0."
             )
 
+        # Validate tax_bracket (must be between 0 and 100)
+        if not (0 <= self.tax_bracket <= 100):
+            raise ValueError(
+                f"tax_bracket must be between 0 and 100 (got {self.tax_bracket}). "
+                "For no tax benefits, use 0."
+            )
+
+        # Validate capital_gains_exemption_limit (must be non-negative)
+        if self.capital_gains_exemption_limit < 0:
+            raise ValueError(
+                f"capital_gains_exemption_limit cannot be negative (got {self.capital_gains_exemption_limit})."
+            )
+
+        # Validate salt_cap (must be non-negative)
+        if self.salt_cap < 0:
+            raise ValueError(f"salt_cap cannot be negative (got {self.salt_cap}).")
+
 
 @dataclass
 class SimulationResults:
