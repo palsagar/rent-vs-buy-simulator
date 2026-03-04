@@ -176,6 +176,12 @@ class TestCalculateScenarios:
             property_appreciation_annual=3.0,
             equity_growth_annual=7.0,
             monthly_rent=2000,
+            # Isolate the 100% down payment behaviour from cost features
+            closing_cost_buyer_pct=0.0,
+            closing_cost_seller_pct=0.0,
+            property_tax_rate=0.0,
+            annual_home_insurance=0.0,
+            annual_maintenance_pct=0.0,
         )
 
         results = calculate_scenarios(config)
@@ -555,6 +561,12 @@ class TestEdgeCases:
             property_appreciation_annual=3.0,
             equity_growth_annual=7.0,
             monthly_rent=400,  # Proportional rent for small property
+            # Isolate basic outflow check from cost features
+            closing_cost_buyer_pct=0.0,
+            closing_cost_seller_pct=0.0,
+            property_tax_rate=0.0,
+            annual_home_insurance=0.0,
+            annual_maintenance_pct=0.0,
         )
 
         results = calculate_scenarios(config)
@@ -612,13 +624,19 @@ class TestEdgeCases:
             property_appreciation_annual=3.0,
             equity_growth_annual=7.0,
             monthly_rent=2000,
+            # Isolate down-payment check from closing cost features
+            closing_cost_buyer_pct=0.0,
+            closing_cost_seller_pct=0.0,
+            property_tax_rate=0.0,
+            annual_home_insurance=0.0,
+            annual_maintenance_pct=0.0,
         )
 
         results = calculate_scenarios(config)
 
         # Minimum down payment means initial outflow for buying should be $25k
         initial_outflow_buy = results.data["Outflow_Buy"].iloc[0]
-        assert abs(initial_outflow_buy - 25000) < 1000  # $25k plus closing costs
+        assert abs(initial_outflow_buy - 25000) < 1000  # $25k (no closing costs)
 
         # Mortgage balance should start at 95% of property price
         initial_mortgage = results.data["Mortgage_Balance"].iloc[0]

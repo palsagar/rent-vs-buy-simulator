@@ -26,6 +26,7 @@ from simulator.scenario_manager import (
 from simulator.utils import generate_pdf_report
 from simulator.visualization import (
     create_asset_growth_chart,
+    create_cost_breakdown_chart,
     create_net_value_chart,
     create_outflow_chart,
 )
@@ -398,6 +399,58 @@ def main():  # noqa: C901
         help="Expected annual rent increase",
     )
 
+    # Advanced Costs: closing costs and ongoing homeownership expenses
+    with st.sidebar.expander("💰 Advanced Costs", expanded=False):
+        st.caption("Closing costs and ongoing homeownership expenses")
+        closing_cost_buyer_pct = st.slider(
+            "Buyer's Closing Costs (%)",
+            min_value=0.0,
+            max_value=10.0,
+            value=3.0,
+            step=0.5,
+            help="Upfront closing costs when buying (loan fees, inspection, title, etc.)",
+        )
+        closing_cost_seller_pct = st.slider(
+            "Seller's Closing Costs (%)",
+            min_value=0.0,
+            max_value=10.0,
+            value=6.0,
+            step=0.5,
+            help="Closing costs when selling (agent commissions, transfer taxes, etc.)",
+        )
+        property_tax_rate = st.slider(
+            "Property Tax Rate (% Annual)",
+            min_value=0.0,
+            max_value=5.0,
+            value=1.2,
+            step=0.1,
+            help="Annual property tax as % of current property value",
+        )
+        annual_home_insurance = st.number_input(
+            "Annual Home Insurance ($)",
+            min_value=0,
+            max_value=10000,
+            value=1200,
+            step=100,
+            help="Annual homeowners insurance premium",
+        )
+        annual_maintenance_pct = st.slider(
+            "Maintenance (% Annual)",
+            min_value=0.0,
+            max_value=5.0,
+            value=1.0,
+            step=0.1,
+            help="Annual maintenance costs as % of property value",
+        )
+        cost_inflation_rate = st.slider(
+            "Cost Inflation (% Annual)",
+            min_value=0.0,
+            max_value=10.0,
+            value=2.5,
+            step=0.1,
+            help="Annual inflation rate for insurance and maintenance costs",
+        )
+
     # Clear load_params after using it
     if load_params:
         del st.session_state["load_scenario"]
@@ -452,6 +505,12 @@ def main():  # noqa: C901
         equity_growth_annual=equity_growth,
         monthly_rent=monthly_rent,
         rent_inflation_rate=rent_inflation / 100,
+        closing_cost_buyer_pct=closing_cost_buyer_pct,
+        closing_cost_seller_pct=closing_cost_seller_pct,
+        property_tax_rate=property_tax_rate,
+        annual_home_insurance=float(annual_home_insurance),
+        annual_maintenance_pct=annual_maintenance_pct,
+        cost_inflation_rate=cost_inflation_rate / 100,
     )
 
     # Run simulation
@@ -605,8 +664,14 @@ def main():  # noqa: C901
     st.header("📊 Detailed Analysis")
 
     # Create tabs for different views
-    tab1, tab2, tab3, tab4 = st.tabs(
-        ["Asset Growth", "Cumulative Costs", "Net Value Comparison", "Data Table"]
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(
+        [
+            "Asset Growth",
+            "Cumulative Costs",
+            "Net Value Comparison",
+            "Cost Breakdown",
+            "Data Table",
+        ]
     )
 
     with tab1:
@@ -662,6 +727,35 @@ def main():  # noqa: C901
         st.plotly_chart(fig_net, use_container_width=True)
 
     with tab4:
+        st.subheader("Cost of Homeownership — Breakdown")
+        st.markdown("""
+        This chart shows what makes up the total cost of buying and owning the property:
+        - **Mortgage Payments:** Principal + interest over the simulation period
+        - **Buyer/Seller Closing Costs:** One-time transaction fees at purchase and sale
+        - **Property Tax:** Annual tax based on current property value
+        - **Insurance:** Annual homeowners insurance (inflation-adjusted)
+        - **Maintenance:** Annual upkeep costs (inflation-adjusted)
+        """)
+        col_cb1, col_cb2, col_cb3 = st.columns(3)
+        with col_cb1:
+            st.metric(
+                "Total Property Tax",
+                f"${results.total_property_tax_paid:,.0f}",
+            )
+        with col_cb2:
+            st.metric(
+                "Total Insurance",
+                f"${results.total_insurance_paid:,.0f}",
+            )
+        with col_cb3:
+            st.metric(
+                "Total Maintenance",
+                f"${results.total_maintenance_paid:,.0f}",
+            )
+        fig_cost_breakdown = create_cost_breakdown_chart(results)
+        st.plotly_chart(fig_cost_breakdown, use_container_width=True)
+
+    with tab5:
         st.subheader("Raw Data")
         st.markdown("View and download the underlying simulation data.")
 
