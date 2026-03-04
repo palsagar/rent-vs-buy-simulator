@@ -682,6 +682,45 @@ def main():  # noqa: C901
                 help="Tax-adjusted comparison (positive = buying is better)",
             )
 
+    # Edge Case Metrics Section
+    with st.expander("📊 Edge Case Metrics", expanded=False):
+        st.markdown("Additional metrics for analyzing risk and edge cases:")
+
+        edge_col1, edge_col2, edge_col3, edge_col4 = st.columns(4)
+
+        with edge_col1:
+            st.metric(
+                label="Negative Equity Months",
+                value=f"{results.negative_equity_months}",
+                help="Months where mortgage balance exceeds home value (underwater)",
+            )
+
+        with edge_col2:
+            equity_delta_color = (
+                "normal" if results.min_equity_achieved >= 0 else "inverse"
+            )
+            st.metric(
+                label="Minimum Equity Achieved",
+                value=f"${results.min_equity_achieved:,.0f}",
+                delta="Safe" if results.min_equity_achieved >= 0 else "Risky",
+                delta_color=equity_delta_color,
+                help="Lowest equity observed during the simulation",
+            )
+
+        with edge_col3:
+            st.metric(
+                label="Final LTV Ratio",
+                value=f"{results.final_ltv_ratio * 100:.1f}%",
+                help="Loan-to-value ratio at the end of the simulation",
+            )
+
+        with edge_col4:
+            st.metric(
+                label="Max Monthly Payment",
+                value=f"${results.max_monthly_payment:,.0f}",
+                help="Highest monthly housing payment obligation across scenarios",
+            )
+
     # PDF Report Generation Section
     st.markdown("")  # Small spacing
     show_c = show_scenario_c and results.scenario_c_enabled

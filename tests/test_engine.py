@@ -12,7 +12,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 import numpy as np
 import pytest
 
-from simulator.engine import _find_breakeven, calculate_scenarios
+from simulator.engine import (
+    _find_breakeven,
+    _is_close,
+    _is_close_to_zero,
+    calculate_scenarios,
+)
 from simulator.models import SimulationConfig, SimulationResults
 
 
@@ -166,6 +171,23 @@ class TestCalculateScenarios:
         final_home = results.data["Home_Value"].iloc[-1]
         assert abs(final_home - initial_home) < 1  # Should be very close
 
+    def test_rent_inflation_annual_rate_is_applied_as_percentage(self):
+        """Test 3% annual rent inflation does not explode monthly rent."""
+        config = SimulationConfig(
+            duration_years=1,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+            rent_inflation_rate=0.03,
+        )
+
+        results = calculate_scenarios(config)
+        first_year_outflow = results.data["Outflow_Rent"].iloc[12]
+        assert 24000 < first_year_outflow < 25000
+
     def test_100_percent_down_payment(self):
         """Test calculation with 100% down payment (no mortgage)."""
         config = SimulationConfig(
@@ -290,6 +312,23 @@ class TestBreakeven:
         # Should find the crossover
         assert breakeven is not None
         assert abs(breakeven - 2.0) < 0.1  # Should be close to 2
+
+
+class TestFloatingPointHelpers:
+    """Tests for floating-point comparison helpers."""
+
+    def test_is_close_to_zero(self):
+        """Test near-zero values are correctly identified."""
+        assert _is_close_to_zero(0.0)
+        assert _is_close_to_zero(1e-10)
+        assert _is_close_to_zero(-1e-10)
+        assert not _is_close_to_zero(1e-3)
+
+    def test_is_close(self):
+        """Test close values are correctly identified."""
+        assert _is_close(1.0, 1.0 + 1e-10)
+        assert _is_close(-10.0, -10.0 - 1e-10)
+        assert not _is_close(1.0, 1.01)
 
 
 class TestScenarioC:
@@ -498,6 +537,29 @@ class TestIntegration:
 
 class TestEdgeCases:
     """Edge case tests for extreme scenarios."""
+
+    def test_edge_case_metrics_are_populated(self):
+        """Test edge-case summary metrics are available and sensible."""
+        config = SimulationConfig(
+            duration_years=30,
+            property_price=500000,
+            down_payment_pct=5,
+            mortgage_rate_annual=6.5,
+            property_appreciation_annual=1.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+            rent_inflation_rate=0.03,
+        )
+
+        results = calculate_scenarios(config)
+
+        assert results.negative_equity_months >= 0
+        assert results.min_equity_achieved <= results.data["Home_Value"].max()
+        assert 0 <= results.final_ltv_ratio <= 1
+        assert results.max_monthly_payment >= max(
+            results.monthly_mortgage_payment,
+            config.monthly_rent,
+        )
 
     def test_negative_equity_growth_property_value_decreases(self):
         """Test negative equity growth (property value decreases)."""
