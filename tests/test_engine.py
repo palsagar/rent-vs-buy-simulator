@@ -184,12 +184,6 @@ class TestCalculateScenarios:
         final_equity = results.data["Equity_Value"].iloc[-1]
         assert final_equity > initial_equity
 
-    def test_very_low_interest_rate(self):
-        """Test calculation with very low (but positive) mortgage interest rate."""
-        config = SimulationConfig(
-            duration_years=30,
-            property_price=500000,
-            down_payment_pct=20,
     def test_tax_columns_exist(self):
         """Test that tax-related columns exist when tax benefits enabled."""
         config = SimulationConfig(
@@ -301,7 +295,7 @@ class TestCalculateScenarios:
         # All mortgage balance should be zero
         assert results.data["Mortgage_Balance"].max() < 1
 
-        # Outflow for buying should just be the down payment (no monthly payments, no tax, no closing costs, no insurance, no maintenance)
+        # Outflow should remain just the down payment when all ongoing costs are off.
         final_outflow = results.data["Outflow_Buy"].iloc[-1]
         assert abs(final_outflow - 500000) < 1  # Should be just the property price
 
@@ -761,7 +755,10 @@ class TestEdgeCases:
 
         # Verify that rent outflows are positive and monotonically increasing
         rent_outflows = results.data["Outflow_Rent"].values
-        assert all(rent_outflows[i] <= rent_outflows[i + 1] for i in range(len(rent_outflows) - 1))
+        assert all(
+            rent_outflows[i] <= rent_outflows[i + 1]
+            for i in range(len(rent_outflows) - 1)
+        )
 
         # Both scenarios should have valid results
         assert results.final_net_rent is not None
@@ -804,7 +801,7 @@ class TestEdgeCases:
 
     def test_rent_equals_mortgage_payment_exactly(self):
         """Test when rent equals mortgage payment exactly."""
-        # Calculate monthly mortgage for $400k loan (20% down on $500k) at 4.5% for 30 years
+        # Calculate monthly mortgage for $400k loan (20% down on $500k).
         # Using standard amortization: P = L[c(1+c)^n]/[(1+c)^n-1]
         # L = 400000, c = 0.045/12, n = 360
         # P ≈ $2026.74
