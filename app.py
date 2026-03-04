@@ -8,7 +8,6 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-import pandas as pd
 import streamlit as st
 
 # Add src to path to import our modules
@@ -18,7 +17,6 @@ from simulator.engine import calculate_scenarios
 from simulator.models import SimulationConfig
 from simulator.scenario_manager import (
     ScenarioManager,
-    SavedScenario,
     create_comparison_chart,
     create_comparison_table,
     export_comparison_csv,
@@ -42,18 +40,22 @@ def init_session_state():
     if "pdf_data" not in st.session_state:
         st.session_state.pdf_data = None
     if "scenario_manager" not in st.session_state:
-        st.session_state.scenario_manager = ScenarioManager(max_scenarios=MAX_SAVED_SCENARIOS)
+        st.session_state.scenario_manager = ScenarioManager(
+            max_scenarios=MAX_SAVED_SCENARIOS
+        )
 
 
 def render_scenario_saver(config: SimulationConfig, results):
     """Render the scenario saving UI in the sidebar."""
     st.sidebar.divider()
     st.sidebar.subheader("💾 Save Scenario")
-    
+
     manager = st.session_state.scenario_manager
-    
+
     if manager.is_full():
-        st.sidebar.warning(f"⚠️ Maximum {MAX_SAVED_SCENARIOS} scenarios saved. Delete one to save more.")
+        st.sidebar.warning(
+            f"⚠️ Maximum {MAX_SAVED_SCENARIOS} scenarios saved. Delete one to save more."
+        )
     else:
         scenario_name = st.sidebar.text_input(
             "Scenario Name",
@@ -61,7 +63,7 @@ def render_scenario_saver(config: SimulationConfig, results):
             max_chars=30,
             help="Give your scenario a descriptive name",
         )
-        
+
         if st.sidebar.button("💾 Save Current Scenario", use_container_width=True):
             created_at = datetime.now().strftime("%Y-%m-%d %H:%M")
             success = manager.add_scenario(scenario_name, config, results, created_at)
@@ -76,24 +78,28 @@ def render_scenario_saver(config: SimulationConfig, results):
 def render_saved_scenarios_sidebar():
     """Render saved scenarios management in the sidebar."""
     manager = st.session_state.scenario_manager
-    
+
     if not manager.scenarios:
         return
-    
+
     st.sidebar.divider()
     st.sidebar.subheader("📁 Saved Scenarios")
-    st.sidebar.caption(f"{len(manager.scenarios)}/{MAX_SAVED_SCENARIOS} scenarios saved")
-    
+    st.sidebar.caption(
+        f"{len(manager.scenarios)}/{MAX_SAVED_SCENARIOS} scenarios saved"
+    )
+
     for scenario in manager.scenarios:
         col1, col2 = st.sidebar.columns([3, 1])
         with col1:
             st.caption(f"📊 {scenario.name}")
         with col2:
-            if st.button("🗑️", key=f"delete_{scenario.name}", help=f"Delete {scenario.name}"):
+            if st.button(
+                "🗑️", key=f"delete_{scenario.name}", help=f"Delete {scenario.name}"
+            ):
                 manager.remove_scenario(scenario.name)
                 st.session_state.saved_scenarios = manager.to_dict_list()
                 st.rerun()
-    
+
     if st.sidebar.button("🗑️ Clear All Scenarios", use_container_width=True):
         manager.clear_all()
         st.session_state.saved_scenarios = []
@@ -103,30 +109,30 @@ def render_saved_scenarios_sidebar():
 def render_scenario_comparison():
     """Render the scenario comparison section."""
     manager = st.session_state.scenario_manager
-    
+
     if not manager.scenarios:
         return
-    
+
     st.divider()
-    
+
     with st.expander("📊 Compare Scenarios", expanded=False):
         st.header("📊 Scenario Comparison")
         st.caption("Compare saved scenarios side-by-side")
-        
+
         # Comparison table
         st.subheader("Comparison Table")
         comparison_df = create_comparison_table(manager.scenarios)
-        
+
         # Format the dataframe for display
         st.dataframe(
             comparison_df,
             use_container_width=True,
             hide_index=True,
         )
-        
+
         # Export comparison CSV
         csv_data = export_comparison_csv(manager.scenarios)
-        col1, col2 = st.columns([1, 4])
+        col1, _ = st.columns([1, 4])
         with col1:
             st.download_button(
                 label="📥 Export Comparison CSV",
@@ -135,12 +141,12 @@ def render_scenario_comparison():
                 mime="text/csv",
                 use_container_width=True,
             )
-        
+
         st.divider()
-        
+
         # Comparison charts
         st.subheader("Visual Comparison")
-        
+
         chart_type = st.selectbox(
             "Select Comparison View",
             options=[
@@ -150,15 +156,17 @@ def render_scenario_comparison():
             ],
             format_func=lambda x: x[1],
         )
-        
-        fig_comparison = create_comparison_chart(manager.scenarios, metric=chart_type[0])
+
+        fig_comparison = create_comparison_chart(
+            manager.scenarios, metric=chart_type[0]
+        )
         st.plotly_chart(fig_comparison, use_container_width=True)
-        
+
         # Quick load section
         st.divider()
         st.subheader("🔄 Quick Load Saved Scenario")
         st.caption("Click a scenario to load its parameters")
-        
+
         cols = st.columns(min(len(manager.scenarios), 3))
         for idx, scenario in enumerate(manager.scenarios):
             with cols[idx % 3]:
@@ -166,7 +174,7 @@ def render_scenario_comparison():
                     st.caption(f"**{scenario.name}**")
                     st.caption(f"Property: ${scenario.config.property_price:,.0f}")
                     st.caption(f"Duration: {scenario.config.duration_years} years")
-                    
+
                     # Show winner
                     if scenario.results.final_difference > 0:
                         winner = "🏆 Buy"
@@ -174,45 +182,35 @@ def render_scenario_comparison():
                     else:
                         winner = "🏆 Rent"
                         winner_color = "blue"
-                    
+
                     st.caption(f":{winner_color}[{winner} wins]")
-                    
-                    if st.button("📂 Load", key=f"load_{scenario.name}", use_container_width=True):
+
+                    if st.button(
+                        "📂 Load", key=f"load_{scenario.name}", use_container_width=True
+                    ):
                         # Store selected scenario parameters in session state
+                        cfg = scenario.config
                         st.session_state["load_scenario"] = {
-                            "duration_years": scenario.config.duration_years,
-                            "property_price": scenario.config.property_price,
-                            "down_payment_pct": scenario.config.down_payment_pct,
-                            "mortgage_rate_annual": scenario.config.mortgage_rate_annual,
-                            "property_appreciation_annual": scenario.config.property_appreciation_annual,
-                            "equity_growth_annual": scenario.config.equity_growth_annual,
-                            "monthly_rent": scenario.config.monthly_rent,
-                            "rent_inflation_rate": scenario.config.rent_inflation_rate,
+                            "duration_years": cfg.duration_years,
+                            "property_price": cfg.property_price,
+                            "down_payment_pct": cfg.down_payment_pct,
+                            "mortgage_rate_annual": cfg.mortgage_rate_annual,
+                            "property_appreciation_annual": (
+                                cfg.property_appreciation_annual
+                            ),
+                            "equity_growth_annual": cfg.equity_growth_annual,
+                            "monthly_rent": cfg.monthly_rent,
+                            "rent_inflation_rate": cfg.rent_inflation_rate,
                         }
                         st.rerun()
 
 
-def render_comparison_in_pdf(config, results, show_c):
-    """Generate comparison charts for PDF report."""
-    manager = st.session_state.scenario_manager
-    
-    if not manager.scenarios or len(manager.scenarios) < 2:
-        return None, None, None
-    
-    # Create comparison charts for PDF
-    fig_final = create_comparison_chart(manager.scenarios, metric="final_values")
-    fig_breakeven = create_comparison_chart(manager.scenarios, metric="breakeven")
-    fig_trajectory = create_comparison_chart(manager.scenarios, metric="net_value")
-    
-    return fig_final, fig_breakeven, fig_trajectory
-
-
 def main():  # noqa: C901
     """Main application entry point."""
-    
+
     # Initialize session state
     init_session_state()
-    
+
     # Restore scenarios from session state if needed
     manager = st.session_state.scenario_manager
     if not manager.scenarios and st.session_state.saved_scenarios:
@@ -224,7 +222,7 @@ def main():  # noqa: C901
             manager = restored_manager
         except Exception:
             pass
-    
+
     # Page configuration
     st.set_page_config(
         layout="wide",
@@ -316,13 +314,31 @@ def main():  # noqa: C901
     # Use loaded values if available
     default_years = load_params["duration_years"] if load_params else 30
     default_price = load_params["property_price"] if load_params else 500000
-    default_down_pct = load_params["down_payment_pct"] if load_params else p.get("down_pmt_pct", 20)
-    default_mortgage_rate = load_params["mortgage_rate_annual"] if load_params else p.get("mortgage_rate", 4.5)
-    default_appreciation = load_params["property_appreciation_annual"] if load_params else p.get("prop_appreciation", 3.0)
-    default_equity_growth = load_params["equity_growth_annual"] if load_params else p.get("equity_growth", 7.0)
+    default_down_pct = (
+        load_params["down_payment_pct"] if load_params else p.get("down_pmt_pct", 20)
+    )
+    default_mortgage_rate = (
+        load_params["mortgage_rate_annual"]
+        if load_params
+        else p.get("mortgage_rate", 4.5)
+    )
+    default_appreciation = (
+        load_params["property_appreciation_annual"]
+        if load_params
+        else p.get("prop_appreciation", 3.0)
+    )
+    default_equity_growth = (
+        load_params["equity_growth_annual"]
+        if load_params
+        else p.get("equity_growth", 7.0)
+    )
     default_rent = load_params["monthly_rent"] if load_params else 2000
-    default_rent_inflation = load_params["rent_inflation_rate"] * 100 if load_params else p.get("rent_inflation", 3.0)
-    
+    default_rent_inflation = (
+        load_params["rent_inflation_rate"] * 100
+        if load_params
+        else p.get("rent_inflation", 3.0)
+    )
+
     years = st.sidebar.slider(
         "Duration (Years)",
         min_value=10,
@@ -408,7 +424,7 @@ def main():  # noqa: C901
             max_value=10.0,
             value=3.0,
             step=0.5,
-            help="Upfront closing costs when buying (loan fees, inspection, title, etc.)",
+            help="Upfront closing costs when buying (loan fees, inspection, title)",
         )
         closing_cost_seller_pct = st.slider(
             "Seller's Closing Costs (%)",
@@ -646,7 +662,9 @@ def main():  # noqa: C901
         )
 
     # Tax Benefits Summary
-    if tax_bracket > 0 and (enable_mortgage_deduction or enable_capital_gains_exclusion):
+    if tax_bracket > 0 and (
+        enable_mortgage_deduction or enable_capital_gains_exclusion
+    ):
         st.header("💰 Tax Benefits Summary")
         tax_col1, tax_col2, tax_col3, tax_col4 = st.columns(4)
 
@@ -654,7 +672,7 @@ def main():  # noqa: C901
             st.metric(
                 label="Total Tax Savings",
                 value=f"${results.total_tax_savings:,.0f}",
-                help="Cumulative tax savings from mortgage interest and property tax deductions",
+                help="Tax savings from mortgage interest and property tax deductions",
             )
 
         with tax_col2:
@@ -672,8 +690,12 @@ def main():  # noqa: C901
             )
 
         with tax_col4:
-            delta_color_tax = "normal" if results.tax_adjusted_difference > 0 else "inverse"
-            winner_tax = "Buy (A)" if results.tax_adjusted_difference > 0 else "Rent (B)"
+            delta_color_tax = (
+                "normal" if results.tax_adjusted_difference > 0 else "inverse"
+            )
+            winner_tax = (
+                "Buy (A)" if results.tax_adjusted_difference > 0 else "Rent (B)"
+            )
             st.metric(
                 label="Tax-Adjusted Difference",
                 value=f"${results.tax_adjusted_difference:,.0f}",
@@ -751,11 +773,6 @@ def main():  # noqa: C901
                 breakeven_year_vs_rent_savings=results.breakeven_year_vs_rent_savings,
             )
 
-            # Generate comparison charts if we have saved scenarios
-            comparison_charts = None
-            if len(manager.scenarios) >= 2:
-                comparison_charts = render_comparison_in_pdf(config, results, show_c)
-
             # Generate PDF with charts
             pdf_bytes = generate_pdf_report(
                 config,
@@ -764,8 +781,6 @@ def main():  # noqa: C901
                 fig_assets=fig_assets_pdf,
                 fig_outflows=fig_outflows_pdf,
                 fig_net=fig_net_pdf,
-                comparison_charts=comparison_charts,
-                saved_scenarios=manager.scenarios,
             )
 
             # Store in session state
@@ -930,30 +945,36 @@ def main():  # noqa: C901
     - Mortgage payments are fixed (standard amortization)
     - Property appreciation and equity growth compound monthly
     - Rent increases with inflation annually
-    - No transaction costs, property taxes, or maintenance costs included
-    - No taxes on investment gains considered
+    - **Closing costs:** Buyer and seller costs modeled (configurable %)
+    - **Ongoing costs:** Property tax, insurance, maintenance (inflation-adjusted)
+    - **Tax benefits:** Mortgage interest deduction, capital gains exclusion
+      (Section 121), SALT cap for property tax deduction
+    - **Scenario C** available when mortgage payment > rent
+    - No taxes on investment gains for the rent scenario
     """)
 
     with st.expander("ℹ️ About This Tool"):
         st.markdown("""
         This simulation engine helps compare three financial strategies:
 
-        **Strategy A (Buy):** You purchase a property with a mortgage. Your
-        outflows are the down payment and monthly mortgage payments. Your asset
-        is the property value.
+        **Strategy A (Buy):** You purchase a property with a mortgage. Outflows
+        include the down payment, closing costs, monthly mortgage payments,
+        property tax, insurance, and maintenance. Your asset is the property value.
 
-        **Strategy B (Rent + Invest):** You rent and invest the equivalent down payment
+        **Strategy B (Rent + Invest):** You rent and invest the down payment
         into a diversified equity portfolio. Your outflows are rent payments.
         Your asset is the investment portfolio.
 
-        **Strategy C (Rent + Invest Savings):** Available when mortgage payment > rent.
-        You rent and keep the down payment as cash (0% return). The monthly savings
-        (mortgage payment - rent) are invested at the same CAGR as Strategy B.
+        **Strategy C (Rent + Invest Savings):** Available when mortgage > rent.
+        You rent and keep the down payment as cash (0% return). Monthly savings
+        (mortgage - rent) are invested at the same CAGR as Strategy B.
         Your asset is cash + savings portfolio. Outflows are rent payments.
 
-        The **Net Value** metric (Asset - Outflows) represents the actual
-        wealth accumulation after accounting for money spent. This is the key
-        decision metric.
+        The **Net Value** metric (Asset - Outflows) is the key decision metric.
+
+        **Features:** Tax benefits (mortgage interest deduction, capital gains
+        exclusion), cost breakdown analysis, scenario comparison, PDF report
+        generation.
 
         **Developed using:** Python, NumPy, Pandas, Plotly, and Streamlit
         """)

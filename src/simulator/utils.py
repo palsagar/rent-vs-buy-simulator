@@ -141,8 +141,14 @@ def generate_pdf_report(  # noqa: C901
 
         tax_params = [
             ("Tax Bracket", f"{config.tax_bracket}%"),
-            ("Mortgage Deduction", "Enabled" if config.enable_mortgage_deduction else "Disabled"),
-            ("Capital Gains Exclusion", "Enabled" if config.enable_capital_gains_exclusion else "Disabled"),
+            (
+                "Mortgage Deduction",
+                "Enabled" if config.enable_mortgage_deduction else "Disabled",
+            ),
+            (
+                "Capital Gains Exclusion",
+                "Enabled" if config.enable_capital_gains_exclusion else "Disabled",
+            ),
             ("Exemption Limit", f"${config.capital_gains_exemption_limit:,.0f}"),
             ("SALT Cap", f"${config.salt_cap:,.0f}"),
         ]
@@ -232,7 +238,9 @@ def generate_pdf_report(  # noqa: C901
         pdf.set_font("Arial", "B", 9)
         pdf.cell(60, line_height, "Tax-Adjusted Winner:", 0, 0)
         pdf.set_font("Arial", "", 9)
-        winner_tax = "Buy (A)" if results.tax_adjusted_difference > 0 else "Rent + Invest (B)"
+        winner_tax = (
+            "Buy (A)" if results.tax_adjusted_difference > 0 else "Rent + Invest (B)"
+        )
         pdf.cell(
             0,
             line_height,

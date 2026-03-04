@@ -171,7 +171,7 @@ class SimulationConfig:
         # Validate down_payment_pct (must be between 5% and 100%)
         if not (5 <= self.down_payment_pct <= 100):
             raise ValueError(
-                f"down_payment_pct must be between 5 and 100 (got {self.down_payment_pct}). "
+                f"down_payment_pct must be 5-100 (got {self.down_payment_pct}). "
                 "Minimum down payment is typically 5% for most mortgages. "
                 "Use 100% for an all-cash purchase."
             )
@@ -179,7 +179,7 @@ class SimulationConfig:
         # Validate mortgage_rate_annual (must be > 0 to avoid numerical issues)
         if self.mortgage_rate_annual <= 0:
             raise ValueError(
-                f"mortgage_rate_annual must be positive (got {self.mortgage_rate_annual}). "
+                f"mortgage_rate_annual must be > 0 (got {self.mortgage_rate_annual}). "
                 "Please specify a rate greater than 0%. "
                 "For very low rates, use a small positive value like 0.01%."
             )
@@ -194,9 +194,8 @@ class SimulationConfig:
         # Validate rent_inflation_rate (must be between 0 and 1, i.e., 0-100%)
         if not (0 <= self.rent_inflation_rate <= 1):
             raise ValueError(
-                f"rent_inflation_rate must be between 0 and 1 (0-100%) (got {self.rent_inflation_rate}). "
-                "For 3% annual inflation, use 0.03. "
-                "For no inflation, use 0."
+                f"rent_inflation_rate must be 0-1 (got {self.rent_inflation_rate}). "
+                "For 3% annual inflation, use 0.03. For no inflation, use 0."
             )
 
         # Validate tax_bracket (must be between 0 and 100)
@@ -209,7 +208,8 @@ class SimulationConfig:
         # Validate capital_gains_exemption_limit (must be non-negative)
         if self.capital_gains_exemption_limit < 0:
             raise ValueError(
-                f"capital_gains_exemption_limit cannot be negative (got {self.capital_gains_exemption_limit})."
+                "capital_gains_exemption_limit cannot be negative "
+                f"(got {self.capital_gains_exemption_limit})."
             )
 
         # Validate salt_cap (must be non-negative)

@@ -66,9 +66,7 @@ class TestSimulationConfig:
 
     def test_invalid_down_payment_pct_raises_error(self):
         """Test that invalid down payment percentage raises ValueError."""
-        with pytest.raises(
-            ValueError, match="down_payment_pct must be between 5 and 100"
-        ):
+        with pytest.raises(ValueError, match="down_payment_pct must be 5-100"):
             SimulationConfig(
                 duration_years=30,
                 property_price=500000,
@@ -135,6 +133,7 @@ class TestSimulationConfig:
             monthly_rent=2000,
         )
         assert config.down_payment_pct == 100
+
 
 class TestCalculateScenarios:
     """Tests for calculate_scenarios function."""
@@ -236,6 +235,7 @@ class TestCalculateScenarios:
 
         # With very low interest, minimal tax savings from mortgage deduction
         assert results.total_tax_savings >= 0
+
     def test_zero_appreciation(self):
         """Test calculation with 0% property appreciation."""
         config = SimulationConfig(
@@ -831,5 +831,3 @@ class TestEdgeCases:
         assert results.final_net_buy is not None
         assert results.final_net_rent is not None
         assert results.final_difference is not None
-
-
