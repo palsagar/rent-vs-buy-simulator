@@ -4,9 +4,13 @@ This module provides functions to create publication-quality interactive
 charts for the financial simulation results.
 """
 
+from __future__ import annotations
+
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+
+from simulator.models import SimulationResults
 
 
 def create_asset_growth_chart(
@@ -705,7 +709,7 @@ def create_combined_dashboard(
     return fig
 
 
-def create_cost_breakdown_chart(results: "SimulationResults") -> go.Figure:  # noqa: F821
+def create_cost_breakdown_chart(results: SimulationResults) -> go.Figure:
     """Create a bar chart breaking down the total cost of homeownership.
 
     Shows the cumulative cost components for the buy scenario: mortgage

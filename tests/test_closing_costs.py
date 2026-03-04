@@ -6,7 +6,6 @@ from pathlib import Path
 # Add src to path to import our modules
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-import pytest
 
 from simulator.engine import calculate_scenarios
 from simulator.models import SimulationConfig

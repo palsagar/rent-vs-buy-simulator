@@ -4,21 +4,20 @@ This module provides functionality to save multiple simulation configurations
 and compare their results side-by-side.
 """
 
-from dataclasses import dataclass, asdict
-from typing import List, Dict, Any, Optional
-import json
+from dataclasses import dataclass
+from typing import Any
+
 import pandas as pd
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
-from .models import SimulationConfig, SimulationResults
 from .engine import calculate_scenarios
+from .models import SimulationConfig, SimulationResults
 
 
 @dataclass
 class SavedScenario:
     """A saved scenario with name, configuration, and results.
-    
+
     Parameters
     ----------
     name : str
@@ -30,6 +29,7 @@ class SavedScenario:
     created_at : str
         Timestamp when the scenario was saved.
     """
+
     name: str
     config: SimulationConfig
     results: SimulationResults
@@ -38,16 +38,16 @@ class SavedScenario:
 
 class ScenarioManager:
     """Manages saved scenarios for comparison.
-    
+
     This class handles saving, loading, deleting, and comparing scenarios.
     It's designed to work with Streamlit's session_state for persistence
     across user interactions.
-    
+
     Parameters
     ----------
     max_scenarios : int
         Maximum number of scenarios to store. Default is 5.
-    
+
     Attributes
     ----------
     max_scenarios : int
@@ -55,14 +55,20 @@ class ScenarioManager:
     scenarios : List[SavedScenario]
         List of saved scenarios.
     """
-    
+
     def __init__(self, max_scenarios: int = 5):
         self.max_scenarios = max_scenarios
-        self.scenarios: List[SavedScenario] = []
-    
-    def add_scenario(self, name: str, config: SimulationConfig, results: SimulationResults, created_at: str) -> bool:
+        self.scenarios: list[SavedScenario] = []
+
+    def add_scenario(
+        self,
+        name: str,
+        config: SimulationConfig,
+        results: SimulationResults,
+        created_at: str,
+    ) -> bool:
         """Add a new scenario.
-        
+
         Parameters
         ----------
         name : str
@@ -73,7 +79,7 @@ class ScenarioManager:
             The simulation results.
         created_at : str
             Timestamp when the scenario was saved.
-            
+
         Returns
         -------
         bool
@@ -81,7 +87,7 @@ class ScenarioManager:
         """
         if len(self.scenarios) >= self.max_scenarios:
             return False
-        
+
         # Check for duplicate names and append number if needed
         base_name = name
         counter = 1
@@ -89,19 +95,19 @@ class ScenarioManager:
         while name in existing_names:
             name = f"{base_name} ({counter})"
             counter += 1
-        
+
         scenario = SavedScenario(name, config, results, created_at)
         self.scenarios.append(scenario)
         return True
-    
+
     def remove_scenario(self, name: str) -> bool:
         """Remove a scenario by name.
-        
+
         Parameters
         ----------
         name : str
             Name of the scenario to remove.
-            
+
         Returns
         -------
         bool
@@ -112,15 +118,15 @@ class ScenarioManager:
                 self.scenarios.pop(i)
                 return True
         return False
-    
-    def get_scenario(self, name: str) -> Optional[SavedScenario]:
+
+    def get_scenario(self, name: str) -> SavedScenario | None:
         """Get a scenario by name.
-        
+
         Parameters
         ----------
         name : str
             Name of the scenario to retrieve.
-            
+
         Returns
         -------
         SavedScenario | None
@@ -130,18 +136,18 @@ class ScenarioManager:
             if scenario.name == name:
                 return scenario
         return None
-    
+
     def clear_all(self):
         """Remove all saved scenarios."""
         self.scenarios = []
-    
+
     def is_full(self) -> bool:
         """Check if the scenario storage is at capacity."""
         return len(self.scenarios) >= self.max_scenarios
-    
+
     def get_comparison_data(self) -> pd.DataFrame:
         """Generate comparison data for all saved scenarios.
-        
+
         Returns
         -------
         pd.DataFrame
@@ -149,7 +155,7 @@ class ScenarioManager:
         """
         if not self.scenarios:
             return pd.DataFrame()
-        
+
         data = []
         for s in self.scenarios:
             row = {
@@ -168,24 +174,30 @@ class ScenarioManager:
                 "Breakeven - Buy vs Rent (Years)": s.results.breakeven_year,
                 "Monthly Mortgage Payment ($)": s.results.monthly_mortgage_payment,
             }
-            
+
             if s.results.scenario_c_enabled:
-                row["Final Net Value - Rent+Savings ($)"] = s.results.final_net_rent_savings
-                diff_a_vs_c = s.results.final_net_buy - (s.results.final_net_rent_savings or 0)
+                row["Final Net Value - Rent+Savings ($)"] = (
+                    s.results.final_net_rent_savings
+                )
+                diff_a_vs_c = s.results.final_net_buy - (
+                    s.results.final_net_rent_savings or 0
+                )
                 row["Difference - Buy vs Rent+Savings ($)"] = diff_a_vs_c
-                row["Breakeven - Buy vs Rent+Savings (Years)"] = s.results.breakeven_year_vs_rent_savings
+                row["Breakeven - Buy vs Rent+Savings (Years)"] = (
+                    s.results.breakeven_year_vs_rent_savings
+                )
             else:
                 row["Final Net Value - Rent+Savings ($)"] = None
                 row["Difference - Buy vs Rent+Savings ($)"] = None
                 row["Breakeven - Buy vs Rent+Savings (Years)"] = None
-            
+
             data.append(row)
-        
+
         return pd.DataFrame(data)
-    
-    def to_dict_list(self) -> List[Dict[str, Any]]:
+
+    def to_dict_list(self) -> list[dict[str, Any]]:
         """Convert scenarios to a list of dictionaries for serialization.
-        
+
         Returns
         -------
         List[Dict[str, Any]]
@@ -193,33 +205,40 @@ class ScenarioManager:
         """
         result = []
         for s in self.scenarios:
-            result.append({
-                "name": s.name,
-                "config": {
-                    "duration_years": s.config.duration_years,
-                    "property_price": s.config.property_price,
-                    "down_payment_pct": s.config.down_payment_pct,
-                    "mortgage_rate_annual": s.config.mortgage_rate_annual,
-                    "property_appreciation_annual": s.config.property_appreciation_annual,
-                    "equity_growth_annual": s.config.equity_growth_annual,
-                    "monthly_rent": s.config.monthly_rent,
-                    "rent_inflation_rate": s.config.rent_inflation_rate,
-                },
-                "created_at": s.created_at,
-            })
+            cfg = s.config
+            result.append(
+                {
+                    "name": s.name,
+                    "config": {
+                        "duration_years": cfg.duration_years,
+                        "property_price": cfg.property_price,
+                        "down_payment_pct": cfg.down_payment_pct,
+                        "mortgage_rate_annual": cfg.mortgage_rate_annual,
+                        "property_appreciation_annual": (
+                            cfg.property_appreciation_annual
+                        ),
+                        "equity_growth_annual": cfg.equity_growth_annual,
+                        "monthly_rent": cfg.monthly_rent,
+                        "rent_inflation_rate": cfg.rent_inflation_rate,
+                    },
+                    "created_at": s.created_at,
+                }
+            )
         return result
-    
+
     @classmethod
-    def from_dict_list(cls, data: List[Dict[str, Any]], max_scenarios: int = 5) -> "ScenarioManager":
+    def from_dict_list(
+        cls, data: list[dict[str, Any]], max_scenarios: int = 5
+    ) -> "ScenarioManager":
         """Create a ScenarioManager from a list of dictionaries.
-        
+
         Parameters
         ----------
         data : List[Dict[str, Any]]
             List of scenario dictionaries.
         max_scenarios : int
             Maximum number of scenarios. Default is 5.
-            
+
         Returns
         -------
         ScenarioManager
@@ -237,14 +256,14 @@ class ScenarioManager:
         return manager
 
 
-def create_comparison_table(scenarios: List[SavedScenario]) -> pd.DataFrame:
+def create_comparison_table(scenarios: list[SavedScenario]) -> pd.DataFrame:
     """Create a formatted comparison table for display.
-    
+
     Parameters
     ----------
     scenarios : List[SavedScenario]
         List of scenarios to compare.
-        
+
     Returns
     -------
     pd.DataFrame
@@ -252,11 +271,11 @@ def create_comparison_table(scenarios: List[SavedScenario]) -> pd.DataFrame:
     """
     if not scenarios:
         return pd.DataFrame()
-    
+
     manager = ScenarioManager()
     manager.scenarios = scenarios
     df = manager.get_comparison_data()
-    
+
     # Select key columns for display
     display_cols = [
         "Scenario Name",
@@ -265,28 +284,32 @@ def create_comparison_table(scenarios: List[SavedScenario]) -> pd.DataFrame:
         "Difference - Buy vs Rent ($)",
         "Breakeven - Buy vs Rent (Years)",
     ]
-    
+
     # Check if any scenario has Scenario C enabled
     has_scenario_c = any(s.results.scenario_c_enabled for s in scenarios)
     if has_scenario_c:
-        display_cols.extend([
-            "Final Net Value - Rent+Savings ($)",
-            "Difference - Buy vs Rent+Savings ($)",
-        ])
-    
+        display_cols.extend(
+            [
+                "Final Net Value - Rent+Savings ($)",
+                "Difference - Buy vs Rent+Savings ($)",
+            ]
+        )
+
     return df[display_cols]
 
 
-def create_comparison_chart(scenarios: List[SavedScenario], metric: str = "net_value") -> go.Figure:
+def create_comparison_chart(
+    scenarios: list[SavedScenario], metric: str = "net_value"
+) -> go.Figure:
     """Create a comparison chart for saved scenarios.
-    
+
     Parameters
     ----------
     scenarios : List[SavedScenario]
         List of scenarios to compare.
     metric : str
         Metric to compare: "net_value", "final_values", or "breakeven".
-        
+
     Returns
     -------
     go.Figure
@@ -296,7 +319,7 @@ def create_comparison_chart(scenarios: List[SavedScenario], metric: str = "net_v
         fig = go.Figure()
         fig.update_layout(title="No scenarios to compare")
         return fig
-    
+
     if metric == "final_values":
         return _create_final_values_chart(scenarios)
     elif metric == "breakeven":
@@ -305,52 +328,61 @@ def create_comparison_chart(scenarios: List[SavedScenario], metric: str = "net_v
         return _create_net_value_comparison_chart(scenarios)
 
 
-def _create_final_values_chart(scenarios: List[SavedScenario]) -> go.Figure:
+def _create_final_values_chart(scenarios: list[SavedScenario]) -> go.Figure:
     """Create a bar chart comparing final values."""
     fig = go.Figure()
-    
+
     names = [s.name for s in scenarios]
     buy_values = [s.results.final_net_buy for s in scenarios]
     rent_values = [s.results.final_net_rent for s in scenarios]
-    
-    fig.add_trace(go.Bar(
-        name="Buy (Scenario A)",
-        x=names,
-        y=buy_values,
-        marker_color="#2ecc71",
-        text=[f"${v:,.0f}" for v in buy_values],
-        textposition="outside",
-    ))
-    
-    fig.add_trace(go.Bar(
-        name="Rent + Invest (Scenario B)",
-        x=names,
-        y=rent_values,
-        marker_color="#3498db",
-        text=[f"${v:,.0f}" for v in rent_values],
-        textposition="outside",
-    ))
-    
+
+    fig.add_trace(
+        go.Bar(
+            name="Buy (Scenario A)",
+            x=names,
+            y=buy_values,
+            marker_color="#2ecc71",
+            text=[f"${v:,.0f}" for v in buy_values],
+            textposition="outside",
+        )
+    )
+
+    fig.add_trace(
+        go.Bar(
+            name="Rent + Invest (Scenario B)",
+            x=names,
+            y=rent_values,
+            marker_color="#3498db",
+            text=[f"${v:,.0f}" for v in rent_values],
+            textposition="outside",
+        )
+    )
+
     # Add Scenario C if any scenario has it enabled
     savings_values = []
     has_c = False
     for s in scenarios:
-        if s.results.scenario_c_enabled and s.results.final_net_rent_savings is not None:
+        if (
+            s.results.scenario_c_enabled
+            and s.results.final_net_rent_savings is not None
+        ):
             savings_values.append(s.results.final_net_rent_savings)
             has_c = True
         else:
             savings_values.append(0)
-    
+
     if has_c:
-        fig.add_trace(go.Bar(
-            name="Rent + Savings (Scenario C)",
-            x=names,
-            y=savings_values,
-            marker_color="#9b59b6",
-            text=[f"${v:,.0f}" if v > 0 else "" for v in savings_values],
-            textposition="outside",
-        ))
-    
+        fig.add_trace(
+            go.Bar(
+                name="Rent + Savings (Scenario C)",
+                x=names,
+                y=savings_values,
+                marker_color="#9b59b6",
+                text=[f"${v:,.0f}" if v > 0 else "" for v in savings_values],
+                textposition="outside",
+            )
+        )
+
     fig.update_layout(
         title="Final Net Values Comparison",
         xaxis_title="Scenario",
@@ -361,43 +393,53 @@ def _create_final_values_chart(scenarios: List[SavedScenario]) -> go.Figure:
         yaxis_tickformat="$,.0f",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
-    
+
     return fig
 
 
-def _create_breakeven_chart(scenarios: List[SavedScenario]) -> go.Figure:
+def _create_breakeven_chart(scenarios: list[SavedScenario]) -> go.Figure:
     """Create a chart showing breakeven points."""
     fig = go.Figure()
-    
+
     names = []
     breakeven_a_b = []
     breakeven_a_c = []
-    
+
     for s in scenarios:
         names.append(s.name)
-        breakeven_a_b.append(s.results.breakeven_year if s.results.breakeven_year else None)
-        breakeven_a_c.append(s.results.breakeven_year_vs_rent_savings if s.results.breakeven_year_vs_rent_savings else None)
-    
-    fig.add_trace(go.Bar(
-        name="Breakeven: Buy vs Rent (A vs B)",
-        x=names,
-        y=breakeven_a_b,
-        marker_color="#f39c12",
-        text=[f"{v:.1f}y" if v else "N/A" for v in breakeven_a_b],
-        textposition="outside",
-    ))
-    
+        breakeven_a_b.append(
+            s.results.breakeven_year if s.results.breakeven_year else None
+        )
+        breakeven_a_c.append(
+            s.results.breakeven_year_vs_rent_savings
+            if s.results.breakeven_year_vs_rent_savings
+            else None
+        )
+
+    fig.add_trace(
+        go.Bar(
+            name="Breakeven: Buy vs Rent (A vs B)",
+            x=names,
+            y=breakeven_a_b,
+            marker_color="#f39c12",
+            text=[f"{v:.1f}y" if v else "N/A" for v in breakeven_a_b],
+            textposition="outside",
+        )
+    )
+
     # Only add A vs C if any scenario has it
     if any(v is not None for v in breakeven_a_c):
-        fig.add_trace(go.Bar(
-            name="Breakeven: Buy vs Rent+Savings (A vs C)",
-            x=names,
-            y=[v if v else 0 for v in breakeven_a_c],
-            marker_color="#e74c3c",
-            text=[f"{v:.1f}y" if v else "N/A" for v in breakeven_a_c],
-            textposition="outside",
-        ))
-    
+        fig.add_trace(
+            go.Bar(
+                name="Breakeven: Buy vs Rent+Savings (A vs C)",
+                x=names,
+                y=[v if v else 0 for v in breakeven_a_c],
+                marker_color="#e74c3c",
+                text=[f"{v:.1f}y" if v else "N/A" for v in breakeven_a_c],
+                textposition="outside",
+            )
+        )
+
     fig.update_layout(
         title="Breakeven Points Comparison",
         xaxis_title="Scenario",
@@ -407,41 +449,45 @@ def _create_breakeven_chart(scenarios: List[SavedScenario]) -> go.Figure:
         height=500,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
-    
+
     return fig
 
 
-def _create_net_value_comparison_chart(scenarios: List[SavedScenario]) -> go.Figure:
+def _create_net_value_comparison_chart(scenarios: list[SavedScenario]) -> go.Figure:
     """Create a line chart comparing net value trajectories."""
     fig = go.Figure()
-    
+
     colors_buy = ["#27ae60", "#2ecc71", "#58d68d", "#82e0aa", "#abebc6"]
     colors_rent = ["#2980b9", "#3498db", "#5dade2", "#85c1e9", "#aed6f1"]
-    
+
     for i, s in enumerate(scenarios):
         color_buy = colors_buy[i % len(colors_buy)]
         color_rent = colors_rent[i % len(colors_rent)]
-        
+
         # Buy trajectory
-        fig.add_trace(go.Scatter(
-            x=s.results.data["Year"],
-            y=s.results.data["Net_Buy"],
-            name=f"{s.name} - Buy",
-            line=dict(color=color_buy, width=2),
-            mode="lines",
-            hovertemplate="%{fullData.name}: $%{y:,.0f}<extra></extra>",
-        ))
-        
+        fig.add_trace(
+            go.Scatter(
+                x=s.results.data["Year"],
+                y=s.results.data["Net_Buy"],
+                name=f"{s.name} - Buy",
+                line=dict(color=color_buy, width=2),
+                mode="lines",
+                hovertemplate="%{fullData.name}: $%{y:,.0f}<extra></extra>",
+            )
+        )
+
         # Rent trajectory
-        fig.add_trace(go.Scatter(
-            x=s.results.data["Year"],
-            y=s.results.data["Net_Rent"],
-            name=f"{s.name} - Rent",
-            line=dict(color=color_rent, width=2, dash="dash"),
-            mode="lines",
-            hovertemplate="%{fullData.name}: $%{y:,.0f}<extra></extra>",
-        ))
-    
+        fig.add_trace(
+            go.Scatter(
+                x=s.results.data["Year"],
+                y=s.results.data["Net_Rent"],
+                name=f"{s.name} - Rent",
+                line=dict(color=color_rent, width=2, dash="dash"),
+                mode="lines",
+                hovertemplate="%{fullData.name}: $%{y:,.0f}<extra></extra>",
+            )
+        )
+
     fig.update_layout(
         title="Net Value Trajectories Comparison",
         xaxis_title="Years",
@@ -452,18 +498,18 @@ def _create_net_value_comparison_chart(scenarios: List[SavedScenario]) -> go.Fig
         yaxis_tickformat="$,.0f",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
-    
+
     return fig
 
 
-def export_comparison_csv(scenarios: List[SavedScenario]) -> str:
+def export_comparison_csv(scenarios: list[SavedScenario]) -> str:
     """Export comparison data as CSV string.
-    
+
     Parameters
     ----------
     scenarios : List[SavedScenario]
         List of scenarios to export.
-        
+
     Returns
     -------
     str
@@ -471,7 +517,7 @@ def export_comparison_csv(scenarios: List[SavedScenario]) -> str:
     """
     if not scenarios:
         return ""
-    
+
     manager = ScenarioManager()
     manager.scenarios = scenarios
     df = manager.get_comparison_data()

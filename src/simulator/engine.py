@@ -50,7 +50,7 @@ def _is_close(a: float, b: float) -> bool:
     return abs(a - b) < _FLOAT_TOLERANCE
 
 
-def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
+def calculate_scenarios(config: SimulationConfig) -> SimulationResults:  # noqa: C901
     """Calculate time-series data for both buy and rent scenarios.
 
     This function performs vectorized calculations using NumPy for performance.
@@ -333,7 +333,9 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
     # Tax-adjusted final values
     total_tax_savings = float(cumulative_tax_savings[-1])
     final_net_buy_tax_adjusted = (
-        float(net_val_buy_tax_adjusted[-1]) - seller_closing_costs + capital_gains_tax_saved
+        float(net_val_buy_tax_adjusted[-1])
+        - seller_closing_costs
+        + capital_gains_tax_saved
     )
     tax_adjusted_difference = final_net_buy_tax_adjusted - final_net_rent
 
