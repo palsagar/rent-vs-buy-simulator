@@ -112,6 +112,13 @@ class SimulationConfig:
     equity_growth_annual: float
     monthly_rent: float
     rent_inflation_rate: float = 0.03
+    # Tax benefit parameters
+    tax_bracket: float = 24.0
+    enable_mortgage_deduction: bool = True
+    enable_capital_gains_exclusion: bool = True
+    capital_gains_exemption_limit: float = 250000.0
+    salt_cap: float = 10000.0
+    # Closing cost and ongoing expense parameters
     closing_cost_buyer_pct: float = 3.0
     closing_cost_seller_pct: float = 6.0
     property_tax_rate: float = 1.2
@@ -325,3 +332,14 @@ class SimulationResults:
     min_equity_achieved: float = 0.0
     final_ltv_ratio: float = 0.0
     max_monthly_payment: float = 0.0
+    # Closing cost and ongoing expense totals
+    total_closing_costs_buyer: float = 0.0
+    total_closing_costs_seller: float = 0.0
+    total_property_tax_paid: float = 0.0
+    total_insurance_paid: float = 0.0
+    total_maintenance_paid: float = 0.0
+    # Tax benefit totals
+    total_tax_savings: float = 0.0
+    capital_gains_tax_saved: float = 0.0
+    final_net_buy_tax_adjusted: float = 0.0
+    tax_adjusted_difference: float = 0.0

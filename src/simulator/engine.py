@@ -99,6 +99,9 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
 
     # Calculate initial values
     down_payment = config.property_price * (config.down_payment_pct / 100)
+    # Buyer closing costs are a one-time upfront outflow at purchase
+    buyer_closing_costs = config.property_price * (config.closing_cost_buyer_pct / 100)
+    initial_outflow = down_payment + buyer_closing_costs
     loan_amount = config.property_price - down_payment
     monthly_rate = (config.mortgage_rate_annual / 100) / 12
 
@@ -145,13 +148,75 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
     # Ensure balance doesn't go below zero (handle floating-point errors)
     mortgage_balance = np.maximum(mortgage_balance, 0)
 
-    # Cumulative outflows for buying
-    # At t=0, outflow is just the down payment
-    # After that, add cumulative mortgage payments
-    cum_mortgage_outflow = down_payment + (monthly_payment * month_arr)
+    # Monthly interest paid at each time step (for tax deduction calculations)
+    monthly_interest = np.zeros(n_months + 1)
+    if not _is_close_to_zero(loan_amount) and not _is_close_to_zero(monthly_rate):
+        for i in range(1, n_months + 1):
+            monthly_interest[i] = mortgage_balance[i - 1] * monthly_rate
+
+    # Ongoing homeownership costs: property tax, insurance, maintenance
+    # Property tax is a % of current home value each month
+    monthly_property_tax_rate = (config.property_tax_rate / 100) / 12
+    monthly_property_tax = home_value * monthly_property_tax_rate
+
+    # Insurance and maintenance inflate with cost_inflation_rate
+    monthly_cost_inflation_rate = config.cost_inflation_rate / 12
+    cost_inflation_factor = (1 + monthly_cost_inflation_rate) ** month_arr
+    monthly_insurance = (config.annual_home_insurance / 12) * cost_inflation_factor
+    monthly_maintenance = (
+        home_value * (config.annual_maintenance_pct / 100) / 12
+    ) * cost_inflation_factor
+
+    # Cumulate ongoing costs using the same convention as cum_rent_outflow:
+    # value at t = total paid through end of month t-1 (so t=0 is zero).
+    cum_property_tax = np.concatenate([[0], np.cumsum(monthly_property_tax[:-1])])
+    cum_insurance = np.concatenate([[0], np.cumsum(monthly_insurance[:-1])])
+    cum_maintenance = np.concatenate([[0], np.cumsum(monthly_maintenance[:-1])])
+
+    # Total buy outflow: initial (down payment + closing) + mortgage + ongoing costs
+    cum_mortgage_outflow = initial_outflow + (monthly_payment * month_arr)
+    total_cum_outflow_buy = (
+        cum_mortgage_outflow + cum_property_tax + cum_insurance + cum_maintenance
+    )
+
+    # Tax deduction savings (mortgage interest + property tax, subject to SALT cap)
+    tax_rate = config.tax_bracket / 100
+    cumulative_tax_savings = np.zeros(n_months + 1)
+    if config.enable_mortgage_deduction and not _is_close_to_zero(tax_rate):
+        for yr in range(1, config.duration_years + 1):
+            yr_end = yr * 12
+            yr_start = yr_end - 11
+            year_interest = float(np.sum(monthly_interest[yr_start : yr_end + 1]))
+            year_property_tax = float(
+                np.sum(monthly_property_tax[yr_start : yr_end + 1])
+            )
+            # SALT cap limits property tax deductibility
+            deductible_prop_tax = min(year_property_tax, config.salt_cap)
+            yr_savings = (year_interest + deductible_prop_tax) * tax_rate
+            # Accumulate savings from prior years
+            prior = cumulative_tax_savings[yr_start - 1] if yr_start > 1 else 0.0
+            # Fill the whole year with the running cumulative value
+            cumulative_tax_savings[yr_start : yr_end + 1] = prior + yr_savings
+
+    # Capital gains exclusion on sale (primary residence benefit)
+    capital_gains_tax_saved = 0.0
+    if config.enable_capital_gains_exclusion:
+        final_home_val = float(home_value[-1])
+        capital_gain = final_home_val - config.property_price
+        if capital_gain > config.capital_gains_exemption_limit:
+            taxable_gain = capital_gain - config.capital_gains_exemption_limit
+            cg_rate = 0.20 if config.tax_bracket >= 35 else 0.15
+            capital_gains_tax_saved = taxable_gain * cg_rate
+
+    # Seller closing costs reduce final net value at sale
+    seller_closing_costs = float(home_value[-1]) * (
+        config.closing_cost_seller_pct / 100
+    )
 
     # Net value for buying scenario (Asset - Cumulative Outflows)
-    net_val_buy = home_value - cum_mortgage_outflow
+    # Seller closing costs are only realised at the end, so only applied to final value
+    net_val_buy = home_value - total_cum_outflow_buy
+    net_val_buy_tax_adjusted = net_val_buy + cumulative_tax_savings
 
     # Calculate equity in the property (Home_Value - Mortgage_Balance)
     property_equity = home_value - mortgage_balance
@@ -231,22 +296,35 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
             "Home_Value": home_value,
             "Equity_Value": equity_value,
             "Mortgage_Balance": mortgage_balance,
-            "Outflow_Buy": cum_mortgage_outflow,
+            "Outflow_Buy": total_cum_outflow_buy,
             "Outflow_Rent": cum_rent_outflow,
             "Net_Buy": net_val_buy,
             "Net_Rent": net_val_rent,
             "Savings_Portfolio_Value": savings_portfolio,
             "Net_Rent_Savings": net_val_rent_savings,
+            "Property_Tax_Paid": cum_property_tax,
+            "Insurance_Paid": cum_insurance,
+            "Maintenance_Paid": cum_maintenance,
+            # Scalar closing costs broadcast to all rows for easy access
+            "Closing_Costs_Buyer": np.full(n_months + 1, buyer_closing_costs),
+            "Closing_Costs_Seller": np.full(n_months + 1, seller_closing_costs),
         }
     )
 
-    # Calculate summary metrics
-    final_net_buy = float(net_val_buy[-1])
+    # Summary metrics: seller closing costs applied at sale only
+    final_net_buy = float(net_val_buy[-1]) - seller_closing_costs
     final_net_rent = float(net_val_rent[-1])
     final_difference = final_net_buy - final_net_rent
 
     # Find breakeven point (where net values cross)
     breakeven_year = _find_breakeven(year_arr, net_val_buy, net_val_rent)
+
+    # Tax-adjusted final values
+    total_tax_savings = float(cumulative_tax_savings[-1])
+    final_net_buy_tax_adjusted = (
+        float(net_val_buy_tax_adjusted[-1]) - seller_closing_costs + capital_gains_tax_saved
+    )
+    tax_adjusted_difference = final_net_buy_tax_adjusted - final_net_rent
 
     # Calculate edge case metrics
     # Count months with negative equity (underwater mortgage)
@@ -265,9 +343,15 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
     )
 
     # Maximum monthly payment (highest monthly obligation)
-    # For buying: mortgage payment; for renting: max rent over time
     max_rent = float(np.max(rent_at_month))
-    max_monthly_payment = max(monthly_payment, max_rent)
+    avg_monthly_property_tax = float(np.mean(monthly_property_tax))
+    max_monthly_payment = max(monthly_payment + avg_monthly_property_tax, max_rent)
+
+    # Totals match the last DataFrame row (consistent with shift convention)
+    total_closing_costs_buyer = buyer_closing_costs
+    total_property_tax_paid = float(cum_property_tax[-1])
+    total_insurance_paid = float(cum_insurance[-1])
+    total_maintenance_paid = float(cum_maintenance[-1])
 
     return SimulationResults(
         data=df,
@@ -283,6 +367,15 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
         min_equity_achieved=min_equity_achieved,
         final_ltv_ratio=final_ltv_ratio,
         max_monthly_payment=max_monthly_payment,
+        total_closing_costs_buyer=total_closing_costs_buyer,
+        total_closing_costs_seller=seller_closing_costs,
+        total_property_tax_paid=total_property_tax_paid,
+        total_insurance_paid=total_insurance_paid,
+        total_maintenance_paid=total_maintenance_paid,
+        total_tax_savings=total_tax_savings,
+        capital_gains_tax_saved=capital_gains_tax_saved,
+        final_net_buy_tax_adjusted=final_net_buy_tax_adjusted,
+        tax_adjusted_difference=tax_adjusted_difference,
     )
 
 

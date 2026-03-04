@@ -703,3 +703,86 @@ def create_combined_dashboard(
     fig.update_xaxes(title_text="Years", row=3, col=1)
 
     return fig
+
+
+def create_cost_breakdown_chart(results: "SimulationResults") -> go.Figure:  # noqa: F821
+    """Create a bar chart breaking down the total cost of homeownership.
+
+    Shows the cumulative cost components for the buy scenario: mortgage
+    payments, closing costs, property taxes, insurance, and maintenance.
+
+    Parameters
+    ----------
+    results : SimulationResults
+        Simulation results containing cost totals.
+
+    Returns
+    -------
+    go.Figure
+        Plotly figure with stacked bar chart of cost components.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from simulator.visualization import create_cost_breakdown_chart
+        fig = create_cost_breakdown_chart(results)
+        fig.show()
+
+    """
+    categories = [
+        "Buyer Closing Costs",
+        "Seller Closing Costs",
+        "Property Tax",
+        "Insurance",
+        "Maintenance",
+        "Mortgage Payments",
+    ]
+
+    # Mortgage total = total outflow minus all other components
+    total_outflow = float(results.data["Outflow_Buy"].iloc[-1])
+    mortgage_total = (
+        total_outflow
+        - results.total_closing_costs_buyer
+        - results.total_property_tax_paid
+        - results.total_insurance_paid
+        - results.total_maintenance_paid
+    )
+
+    values = [
+        results.total_closing_costs_buyer,
+        results.total_closing_costs_seller,
+        results.total_property_tax_paid,
+        results.total_insurance_paid,
+        results.total_maintenance_paid,
+        mortgage_total,
+    ]
+
+    colors = [
+        "#e74c3c",
+        "#c0392b",
+        "#f39c12",
+        "#3498db",
+        "#2ecc71",
+        "#9b59b6",
+    ]
+
+    fig = go.Figure(
+        go.Bar(
+            x=categories,
+            y=values,
+            marker_color=colors,
+            text=[f"${v:,.0f}" for v in values],
+            textposition="outside",
+        )
+    )
+
+    fig.update_layout(
+        title="Total Cost of Homeownership — Component Breakdown",
+        yaxis_title="Total Cost ($)",
+        yaxis_tickformat="$,.0f",
+        template="plotly_white",
+        showlegend=False,
+    )
+
+    return fig
