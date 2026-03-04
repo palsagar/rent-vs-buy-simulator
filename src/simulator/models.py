@@ -27,6 +27,23 @@ class SimulationConfig:
         Monthly rent payment ($).
     rent_inflation_rate : float, optional
         Annual rent inflation rate (as percentage). Default is 0.03 (3%).
+    closing_cost_buyer_pct : float, optional
+        Buyer closing costs as percentage of property price.
+        Default is 3.0 (3%).
+    closing_cost_seller_pct : float, optional
+        Seller closing costs as percentage of sale price.
+        Default is 6.0 (6%).
+    property_tax_rate : float, optional
+        Annual property tax rate as percentage of property value.
+        Default is 1.2 (1.2%).
+    annual_home_insurance : float, optional
+        Annual home insurance cost ($). Default is 1200.
+    annual_maintenance_pct : float, optional
+        Annual maintenance cost as percentage of property value.
+        Default is 1.0 (1%).
+    cost_inflation_rate : float, optional
+        Annual inflation rate for ongoing costs (tax, insurance, maintenance).
+        Default is 0.03 (3%).
 
     Attributes
     ----------
@@ -46,13 +63,26 @@ class SimulationConfig:
         Monthly rent payment ($).
     rent_inflation_rate : float
         Annual rent inflation rate (as percentage).
+    closing_cost_buyer_pct : float
+        Buyer closing costs as percentage of property price.
+    closing_cost_seller_pct : float
+        Seller closing costs as percentage of sale price.
+    property_tax_rate : float
+        Annual property tax rate as percentage of property value.
+    annual_home_insurance : float
+        Annual home insurance cost ($).
+    annual_maintenance_pct : float
+        Annual maintenance cost as percentage of property value.
+    cost_inflation_rate : float
+        Annual inflation rate for ongoing costs.
 
     Raises
     ------
     ValueError
         If duration_years is not positive, property_price is not positive,
-        down_payment_pct is not between 0 and 100, mortgage_rate_annual is
-        negative, or monthly_rent is not positive.
+        down_payment_pct is not between 5 and 100, mortgage_rate_annual is
+        not positive, monthly_rent is not positive, or rent_inflation_rate
+        is not between 0 and 1 (0-100%).
 
     Examples
     --------
@@ -82,6 +112,12 @@ class SimulationConfig:
     equity_growth_annual: float
     monthly_rent: float
     rent_inflation_rate: float = 0.03
+    closing_cost_buyer_pct: float = 3.0
+    closing_cost_seller_pct: float = 6.0
+    property_tax_rate: float = 1.2
+    annual_home_insurance: float = 1200.0
+    annual_maintenance_pct: float = 1.0
+    cost_inflation_rate: float = 0.03
 
     def __post_init__(self):
         """Validate input parameters.
@@ -111,16 +147,50 @@ class SimulationConfig:
             # Validation passed successfully
 
         """
+        # Validate duration_years
         if self.duration_years <= 0:
-            raise ValueError("duration_years must be positive")
+            raise ValueError(
+                f"duration_years must be positive (got {self.duration_years}). "
+                "Please specify a duration greater than 0 years."
+            )
+
+        # Validate property_price
         if self.property_price <= 0:
-            raise ValueError("property_price must be positive")
-        if not (0 <= self.down_payment_pct <= 100):
-            raise ValueError("down_payment_pct must be between 0 and 100")
-        if self.mortgage_rate_annual < 0:
-            raise ValueError("mortgage_rate_annual cannot be negative")
+            raise ValueError(
+                f"property_price must be positive (got {self.property_price}). "
+                "Please specify a property price greater than $0."
+            )
+
+        # Validate down_payment_pct (must be between 5% and 100%)
+        if not (5 <= self.down_payment_pct <= 100):
+            raise ValueError(
+                f"down_payment_pct must be between 5 and 100 (got {self.down_payment_pct}). "
+                "Minimum down payment is typically 5% for most mortgages. "
+                "Use 100% for an all-cash purchase."
+            )
+
+        # Validate mortgage_rate_annual (must be > 0 to avoid numerical issues)
+        if self.mortgage_rate_annual <= 0:
+            raise ValueError(
+                f"mortgage_rate_annual must be positive (got {self.mortgage_rate_annual}). "
+                "Please specify a rate greater than 0%. "
+                "For very low rates, use a small positive value like 0.01%."
+            )
+
+        # Validate monthly_rent
         if self.monthly_rent <= 0:
-            raise ValueError("monthly_rent must be positive")
+            raise ValueError(
+                f"monthly_rent must be positive (got {self.monthly_rent}). "
+                "Please specify a monthly rent greater than $0."
+            )
+
+        # Validate rent_inflation_rate (must be between 0 and 1, i.e., 0-100%)
+        if not (0 <= self.rent_inflation_rate <= 1):
+            raise ValueError(
+                f"rent_inflation_rate must be between 0 and 1 (0-100%) (got {self.rent_inflation_rate}). "
+                "For 3% annual inflation, use 0.03. "
+                "For no inflation, use 0."
+            )
 
 
 @dataclass
@@ -158,6 +228,18 @@ class SimulationResults:
         Final net value for Scenario C (rent + invest savings).
     breakeven_year_vs_rent_savings : float | None
         Year when Buy crosses Rent+Savings (None if never crosses).
+    negative_equity_months : int, optional
+        Count of months with underwater mortgage (negative equity).
+        Default is 0.
+    min_equity_achieved : float, optional
+        Lowest equity amount achieved during simulation.
+        Default is 0.0.
+    final_ltv_ratio : float, optional
+        Loan-to-value ratio at the end of simulation.
+        Default is 0.0.
+    max_monthly_payment : float, optional
+        Highest monthly obligation (mortgage or rent payment).
+        Default is 0.0.
 
     Attributes
     ----------
@@ -179,6 +261,14 @@ class SimulationResults:
         Final net value for Scenario C (rent + invest savings).
     breakeven_year_vs_rent_savings : float | None
         Year when Buy crosses Rent+Savings (None if never crosses).
+    negative_equity_months : int
+        Count of months with underwater mortgage (negative equity).
+    min_equity_achieved : float
+        Lowest equity amount achieved during simulation.
+    final_ltv_ratio : float
+        Loan-to-value ratio at the end of simulation.
+    max_monthly_payment : float
+        Highest monthly obligation (mortgage or rent payment).
 
     Examples
     --------
@@ -212,7 +302,11 @@ class SimulationResults:
             monthly_mortgage_payment=2500,
             scenario_c_enabled=True,
             final_net_rent_savings=62500,
-            breakeven_year_vs_rent_savings=None
+            breakeven_year_vs_rent_savings=None,
+            negative_equity_months=0,
+            min_equity_achieved=400000,
+            final_ltv_ratio=0.72,
+            max_monthly_payment=2500
         )
 
     """
@@ -226,3 +320,8 @@ class SimulationResults:
     scenario_c_enabled: bool
     final_net_rent_savings: float | None
     breakeven_year_vs_rent_savings: float | None
+    # Edge case metrics
+    negative_equity_months: int = 0
+    min_equity_achieved: float = 0.0
+    final_ltv_ratio: float = 0.0
+    max_monthly_payment: float = 0.0

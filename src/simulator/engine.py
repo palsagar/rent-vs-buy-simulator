@@ -10,6 +10,45 @@ import pandas as pd
 
 from .models import SimulationConfig, SimulationResults
 
+# Floating-point tolerance for comparisons
+_FLOAT_TOLERANCE = 1e-9
+
+
+def _is_close_to_zero(value: float) -> bool:
+    """Check if a value is effectively zero within tolerance.
+
+    Parameters
+    ----------
+    value : float
+        The value to check.
+
+    Returns
+    -------
+    bool
+        True if value is close to zero, False otherwise.
+
+    """
+    return abs(value) < _FLOAT_TOLERANCE
+
+
+def _is_close(a: float, b: float) -> bool:
+    """Check if two values are close within tolerance.
+
+    Parameters
+    ----------
+    a : float
+        First value.
+    b : float
+        Second value.
+
+    Returns
+    -------
+    bool
+        True if values are close, False otherwise.
+
+    """
+    return abs(a - b) < _FLOAT_TOLERANCE
+
 
 def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
     """Calculate time-series data for both buy and rent scenarios.
@@ -65,11 +104,16 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
 
     # Calculate monthly mortgage payment using numpy-financial
     # Note: npf.pmt returns negative value (outflow), so we negate it
-    if monthly_rate > 0 and loan_amount > 0:
-        monthly_payment = -npf.pmt(monthly_rate, n_months, loan_amount)
+    # Handle edge case: 100% down payment (no loan)
+    if _is_close_to_zero(loan_amount):
+        # No loan = no monthly payment
+        monthly_payment = 0.0
+    elif _is_close_to_zero(monthly_rate):
+        # 0% interest rate edge case: simple principal division
+        monthly_payment = loan_amount / n_months if n_months > 0 else 0.0
     else:
-        # If no interest or no loan, payment is just principal divided by months
-        monthly_payment = loan_amount / n_months if n_months > 0 else 0
+        # Normal case: calculate amortized payment
+        monthly_payment = -npf.pmt(monthly_rate, n_months, loan_amount)
 
     # Property value over time (compound monthly appreciation)
     # Formula: P * (1 + r/12)^month
@@ -79,18 +123,27 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
     # Calculate remaining mortgage balance at each time step
     # This is the present value of remaining payments
     mortgage_balance = np.zeros(n_months + 1)
-    for i in range(n_months + 1):
-        remaining_months = n_months - i
-        if remaining_months > 0 and monthly_rate > 0:
-            # Calculate remaining balance using present value formula
-            mortgage_balance[i] = -npf.pv(
-                monthly_rate, remaining_months, monthly_payment
-            )
-        elif remaining_months > 0 and monthly_rate == 0:
-            # With 0% interest, balance decreases linearly
-            mortgage_balance[i] = loan_amount - (monthly_payment * i)
-        else:
-            mortgage_balance[i] = 0
+
+    # Handle edge case: 100% down payment (no mortgage)
+    if _is_close_to_zero(loan_amount):
+        # No mortgage, balance is always zero
+        mortgage_balance = np.zeros(n_months + 1)
+    else:
+        for i in range(n_months + 1):
+            remaining_months = n_months - i
+            if remaining_months > 0 and not _is_close_to_zero(monthly_rate):
+                # Calculate remaining balance using present value formula
+                mortgage_balance[i] = -npf.pv(
+                    monthly_rate, remaining_months, monthly_payment
+                )
+            elif remaining_months > 0 and _is_close_to_zero(monthly_rate):
+                # With 0% interest, balance decreases linearly
+                mortgage_balance[i] = loan_amount - (monthly_payment * i)
+            else:
+                mortgage_balance[i] = 0
+
+    # Ensure balance doesn't go below zero (handle floating-point errors)
+    mortgage_balance = np.maximum(mortgage_balance, 0)
 
     # Cumulative outflows for buying
     # At t=0, outflow is just the down payment
@@ -99,6 +152,9 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
 
     # Net value for buying scenario (Asset - Cumulative Outflows)
     net_val_buy = home_value - cum_mortgage_outflow
+
+    # Calculate equity in the property (Home_Value - Mortgage_Balance)
+    property_equity = home_value - mortgage_balance
 
     # ========== SCENARIO B: RENT & INVEST ==========
 
@@ -114,7 +170,7 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
 
     # Option 2: Rent with inflation (more realistic)
     # We need to calculate cumulative sum of inflating rent
-    monthly_rent_inflation = (config.rent_inflation_rate / 100) / 12
+    monthly_rent_inflation = (config.rent_inflation_rate * 100) / 12
 
     # Calculate rent at each month
     rent_at_month = config.monthly_rent * (1 + monthly_rent_inflation) ** month_arr
@@ -130,7 +186,8 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
 
     # ========== SCENARIO C: RENT & INVEST MONTHLY SAVINGS ==========
     # Only applicable when initial mortgage payment > initial rent
-    scenario_c_enabled = monthly_payment > config.monthly_rent
+    # Handle edge case: rent equals mortgage exactly
+    scenario_c_enabled = monthly_payment > config.monthly_rent + _FLOAT_TOLERANCE
 
     # Calculate monthly savings (mortgage payment - rent), capped at 0 when
     # rent exceeds mortgage. The savings are invested each month at the same
@@ -191,16 +248,41 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
     # Find breakeven point (where net values cross)
     breakeven_year = _find_breakeven(year_arr, net_val_buy, net_val_rent)
 
+    # Calculate edge case metrics
+    # Count months with negative equity (underwater mortgage)
+    negative_equity_months = int(np.sum(property_equity < 0))
+
+    # Minimum equity achieved during simulation
+    min_equity_achieved = float(np.min(property_equity))
+
+    # Final loan-to-value ratio
+    final_home_value = float(home_value[-1])
+    final_mortgage_balance = float(mortgage_balance[-1])
+    final_ltv_ratio = (
+        final_mortgage_balance / final_home_value
+        if final_home_value > 0 and not _is_close_to_zero(final_home_value)
+        else 0.0
+    )
+
+    # Maximum monthly payment (highest monthly obligation)
+    # For buying: mortgage payment; for renting: max rent over time
+    max_rent = float(np.max(rent_at_month))
+    max_monthly_payment = max(monthly_payment, max_rent)
+
     return SimulationResults(
         data=df,
         final_net_buy=final_net_buy,
         final_net_rent=final_net_rent,
         final_difference=final_difference,
         breakeven_year=breakeven_year,
-        monthly_mortgage_payment=monthly_payment,  # pyright: ignore[reportArgumentType]
-        scenario_c_enabled=scenario_c_enabled,  # pyright: ignore[reportArgumentType]
+        monthly_mortgage_payment=monthly_payment,
+        scenario_c_enabled=scenario_c_enabled,
         final_net_rent_savings=final_net_rent_savings,
         breakeven_year_vs_rent_savings=breakeven_year_vs_rent_savings,
+        negative_equity_months=negative_equity_months,
+        min_equity_achieved=min_equity_achieved,
+        final_ltv_ratio=final_ltv_ratio,
+        max_monthly_payment=max_monthly_payment,
     )
 
 
@@ -245,25 +327,25 @@ def _find_breakeven(
     diff = net_buy - net_rent
 
     # Find where diff crosses zero (changes sign)
-    # Skip the first point if it's zero, to handle initial equality
-    start_idx = 1 if diff[0] == 0 else 0
+    # Skip the first point if it's effectively zero, to handle initial equality
+    start_idx = 1 if _is_close_to_zero(diff[0]) else 0
 
     # Look for sign changes in the difference
     for i in range(start_idx, len(diff) - 1):
-        # Check if diff crosses zero between i and i+1
-        if diff[i] * diff[i + 1] < 0:
+        # Check if diff crosses zero between i and i+1 using tolerance
+        if diff[i] * diff[i + 1] < -_FLOAT_TOLERANCE:
             # Found a crossover: interpolate to find exact zero crossing
             x1, x2 = years[i], years[i + 1]
             y1, y2 = diff[i], diff[i + 1]
 
-            if y2 != y1:
+            if not _is_close(y1, y2):
                 breakeven = x1 - y1 * (x2 - x1) / (y2 - y1)
                 return float(breakeven)
             else:
                 # Both are zero (shouldn't happen with < 0 check, but handle it)
                 return float(x1)
-        elif diff[i] == 0 and i > 0:
-            # Exact match at this point
+        elif _is_close_to_zero(diff[i]) and i > 0:
+            # Exact match at this point (within tolerance)
             return float(years[i])
 
     return None

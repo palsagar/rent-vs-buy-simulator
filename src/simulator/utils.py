@@ -63,7 +63,9 @@ def generate_pdf_report(  # noqa: C901
             mortgage_rate_annual=4.5,
             property_appreciation_annual=3,
             equity_growth_annual=7,
-            monthly_rent=2000
+            monthly_rent=2000,
+            tax_bracket=24,
+            enable_mortgage_deduction=True,
         )
         results = calculate_scenarios(config)
         fig_assets = create_asset_growth_chart(results.data)
@@ -107,6 +109,7 @@ def generate_pdf_report(  # noqa: C901
         ("Mortgage Rate", f"{config.mortgage_rate_annual}% annual"),
         ("Monthly Mortgage Payment", f"${results.monthly_mortgage_payment:,.0f}"),
         ("Property Appreciation", f"{config.property_appreciation_annual}% annual"),
+        ("Property Tax Rate", f"{config.property_tax_rate}% annual"),
         ("Monthly Rent", f"${config.monthly_rent:,.0f}"),
         ("Equity Growth (CAGR)", f"{config.equity_growth_annual}% annual"),
         ("Rent Inflation", f"{config.rent_inflation_rate * 100}% annual"),
@@ -129,6 +132,36 @@ def generate_pdf_report(  # noqa: C901
             pdf.ln()
 
     pdf.ln(3)
+
+    # Tax Parameters Section (if applicable)
+    if config.enable_mortgage_deduction or config.enable_capital_gains_exclusion:
+        pdf.set_font("Arial", "B", 11)
+        pdf.cell(0, 6, "Tax Parameters", ln=True)
+        pdf.set_font("Arial", "", 9)
+
+        tax_params = [
+            ("Tax Bracket", f"{config.tax_bracket}%"),
+            ("Mortgage Deduction", "Enabled" if config.enable_mortgage_deduction else "Disabled"),
+            ("Capital Gains Exclusion", "Enabled" if config.enable_capital_gains_exclusion else "Disabled"),
+            ("Exemption Limit", f"${config.capital_gains_exemption_limit:,.0f}"),
+            ("SALT Cap", f"${config.salt_cap:,.0f}"),
+        ]
+
+        for i in range(0, len(tax_params), 2):
+            pdf.set_font("Arial", "B", 9)
+            pdf.cell(45, line_height, tax_params[i][0] + ":", 0, 0)
+            pdf.set_font("Arial", "", 9)
+            pdf.cell(50, line_height, tax_params[i][1], 0, 0)
+
+            if i + 1 < len(tax_params):
+                pdf.set_font("Arial", "B", 9)
+                pdf.cell(45, line_height, tax_params[i + 1][0] + ":", 0, 0)
+                pdf.set_font("Arial", "", 9)
+                pdf.cell(50, line_height, tax_params[i + 1][1], 0, 1)
+            else:
+                pdf.ln()
+
+        pdf.ln(3)
 
     # Results Summary Section
     pdf.set_font("Arial", "B", 11)
@@ -174,6 +207,39 @@ def generate_pdf_report(  # noqa: C901
         pdf.set_font("Arial", "", 9)
         pdf.cell(0, line_height, f"{winner_c} by ${abs(diff_a_vs_c):,.0f}", ln=True)
 
+    # Tax Benefits Section (if applicable)
+    if results.total_tax_savings > 0:
+        pdf.ln(2)
+        pdf.set_font("Arial", "B", 11)
+        pdf.cell(0, 6, "Tax Benefits", ln=True)
+        pdf.set_font("Arial", "", 9)
+
+        pdf.set_font("Arial", "B", 9)
+        pdf.cell(60, line_height, "Total Tax Savings:", 0, 0)
+        pdf.set_font("Arial", "", 9)
+        pdf.cell(0, line_height, f"${results.total_tax_savings:,.0f}", ln=True)
+
+        pdf.set_font("Arial", "B", 9)
+        pdf.cell(60, line_height, "Capital Gains Tax Saved:", 0, 0)
+        pdf.set_font("Arial", "", 9)
+        pdf.cell(0, line_height, f"${results.capital_gains_tax_saved:,.0f}", ln=True)
+
+        pdf.set_font("Arial", "B", 9)
+        pdf.cell(60, line_height, "Tax-Adjusted Net Value (Buy):", 0, 0)
+        pdf.set_font("Arial", "", 9)
+        pdf.cell(0, line_height, f"${results.final_net_buy_tax_adjusted:,.0f}", ln=True)
+
+        pdf.set_font("Arial", "B", 9)
+        pdf.cell(60, line_height, "Tax-Adjusted Winner:", 0, 0)
+        pdf.set_font("Arial", "", 9)
+        winner_tax = "Buy (A)" if results.tax_adjusted_difference > 0 else "Rent + Invest (B)"
+        pdf.cell(
+            0,
+            line_height,
+            f"{winner_tax} by ${abs(results.tax_adjusted_difference):,.0f}",
+            ln=True,
+        )
+
     pdf.ln(2)
 
     # Breakeven points
@@ -208,8 +274,11 @@ def generate_pdf_report(  # noqa: C901
         "Fixed mortgage payments (standard amortization)",
         "Scenario B: Down payment invested at t=0",
         "Scenario C: Down payment as cash (0%), savings invested",
-        "No transaction costs, property taxes, or maintenance",
-        "No taxes on investment gains",
+        "Property tax included in buy scenario (rate configurable)",
+        "Mortgage interest and property tax deductions (subject to SALT cap)",
+        "Capital gains exclusion on primary residence sale",
+        "No transaction costs or maintenance costs",
+        "No taxes on investment gains for renting scenario",
     ]
 
     for assumption in assumptions:

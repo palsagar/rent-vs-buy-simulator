@@ -62,7 +62,7 @@ class TestSimulationConfig:
     def test_invalid_down_payment_pct_raises_error(self):
         """Test that invalid down payment percentage raises ValueError."""
         with pytest.raises(
-            ValueError, match="down_payment_pct must be between 0 and 100"
+            ValueError, match="down_payment_pct must be between 5 and 100"
         ):
             SimulationConfig(
                 duration_years=30,
@@ -123,13 +123,13 @@ class TestCalculateScenarios:
         final_equity = results.data["Equity_Value"].iloc[-1]
         assert final_equity > initial_equity
 
-    def test_zero_interest_rate(self):
-        """Test calculation with 0% mortgage interest rate."""
+    def test_very_low_interest_rate(self):
+        """Test calculation with very low (but positive) mortgage interest rate."""
         config = SimulationConfig(
             duration_years=30,
             property_price=500000,
             down_payment_pct=20,
-            mortgage_rate_annual=0.0,  # Zero interest
+            mortgage_rate_annual=0.01,  # Very low interest (0.01%)
             property_appreciation_annual=3.0,
             equity_growth_annual=7.0,
             monthly_rent=2000,
@@ -141,7 +141,7 @@ class TestCalculateScenarios:
         assert results.data is not None
         assert len(results.data) == 30 * 12 + 1
 
-        # With 0% interest, mortgage balance should decrease linearly
+        # With very low interest, mortgage balance should still decrease
         initial_balance = results.data["Mortgage_Balance"].iloc[0]
         final_balance = results.data["Mortgage_Balance"].iloc[-1]
         assert initial_balance > final_balance
@@ -488,3 +488,180 @@ class TestIntegration:
         # With very high property appreciation, buying should win
         assert results.final_net_buy > results.final_net_rent
         assert results.final_difference > 0
+
+
+class TestEdgeCases:
+    """Edge case tests for extreme scenarios."""
+
+    def test_negative_equity_growth_property_value_decreases(self):
+        """Test negative equity growth (property value decreases)."""
+        config = SimulationConfig(
+            duration_years=10,
+            property_price=300000,  # Lower property price
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=-2.0,  # Negative appreciation (depreciation)
+            equity_growth_annual=7.0,
+            monthly_rent=2500,  # Higher rent so mortgage < rent (disables Scenario C)
+            rent_inflation_rate=0.02,
+        )
+
+        results = calculate_scenarios(config)
+
+        # Property value should decrease over time
+        initial_home = results.data["Home_Value"].iloc[0]
+        final_home = results.data["Home_Value"].iloc[-1]
+        assert final_home < initial_home
+
+        # Scenario C should be disabled since rent > mortgage
+        assert not results.scenario_c_enabled
+
+        # With property depreciation and high rent, verify calculations work
+        assert results.final_net_buy is not None
+        assert results.final_net_rent is not None
+
+    def test_maximum_duration_boundary_40_years(self):
+        """Test maximum duration boundary (40 years)."""
+        config = SimulationConfig(
+            duration_years=40,  # Maximum allowed duration
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+        )
+
+        results = calculate_scenarios(config)
+
+        # Check correct number of data points (40 years * 12 months + initial)
+        assert len(results.data) == 40 * 12 + 1
+
+        # Check that final year is 40
+        assert results.data["Year"].iloc[-1] == 40.0
+
+        # All basic sanity checks should pass
+        assert results.final_net_buy is not None
+        assert results.final_net_rent is not None
+        assert results.monthly_mortgage_payment > 0
+
+    def test_very_small_property_value_50k_minimum(self):
+        """Test very small property value ($50k minimum)."""
+        config = SimulationConfig(
+            duration_years=15,
+            property_price=50000,  # Very small property value
+            down_payment_pct=20,
+            mortgage_rate_annual=5.0,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=400,  # Proportional rent for small property
+        )
+
+        results = calculate_scenarios(config)
+
+        # Basic sanity checks
+        assert results.data is not None
+        assert len(results.data) == 15 * 12 + 1
+
+        # Down payment should be $10k (20% of $50k)
+        initial_outflow_buy = results.data["Outflow_Buy"].iloc[0]
+        assert abs(initial_outflow_buy - 10000) < 1
+
+        # Property value should appreciate correctly
+        initial_home = results.data["Home_Value"].iloc[0]
+        final_home = results.data["Home_Value"].iloc[-1]
+        assert final_home > initial_home
+
+    def test_high_rent_inflation_above_5_percent(self):
+        """Test high rent inflation (>5% annually)."""
+        config = SimulationConfig(
+            duration_years=30,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+            rent_inflation_rate=0.06,  # 6% annual rent inflation
+        )
+
+        results = calculate_scenarios(config)
+
+        # Rent outflows should increase significantly over time
+        early_rent_outflow = results.data["Outflow_Rent"].iloc[12]  # After 1 year
+        late_rent_outflow = results.data["Outflow_Rent"].iloc[-1]  # Final
+
+        # Total rent paid should be much higher than without inflation
+        assert late_rent_outflow > early_rent_outflow * 10  # Significant increase
+
+        # Verify that rent outflows are positive and monotonically increasing
+        rent_outflows = results.data["Outflow_Rent"].values
+        assert all(rent_outflows[i] <= rent_outflows[i + 1] for i in range(len(rent_outflows) - 1))
+
+        # Both scenarios should have valid results
+        assert results.final_net_rent is not None
+        assert results.final_net_buy is not None
+
+    def test_minimum_down_payment_scenario(self):
+        """Test minimum down payment scenario (5% minimum)."""
+        config = SimulationConfig(
+            duration_years=30,
+            property_price=500000,
+            down_payment_pct=5,  # Minimum down payment (5%)
+            mortgage_rate_annual=5.0,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+        )
+
+        results = calculate_scenarios(config)
+
+        # Minimum down payment means initial outflow for buying should be $25k
+        initial_outflow_buy = results.data["Outflow_Buy"].iloc[0]
+        assert abs(initial_outflow_buy - 25000) < 1000  # $25k plus closing costs
+
+        # Mortgage balance should start at 95% of property price
+        initial_mortgage = results.data["Mortgage_Balance"].iloc[0]
+        assert abs(initial_mortgage - 475000) < 1
+
+        # Monthly mortgage payment should be higher (95% financed)
+        assert results.monthly_mortgage_payment > 2500
+
+        # With minimum down payment, rent scenario starts with small investment
+        initial_equity = results.data["Equity_Value"].iloc[0]
+        assert abs(initial_equity - 25000) < 1  # 5% of $500k
+
+    def test_rent_equals_mortgage_payment_exactly(self):
+        """Test when rent equals mortgage payment exactly."""
+        # Calculate monthly mortgage for $400k loan (20% down on $500k) at 4.5% for 30 years
+        # Using standard amortization: P = L[c(1+c)^n]/[(1+c)^n-1]
+        # L = 400000, c = 0.045/12, n = 360
+        # P ≈ $2026.74
+        config = SimulationConfig(
+            duration_years=30,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2026.74,  # Approximately equal to mortgage payment
+        )
+
+        results = calculate_scenarios(config)
+
+        # Monthly mortgage payment should be close to rent
+        # (allowing for small calculation differences)
+        mortgage_payment = results.monthly_mortgage_payment
+        assert abs(mortgage_payment - 2026.74) < 50
+
+        # Scenario C should NOT be enabled when mortgage ≈ rent
+        # (Scenario C requires mortgage > rent)
+        if mortgage_payment <= config.monthly_rent:
+            assert results.scenario_c_enabled is False
+
+        # Both scenarios should have valid results
+        assert results.final_net_buy is not None
+        assert results.final_net_rent is not None
+        assert results.final_difference is not None
+
+

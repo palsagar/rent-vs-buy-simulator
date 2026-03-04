@@ -11,6 +11,7 @@ dependencies = [
     "plotly>=5.18.0",
     "streamlit>=1.29.0",
     "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
     "fpdf2>=2.7.0",
     "kaleido>=0.2.0",
 ]
@@ -45,3 +46,33 @@ unfixable = []
 quote-style = "double"
 # Indent style
 indent-style = "space"
+
+# Coverage configuration
+# --------------------------------------------------------
+[tool.coverage.run]
+source = ["src/simulator"]
+branch = true
+omit = [
+    "*/scenario_manager.py",
+    "*/utils.py",
+    "*/visualization.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
+show_missing = true
+skip_covered = false
+fail_under = 80
+
+[tool.coverage.html]
+directory = "coverage_html"
+
+[tool.coverage.xml]
+output = "coverage.xml"
