@@ -159,26 +159,29 @@ def create_outflow_chart(df: pd.DataFrame) -> go.Figure:
     """
     fig = go.Figure()
 
-    # Cumulative Mortgage Payments (red line)
+    # Cumulative Mortgage Payments (red line with transparent fill)
     fig.add_trace(
         go.Scatter(
             x=df["Year"],
             y=df["Outflow_Buy"],
             name="Total Cost: Buy (Down Payment + Mortgage)",
             line=dict(color="#e74c3c", width=3),
-            fill="tonexty",
+            fill="tozeroy",
+            fillcolor="rgba(231, 76, 60, 0.2)",
             mode="lines",
             hovertemplate="$%{y:,.0f}<extra></extra>",
         )
     )
 
-    # Cumulative Rent Payments (orange line)
+    # Cumulative Rent Payments (orange line with transparent fill)
     fig.add_trace(
         go.Scatter(
             x=df["Year"],
             y=df["Outflow_Rent"],
             name="Total Cost: Rent",
             line=dict(color="#f39c12", width=3),
+            fill="tozeroy",
+            fillcolor="rgba(243, 156, 18, 0.2)",
             mode="lines",
             hovertemplate="$%{y:,.0f}<extra></extra>",
         )
