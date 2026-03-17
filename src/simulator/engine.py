@@ -224,9 +224,6 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:  # noqa:
     net_val_buy = home_value - total_cum_outflow_buy
     net_val_buy_tax_adjusted = net_val_buy + cumulative_tax_savings
 
-    # Calculate equity in the property (Home_Value - Mortgage_Balance)
-    property_equity = home_value - mortgage_balance
-
     # ========== SCENARIO B: RENT & INVEST ==========
 
     # Investment portfolio value over time
@@ -339,27 +336,6 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:  # noqa:
     )
     tax_adjusted_difference = final_net_buy_tax_adjusted - final_net_rent
 
-    # Calculate edge case metrics
-    # Count months with negative equity (underwater mortgage)
-    negative_equity_months = int(np.sum(property_equity < 0))
-
-    # Minimum equity achieved during simulation
-    min_equity_achieved = float(np.min(property_equity))
-
-    # Final loan-to-value ratio
-    final_home_value = float(home_value[-1])
-    final_mortgage_balance = float(mortgage_balance[-1])
-    final_ltv_ratio = (
-        final_mortgage_balance / final_home_value
-        if final_home_value > 0 and not _is_close_to_zero(final_home_value)
-        else 0.0
-    )
-
-    # Maximum monthly payment (highest monthly obligation)
-    max_rent = float(np.max(rent_at_month))
-    avg_monthly_property_tax = float(np.mean(monthly_property_tax))
-    max_monthly_payment = max(monthly_payment + avg_monthly_property_tax, max_rent)
-
     # Totals match the last DataFrame row (consistent with shift convention)
     total_closing_costs_buyer = buyer_closing_costs
     total_property_tax_paid = float(cum_property_tax[-1])
@@ -376,10 +352,6 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:  # noqa:
         scenario_c_enabled=scenario_c_enabled,
         final_net_rent_savings=final_net_rent_savings,
         breakeven_year_vs_rent_savings=breakeven_year_vs_rent_savings,
-        negative_equity_months=negative_equity_months,
-        min_equity_achieved=min_equity_achieved,
-        final_ltv_ratio=final_ltv_ratio,
-        max_monthly_payment=max_monthly_payment,
         total_closing_costs_buyer=total_closing_costs_buyer,
         total_closing_costs_seller=seller_closing_costs,
         total_property_tax_paid=total_property_tax_paid,

@@ -252,19 +252,6 @@ class SimulationResults:
         Final net value for Scenario C (rent + invest savings).
     breakeven_year_vs_rent_savings : float | None
         Year when Buy crosses Rent+Savings (None if never crosses).
-    negative_equity_months : int, optional
-        Count of months with underwater mortgage (negative equity).
-        Default is 0.
-    min_equity_achieved : float, optional
-        Lowest equity amount achieved during simulation.
-        Default is 0.0.
-    final_ltv_ratio : float, optional
-        Loan-to-value ratio at the end of simulation.
-        Default is 0.0.
-    max_monthly_payment : float, optional
-        Highest monthly obligation (mortgage or rent payment).
-        Default is 0.0.
-
     Attributes
     ----------
     data : pd.DataFrame
@@ -285,14 +272,6 @@ class SimulationResults:
         Final net value for Scenario C (rent + invest savings).
     breakeven_year_vs_rent_savings : float | None
         Year when Buy crosses Rent+Savings (None if never crosses).
-    negative_equity_months : int
-        Count of months with underwater mortgage (negative equity).
-    min_equity_achieved : float
-        Lowest equity amount achieved during simulation.
-    final_ltv_ratio : float
-        Loan-to-value ratio at the end of simulation.
-    max_monthly_payment : float
-        Highest monthly obligation (mortgage or rent payment).
 
     Examples
     --------
@@ -327,10 +306,6 @@ class SimulationResults:
             scenario_c_enabled=True,
             final_net_rent_savings=62500,
             breakeven_year_vs_rent_savings=None,
-            negative_equity_months=0,
-            min_equity_achieved=400000,
-            final_ltv_ratio=0.72,
-            max_monthly_payment=2500
         )
 
     """
@@ -344,11 +319,6 @@ class SimulationResults:
     scenario_c_enabled: bool
     final_net_rent_savings: float | None
     breakeven_year_vs_rent_savings: float | None
-    # Edge case metrics
-    negative_equity_months: int = 0
-    min_equity_achieved: float = 0.0
-    final_ltv_ratio: float = 0.0
-    max_monthly_payment: float = 0.0
     # Closing cost and ongoing expense totals
     total_closing_costs_buyer: float = 0.0
     total_closing_costs_seller: float = 0.0
