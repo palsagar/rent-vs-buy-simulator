@@ -38,6 +38,20 @@ uv venv --seed && uv pip install -e .
 - **`src/simulator/scenario_manager.py`** — Save/load/compare up to 5 scenarios.
 - **`src/simulator/utils.py`** — PDF report generation via fpdf2.
 
+## Git Workflow
+
+- **Base branch:** `main` — all PRs target `main`
+- **Branch naming:** `feat/`, `fix/`, `chore/` prefixes
+- **Create a PR:** use `/pr-description` skill first to generate the title/body, then:
+  ```bash
+  git push -u origin <branch>
+  gh pr create --base main --title "..." --body "$(cat <<'EOF'
+  ...
+  EOF
+  )"
+  ```
+- **Check if already pushed:** `git push -u origin <branch>` is idempotent — safe to run even if the branch is already on remote
+
 ## Code Conventions
 
 - **Type annotations** on all function/method signatures (use `typing` and `collections.abc`)
