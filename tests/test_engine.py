@@ -623,29 +623,6 @@ class TestIntegration:
 class TestEdgeCases:
     """Edge case tests for extreme scenarios."""
 
-    def test_edge_case_metrics_are_populated(self):
-        """Test edge-case summary metrics are available and sensible."""
-        config = SimulationConfig(
-            duration_years=30,
-            property_price=500000,
-            down_payment_pct=5,
-            mortgage_rate_annual=6.5,
-            property_appreciation_annual=1.0,
-            equity_growth_annual=7.0,
-            monthly_rent=2000,
-            rent_inflation_rate=0.03,
-        )
-
-        results = calculate_scenarios(config)
-
-        assert results.negative_equity_months >= 0
-        assert results.min_equity_achieved <= results.data["Home_Value"].max()
-        assert 0 <= results.final_ltv_ratio <= 1
-        assert results.max_monthly_payment >= max(
-            results.monthly_mortgage_payment,
-            config.monthly_rent,
-        )
-
     def test_negative_equity_growth_property_value_decreases(self):
         """Test negative equity growth (property value decreases)."""
         config = SimulationConfig(

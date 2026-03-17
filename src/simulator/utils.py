@@ -133,42 +133,6 @@ def generate_pdf_report(  # noqa: C901
 
     pdf.ln(3)
 
-    # Tax Parameters Section (if applicable)
-    if config.enable_mortgage_deduction or config.enable_capital_gains_exclusion:
-        pdf.set_font("Arial", "B", 11)
-        pdf.cell(0, 6, "Tax Parameters", ln=True)
-        pdf.set_font("Arial", "", 9)
-
-        tax_params = [
-            ("Tax Bracket", f"{config.tax_bracket}%"),
-            (
-                "Mortgage Deduction",
-                "Enabled" if config.enable_mortgage_deduction else "Disabled",
-            ),
-            (
-                "Capital Gains Exclusion",
-                "Enabled" if config.enable_capital_gains_exclusion else "Disabled",
-            ),
-            ("Exemption Limit", f"${config.capital_gains_exemption_limit:,.0f}"),
-            ("SALT Cap", f"${config.salt_cap:,.0f}"),
-        ]
-
-        for i in range(0, len(tax_params), 2):
-            pdf.set_font("Arial", "B", 9)
-            pdf.cell(45, line_height, tax_params[i][0] + ":", 0, 0)
-            pdf.set_font("Arial", "", 9)
-            pdf.cell(50, line_height, tax_params[i][1], 0, 0)
-
-            if i + 1 < len(tax_params):
-                pdf.set_font("Arial", "B", 9)
-                pdf.cell(45, line_height, tax_params[i + 1][0] + ":", 0, 0)
-                pdf.set_font("Arial", "", 9)
-                pdf.cell(50, line_height, tax_params[i + 1][1], 0, 1)
-            else:
-                pdf.ln()
-
-        pdf.ln(3)
-
     # Results Summary Section
     pdf.set_font("Arial", "B", 11)
     pdf.cell(0, 6, "Results Summary", ln=True)
@@ -213,41 +177,6 @@ def generate_pdf_report(  # noqa: C901
         pdf.set_font("Arial", "", 9)
         pdf.cell(0, line_height, f"{winner_c} by ${abs(diff_a_vs_c):,.0f}", ln=True)
 
-    # Tax Benefits Section (if applicable)
-    if results.total_tax_savings > 0:
-        pdf.ln(2)
-        pdf.set_font("Arial", "B", 11)
-        pdf.cell(0, 6, "Tax Benefits", ln=True)
-        pdf.set_font("Arial", "", 9)
-
-        pdf.set_font("Arial", "B", 9)
-        pdf.cell(60, line_height, "Total Tax Savings:", 0, 0)
-        pdf.set_font("Arial", "", 9)
-        pdf.cell(0, line_height, f"${results.total_tax_savings:,.0f}", ln=True)
-
-        pdf.set_font("Arial", "B", 9)
-        pdf.cell(60, line_height, "Capital Gains Tax Saved:", 0, 0)
-        pdf.set_font("Arial", "", 9)
-        pdf.cell(0, line_height, f"${results.capital_gains_tax_saved:,.0f}", ln=True)
-
-        pdf.set_font("Arial", "B", 9)
-        pdf.cell(60, line_height, "Tax-Adjusted Net Value (Buy):", 0, 0)
-        pdf.set_font("Arial", "", 9)
-        pdf.cell(0, line_height, f"${results.final_net_buy_tax_adjusted:,.0f}", ln=True)
-
-        pdf.set_font("Arial", "B", 9)
-        pdf.cell(60, line_height, "Tax-Adjusted Winner:", 0, 0)
-        pdf.set_font("Arial", "", 9)
-        winner_tax = (
-            "Buy (A)" if results.tax_adjusted_difference > 0 else "Rent + Invest (B)"
-        )
-        pdf.cell(
-            0,
-            line_height,
-            f"{winner_tax} by ${abs(results.tax_adjusted_difference):,.0f}",
-            ln=True,
-        )
-
     pdf.ln(2)
 
     # Breakeven points
@@ -285,7 +214,7 @@ def generate_pdf_report(  # noqa: C901
         "Property tax included in buy scenario (rate configurable)",
         "Mortgage interest and property tax deductions (subject to SALT cap)",
         "Capital gains exclusion on primary residence sale",
-        "No transaction costs or maintenance costs",
+        "Closing costs, property tax, insurance, and maintenance modeled",
         "No taxes on investment gains for renting scenario",
     ]
 
