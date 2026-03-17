@@ -6,7 +6,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**[🚀 Try the Live App](https://rent-or-buy-sim.com/)**
+**[Try the Live App](https://rent-or-buy-sim.com/)**
 
 A financial simulation application that compares three capital allocation strategies over time:
 
@@ -16,12 +16,15 @@ A financial simulation application that compares three capital allocation strate
 
 ## Features
 
-- 🏠 **Comprehensive Financial Modeling:** Accurate mortgage calculations, property appreciation, and investment growth
-- 📊 **Interactive Visualizations:** Beautiful Plotly charts with hover details and breakeven analysis
-- ⚡ **High Performance:** Vectorized NumPy calculations for fast simulations
-- 🎯 **Key Metrics:** Net value analysis, cumulative outflows, and asset growth comparisons
-- 🔄 **Three-Way Comparison:** Includes Scenario C for investing monthly savings when mortgage exceeds rent
-- 📱 **User-Friendly Interface:** Clean Streamlit UI with intuitive parameter controls
+- **Comprehensive Financial Modeling:** Mortgage amortization, property appreciation, equity growth, closing costs, property tax, insurance, and maintenance
+- **Tax Benefit Modeling:** Mortgage interest deduction, capital gains exclusion (Section 121), SALT cap, configurable tax bracket
+- **Interactive Visualizations:** Four Plotly charts — asset growth, cumulative outflows, net value analysis, and cost breakdown
+- **Quick Presets:** 4 built-in scenarios (High Interest Rate, Bull Market, Conservative, First-Time Buyer) for fast configuration
+- **Scenario Management:** Save, load, compare, and export up to 5 scenarios side-by-side
+- **PDF Report Export:** Downloadable PDF with charts, metrics, and configuration summary
+- **Data Table & CSV Export:** Raw simulation data with CSV download for further analysis
+- **Three-Way Comparison:** Includes Scenario C for investing monthly savings when mortgage exceeds rent
+- **High Performance:** Vectorized NumPy calculations — no Python loops in the engine
 
 ## Installation & Usage
 
@@ -151,18 +154,24 @@ if results.scenario_c_enabled:
 
 ```
 simulator/
-├── app.py                  # Streamlit web application
-├── pyproject.toml          # Project dependencies
-├── README.md               # This file
-├── specs.md                # Technical specifications
+├── app.py                          # Streamlit web application
+├── pyproject.toml                  # Project dependencies
+├── README.md                       # This file
+├── FORMULAS.md                     # Mathematical reference
+├── Dockerfile                      # Production Docker image
+├── Dockerfile.local                # Local development Docker image
+├── docker-compose.yml              # Docker Compose for local dev
 ├── src/
 │   └── simulator/
 │       ├── __init__.py
-│       ├── models.py       # Data models (SimulationConfig, SimulationResults)
-│       ├── engine.py       # Core calculation engine
-│       └── visualization.py # Plotly chart functions
+│       ├── models.py               # Data models (SimulationConfig, SimulationResults)
+│       ├── engine.py               # Core calculation engine
+│       ├── visualization.py        # Plotly chart functions
+│       ├── scenario_manager.py     # Save/load/compare scenarios
+│       └── utils.py                # PDF report generation
 └── tests/
-    └── test_engine.py      # Unit tests
+    ├── test_engine.py              # Engine unit tests
+    └── test_closing_costs.py       # Closing cost tests
 ```
 
 ## Running Tests
@@ -204,6 +213,23 @@ pytest tests/ --cov=src/simulator --cov-report=html
 - **Strategy:** Keep down payment as cash (0% return) and invest monthly savings (mortgage - rent) at equity CAGR
 - **Use Case:** Conservative approach that maintains liquidity while capturing upside from monthly savings
 
+### Advanced Settings
+
+- **Buyer's Closing Costs:** Upfront costs when buying (default 3%)
+- **Seller's Closing Costs:** Costs when selling (default 6%)
+- **Property Tax Rate:** Annual property tax (default 1.2%)
+- **Home Insurance:** Annual insurance premium (default $1,200/yr)
+- **Maintenance:** Annual upkeep as % of property value (default 1%)
+- **Cost Inflation:** Annual inflation for ongoing costs (default 2.5%)
+
+### Tax Settings
+
+- **Federal Tax Bracket:** Marginal rate for deduction calculations (0-37%)
+- **Mortgage Interest Deduction:** Toggle mortgage interest tax deduction
+- **Capital Gains Exclusion:** Toggle Section 121 primary residence exclusion
+- **Exemption Limit:** $250K (single) or $500K (married filing jointly)
+- **SALT Cap:** State and local tax deduction cap (default $10,000)
+
 ## Formulas & Methodology
 
 For detailed mathematical formulas, derivations, and methodology used in the simulation engine, see the **[Mathematical Reference (FORMULAS.md)](FORMULAS.md)**.
@@ -221,23 +247,32 @@ For detailed mathematical formulas, derivations, and methodology used in the sim
 
 The model makes several simplifying assumptions for comparison purposes:
 
-- **Constant Growth Rates:** Property appreciation, equity returns, and rent inflation are constant
+- **Constant Growth Rates:** Property appreciation, equity returns, and rent inflation are constant over the simulation period
 - **Monthly Granularity:** All calculations compound monthly for accuracy
 - **Fixed Mortgage:** Standard amortization with fixed interest rate
-- **No Transaction Costs:** Excludes closing costs, realtor fees, and moving expenses
-- **No Property Costs:** Excludes property taxes, insurance, HOA fees, and maintenance
-- **No Tax Effects:** Ignores mortgage interest deduction and capital gains taxes
+- **No Investment Taxes:** Equity portfolio growth in Scenarios B and C is not reduced by capital gains or dividend taxes
 - **Full Liquidity:** Assumes assets can be sold/liquidated at market value instantly
+- **No Rental Income:** Property is owner-occupied; no rental income is modeled
 
 For a complete discussion of assumptions and limitations, see the [Mathematical Reference](FORMULAS.md).
 
 ## Visualization Outputs
 
-The application generates three main charts:
+The application generates four main charts plus scenario comparison views:
 
-1. **Asset Value Over Time:** Shows property value, equity portfolio value, remaining mortgage balance, and (when applicable) Scenario C assets
-2. **Cumulative Outflows:** Compares total money spent in each scenario
-3. **Net Value Analysis:** The "bottom line" showing asset value minus cumulative outflows for all applicable scenarios
+1. **Asset Value Over Time:** Property value, equity portfolio value, remaining mortgage balance, and (when applicable) Scenario C assets
+2. **Cumulative Outflows:** Total money spent in each scenario over time
+3. **Net Value Analysis:** Asset value minus cumulative outflows for all applicable scenarios, with breakeven markers
+4. **Cost Breakdown:** Stacked bar chart showing the composition of buying costs (mortgage, property tax, insurance, maintenance, closing costs)
+
+### Scenario Comparison
+
+When multiple scenarios are saved, additional comparison views are available:
+
+- **Final Net Values:** Bar chart comparing end-of-period outcomes across saved scenarios
+- **Net Value Trajectories:** Overlaid line charts showing how scenarios evolve over time
+- **Breakeven Points:** Visual comparison of when buying overtakes renting in each scenario
+- **Comparison Table:** Side-by-side metrics with CSV export
 
 ## Technical Stack
 
@@ -246,6 +281,8 @@ The application generates three main charts:
 - **Pandas:** Data manipulation and time-series handling
 - **Plotly:** Interactive visualizations
 - **Streamlit:** Web application framework
+- **fpdf2:** PDF report generation
+- **kaleido:** Static chart export for PDF reports
 - **Pytest:** Testing framework
 
 ## Architecture
@@ -258,7 +295,27 @@ The application follows an MVC (Model-View-Controller) pattern:
 
 ## Contributing
 
-Feel free to open issues or submit pull requests for improvements.
+Contributions are welcome! Here's how to get started:
+
+1. **Fork the repository** and clone your fork locally
+2. **Set up the dev environment:**
+   ```bash
+   uv sync
+   ```
+3. **Create a feature branch:**
+   ```bash
+   git checkout -b feat/your-feature
+   ```
+4. **Make your changes** — follow existing code conventions (type annotations, NumPy-style docstrings, 88-char line length)
+5. **Run tests and linting before submitting:**
+   ```bash
+   uv run pytest tests/ --cov --cov-report=term   # 80% coverage minimum
+   uv run ruff check src/ tests/ app.py            # lint
+   uv run ruff format src/ tests/ app.py           # format
+   ```
+6. **Open a pull request** against `main` with a clear description of your changes
+
+Bug reports, feature requests, and documentation improvements are all appreciated — feel free to open an issue to start a discussion.
 
 ## License
 
