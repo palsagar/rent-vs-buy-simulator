@@ -13,7 +13,7 @@ from simulator.models import SimulationResults
 
 
 def create_asset_growth_chart(
-    df: pd.DataFrame, show_scenario_c: bool = False, down_payment: float = 0
+    df: pd.DataFrame, show_scenario_c: bool = False
 ) -> go.Figure:
     """Create a line chart showing asset values over time.
 
@@ -28,8 +28,6 @@ def create_asset_growth_chart(
         and optionally Savings_Portfolio_Value for Scenario C.
     show_scenario_c : bool, optional
         Whether to show Scenario C trace. Default is False.
-    down_payment : float, optional
-        Down payment amount for Scenario C asset calculation. Default is 0.
 
     Returns
     -------
@@ -82,14 +80,14 @@ def create_asset_growth_chart(
         )
     )
 
-    # Scenario C: Down Payment (cash) + Savings Portfolio (purple solid line)
-    if show_scenario_c and "Savings_Portfolio_Value" in df.columns:
-        scenario_c_asset = down_payment + df["Savings_Portfolio_Value"]
+    # Scenario C: Invested Down Payment + Savings Portfolio (purple solid line)
+    if show_scenario_c and "Down_Payment_Value" in df.columns:
+        scenario_c_asset = df["Down_Payment_Value"] + df["Savings_Portfolio_Value"]
         fig.add_trace(
             go.Scatter(
                 x=df["Year"],
                 y=scenario_c_asset,
-                name="Cash + Savings Portfolio (Scenario C)",
+                name="Invested Down Pmt + Savings Portfolio (Scenario C)",
                 line=dict(color="#9b59b6", width=3),
                 mode="lines",
                 hovertemplate="$%{y:,.0f}<extra></extra>",
@@ -447,6 +445,8 @@ def create_cost_breakdown_chart(results: SimulationResults) -> go.Figure:
 
     Examples
     --------
+    Create a cost breakdown bar chart from simulation results:
+
     .. code-block:: python
 
         from simulator.visualization import create_cost_breakdown_chart

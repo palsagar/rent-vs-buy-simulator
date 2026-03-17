@@ -27,6 +27,18 @@ def _is_close_to_zero(value: float) -> bool:
     bool
         True if value is close to zero, False otherwise.
 
+    Examples
+    --------
+    Check whether a floating-point value rounds to zero:
+
+    .. code-block:: python
+
+        from simulator.engine import _is_close_to_zero
+
+        _is_close_to_zero(0.0)       # True
+        _is_close_to_zero(1e-10)     # True
+        _is_close_to_zero(0.001)     # False
+
     """
     return abs(value) < _FLOAT_TOLERANCE
 
@@ -45,6 +57,17 @@ def _is_close(a: float, b: float) -> bool:
     -------
     bool
         True if values are close, False otherwise.
+
+    Examples
+    --------
+    Compare two floating-point values within the default tolerance:
+
+    .. code-block:: python
+
+        from simulator.engine import _is_close
+
+        _is_close(1.0, 1.0 + 1e-10)   # True
+        _is_close(1.0, 1.01)           # False
 
     """
     return abs(a - b) < _FLOAT_TOLERANCE
@@ -231,6 +254,7 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:  # noqa:
     # Formula: D * (1 + e/12)^month
     monthly_equity_rate = (config.equity_growth_annual / 100) / 12
     equity_value = down_payment * (1 + monthly_equity_rate) ** month_arr
+    monthly_dp_rate = config.down_payment_investment_rate / 12
 
     # Calculate cumulative rent outflows
     # Option 1: Constant rent (simpler)
@@ -262,6 +286,9 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:  # noqa:
     # CAGR as Scenario B
     monthly_savings = np.maximum(0, monthly_payment - rent_at_month)
 
+    # Down payment grows at the money-market rate in Scenario C
+    down_payment_value = down_payment * (1 + monthly_dp_rate) ** month_arr
+
     # Calculate compounded value of monthly contributions
     # Each month's contribution compounds for the remaining months
     # savings_portfolio[t] = sum over i from 0 to t-1 of: savings[i] * (1 + r)^(t-i)
@@ -273,8 +300,8 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:  # noqa:
         if t > 0:
             savings_portfolio[t] += monthly_savings[t - 1]
 
-    # Scenario C asset value: uninvested down payment (cash) + savings portfolio
-    asset_value_rent_savings = down_payment + savings_portfolio
+    # Scenario C asset value: invested down payment + savings portfolio
+    asset_value_rent_savings = down_payment_value + savings_portfolio
 
     # Scenario C net value: asset value - cumulative rent outflows
     net_val_rent_savings = asset_value_rent_savings - cum_rent_outflow
@@ -282,6 +309,9 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:  # noqa:
     # Calculate Scenario C final values and breakeven
     final_net_rent_savings = (
         float(net_val_rent_savings[-1]) if scenario_c_enabled else None
+    )
+    final_down_payment_value = (
+        float(down_payment_value[-1]) if scenario_c_enabled else None
     )
     breakeven_year_vs_rent_savings = (
         _find_breakeven(year_arr, net_val_buy, net_val_rent_savings)
@@ -309,6 +339,7 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:  # noqa:
             "Cumulative_Tax_Savings": cumulative_tax_savings,
             "Net_Buy_Tax_Adjusted": net_val_buy_tax_adjusted,
             "Savings_Portfolio_Value": savings_portfolio,
+            "Down_Payment_Value": down_payment_value,
             "Net_Rent_Savings": net_val_rent_savings,
             "Property_Tax_Paid": cum_property_tax,
             "Insurance_Paid": cum_insurance,
@@ -351,6 +382,7 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:  # noqa:
         monthly_mortgage_payment=monthly_payment,
         scenario_c_enabled=scenario_c_enabled,
         final_net_rent_savings=final_net_rent_savings,
+        final_down_payment_value=final_down_payment_value,
         breakeven_year_vs_rent_savings=breakeven_year_vs_rent_savings,
         total_closing_costs_buyer=total_closing_costs_buyer,
         total_closing_costs_seller=seller_closing_costs,
