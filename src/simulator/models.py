@@ -45,37 +45,6 @@ class SimulationConfig:
         Annual inflation rate for ongoing costs (tax, insurance, maintenance).
         Default is 0.03 (3%).
 
-    Attributes
-    ----------
-    duration_years : int
-        Number of years to simulate.
-    property_price : float
-        Initial price of the property ($).
-    down_payment_pct : float
-        Down payment as percentage of property price.
-    mortgage_rate_annual : float
-        Annual mortgage interest rate (as percentage).
-    property_appreciation_annual : float
-        Annual property appreciation rate (as percentage).
-    equity_growth_annual : float
-        Annual equity portfolio growth rate (as percentage).
-    monthly_rent : float
-        Monthly rent payment ($).
-    rent_inflation_rate : float
-        Annual rent inflation rate (as percentage).
-    closing_cost_buyer_pct : float
-        Buyer closing costs as percentage of property price.
-    closing_cost_seller_pct : float
-        Seller closing costs as percentage of sale price.
-    property_tax_rate : float
-        Annual property tax rate as percentage of property value.
-    annual_home_insurance : float
-        Annual home insurance cost ($).
-    annual_maintenance_pct : float
-        Annual maintenance cost as percentage of property value.
-    cost_inflation_rate : float
-        Annual inflation rate for ongoing costs.
-
     Raises
     ------
     ValueError
@@ -125,8 +94,9 @@ class SimulationConfig:
     annual_home_insurance: float = 1200.0
     annual_maintenance_pct: float = 1.0
     cost_inflation_rate: float = 0.03
+    down_payment_investment_rate: float = 0.025
 
-    def __post_init__(self):
+    def __post_init__(self):  # noqa: C901
         """Validate input parameters.
 
         Raises
@@ -216,6 +186,13 @@ class SimulationConfig:
         if self.salt_cap < 0:
             raise ValueError(f"salt_cap cannot be negative (got {self.salt_cap}).")
 
+        if not (0 <= self.down_payment_investment_rate <= 1):
+            raise ValueError(
+                f"down_payment_investment_rate must be 0–1 "
+                f"(got {self.down_payment_investment_rate}). "
+                "For 2.5% annual return use 0.025. For no return use 0."
+            )
+
 
 @dataclass
 class SimulationResults:
@@ -236,26 +213,6 @@ class SimulationResults:
         - Net_Rent: Net value for renting (Equity_Value - Outflow_Rent)
         - Savings_Portfolio_Value: Scenario C investment from monthly savings
         - Net_Rent_Savings: Scenario C net value (down payment + savings - rent)
-    final_net_buy : float
-        Final net value for buying scenario.
-    final_net_rent : float
-        Final net value for renting scenario.
-    final_difference : float
-        Difference between buying and renting (Buy - Rent).
-    breakeven_year : float | None
-        Year when net values cross (None if they never cross).
-    monthly_mortgage_payment : float
-        Monthly mortgage payment amount.
-    scenario_c_enabled : bool
-        Whether Scenario C is applicable (mortgage > initial rent).
-    final_net_rent_savings : float | None
-        Final net value for Scenario C (rent + invest savings).
-    breakeven_year_vs_rent_savings : float | None
-        Year when Buy crosses Rent+Savings (None if never crosses).
-    Attributes
-    ----------
-    data : pd.DataFrame
-        DataFrame containing time-series simulation data.
     final_net_buy : float
         Final net value for buying scenario.
     final_net_rent : float
@@ -325,6 +282,7 @@ class SimulationResults:
     total_property_tax_paid: float = 0.0
     total_insurance_paid: float = 0.0
     total_maintenance_paid: float = 0.0
+    final_down_payment_value: float | None = None
     # Tax benefit totals
     total_tax_savings: float = 0.0
     capital_gains_tax_saved: float = 0.0

@@ -14,7 +14,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from simulator.engine import calculate_scenarios
-from simulator.models import SimulationConfig
+from simulator.models import SimulationConfig, SimulationResults
 from simulator.scenario_manager import (
     ScenarioManager,
     create_comparison_chart,
@@ -33,8 +33,26 @@ from simulator.visualization import (
 MAX_SAVED_SCENARIOS = 5
 
 
-def init_session_state():
-    """Initialize session state variables."""
+def init_session_state() -> None:
+    """Initialize Streamlit session state variables on first load.
+
+    Sets default values for ``saved_scenarios``, ``pdf_data``, and
+    ``scenario_manager`` if they are not already present in
+    ``st.session_state``. Safe to call on every rerun.
+
+    Examples
+    --------
+    Call once at the top of the main entry point:
+
+    .. code-block:: python
+
+        import streamlit as st
+        from app import init_session_state
+
+        init_session_state()
+        assert "saved_scenarios" in st.session_state
+
+    """
     if "saved_scenarios" not in st.session_state:
         st.session_state.saved_scenarios = []
     if "pdf_data" not in st.session_state:
@@ -45,8 +63,30 @@ def init_session_state():
         )
 
 
-def render_scenario_saver(config: SimulationConfig, results):
-    """Render the scenario saving UI in the sidebar."""
+def render_scenario_saver(config: SimulationConfig, results: SimulationResults) -> None:
+    """Render the scenario saving UI in the sidebar.
+
+    Displays a text input for naming the scenario and a save button.
+    Shows a warning when the maximum number of saved scenarios is reached.
+
+    Parameters
+    ----------
+    config : SimulationConfig
+        The current simulation configuration to save.
+    results : SimulationResults
+        The current simulation results to save alongside the config.
+
+    Examples
+    --------
+    Typical call after running the simulation:
+
+    .. code-block:: python
+
+        from app import render_scenario_saver
+
+        render_scenario_saver(config, results)
+
+    """
     st.sidebar.divider()
     st.sidebar.subheader("💾 Save Scenario")
 
@@ -75,8 +115,23 @@ def render_scenario_saver(config: SimulationConfig, results):
                 st.sidebar.error("❌ Failed to save scenario")
 
 
-def render_saved_scenarios_sidebar():
-    """Render saved scenarios management in the sidebar."""
+def render_saved_scenarios_sidebar() -> None:
+    """Render saved scenarios management in the sidebar.
+
+    Lists all saved scenarios with per-scenario delete buttons and a
+    bulk "Clear All" button. Does nothing when no scenarios are saved.
+
+    Examples
+    --------
+    Call after saving at least one scenario:
+
+    .. code-block:: python
+
+        from app import render_saved_scenarios_sidebar
+
+        render_saved_scenarios_sidebar()
+
+    """
     manager = st.session_state.scenario_manager
 
     if not manager.scenarios:
@@ -106,8 +161,24 @@ def render_saved_scenarios_sidebar():
         st.rerun()
 
 
-def render_scenario_comparison():
-    """Render the scenario comparison section."""
+def render_scenario_comparison() -> None:
+    """Render the scenario comparison section.
+
+    Displays a collapsible expander containing a comparison table,
+    CSV export button, visual comparison chart, and quick-load buttons
+    for each saved scenario. Does nothing when no scenarios are saved.
+
+    Examples
+    --------
+    Call after the main simulation output to append the comparison UI:
+
+    .. code-block:: python
+
+        from app import render_scenario_comparison
+
+        render_scenario_comparison()
+
+    """
     manager = st.session_state.scenario_manager
 
     if not manager.scenarios:
@@ -201,12 +272,36 @@ def render_scenario_comparison():
                             "equity_growth_annual": cfg.equity_growth_annual,
                             "monthly_rent": cfg.monthly_rent,
                             "rent_inflation_rate": cfg.rent_inflation_rate,
+                            "down_payment_investment_rate": (
+                                cfg.down_payment_investment_rate
+                            ),
                         }
                         st.rerun()
 
 
-def main():  # noqa: C901
-    """Main application entry point."""
+def main() -> None:  # noqa: C901
+    """Run the Streamlit application.
+
+    Orchestrates the full UI lifecycle: initialises session state,
+    renders sidebar inputs, runs the simulation via
+    ``calculate_scenarios``, and displays summary metrics, charts,
+    data table, and scenario comparison.
+
+    Examples
+    --------
+    Invoke directly when running the app via Streamlit:
+
+    .. code-block:: python
+
+        # From the command line:
+        # streamlit run app.py
+
+        # Or programmatically in tests / notebooks:
+        from app import main
+
+        main()
+
+    """
 
     # Initialize session state
     init_session_state()
@@ -252,8 +347,8 @@ def main():  # noqa: C901
     Compare capital allocation strategies over time:
     - **Strategy A (Buy):** Purchase property with a mortgage
     - **Strategy B (Rent + Invest):** Rent and invest the down payment in equities
-    - **Strategy C (Rent + Invest Savings):** Rent, keep down payment as cash,
-      invest monthly savings
+    - **Strategy C (Rent + Invest Savings):** Rent, invest down payment at a
+      configurable rate, invest monthly savings
     """)
 
     # Check for scenario to load
@@ -523,6 +618,11 @@ def main():  # noqa: C901
     scenario_c_available = preliminary_monthly_payment > monthly_rent
 
     st.sidebar.subheader("📈 Scenario C: Rent + Invest Savings")
+    default_down_pmt_investment_rate = (
+        load_params["down_payment_investment_rate"] * 100
+        if load_params and "down_payment_investment_rate" in load_params
+        else 2.5
+    )
     if scenario_c_available:
         monthly_savings = preliminary_monthly_payment - monthly_rent
         st.sidebar.caption(
@@ -535,7 +635,18 @@ def main():  # noqa: C901
             value=True,
             help=(
                 "Rent and invest the monthly savings (mortgage - rent) at the "
-                "same CAGR. Down payment kept as cash (0% return)."
+                "same CAGR. Down payment invested at the configured rate."
+            ),
+        )
+        down_pmt_investment_rate = st.sidebar.slider(
+            "Down Pmt Investment Rate (% Annual)",
+            min_value=0.0,
+            max_value=10.0,
+            value=float(default_down_pmt_investment_rate),
+            step=0.1,
+            help=(
+                "Annual return on the idle down payment (e.g. money market fund "
+                "or short-term government bonds). Applies to Scenario C only."
             ),
         )
     else:
@@ -544,6 +655,7 @@ def main():  # noqa: C901
             f"Monthly mortgage (\\${preliminary_monthly_payment:,.0f})"
         )
         show_scenario_c = False
+        down_pmt_investment_rate = 2.5
 
     # Create configuration
     config = SimulationConfig(
@@ -566,6 +678,7 @@ def main():  # noqa: C901
         capital_gains_exemption_limit=float(capital_gains_exemption_limit),
         property_tax_rate=property_tax_rate,
         salt_cap=float(salt_cap),
+        down_payment_investment_rate=down_pmt_investment_rate / 100,
     )
 
     # Run simulation
@@ -585,10 +698,10 @@ def main():  # noqa: C901
 
     # Determine number of columns based on whether Scenario C is shown
     if show_scenario_c and results.scenario_c_enabled:
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5 = st.columns(5)
     else:
         col1, col2, col3 = st.columns(3)
-        col4 = None
+        col4 = col5 = None
 
     with col1:
         st.metric(
@@ -625,7 +738,18 @@ def main():  # noqa: C901
                 value=f"${results.final_net_rent_savings:,.0f}",
                 delta=f"{winner_c} wins",
                 delta_color=delta_color_c,
-                help="Down payment (cash) + invested savings - rent payments",
+                help="Invested down payment + savings portfolio - rent payments",
+            )
+
+    if col5 is not None and results.final_down_payment_value is not None:
+        with col5:
+            dp_initial = prop_price * (down_pmt_pct / 100)
+            dp_gain = results.final_down_payment_value - dp_initial
+            st.metric(
+                label="Down Pmt Final Value (C)",
+                value=f"${results.final_down_payment_value:,.0f}",
+                delta=f"+${dp_gain:,.0f} earned",
+                help="Final value of the invested down payment (Scenario C)",
             )
 
     # Breakeven information
@@ -668,7 +792,6 @@ def main():  # noqa: C901
             fig_assets_pdf = create_asset_growth_chart(
                 results.data,
                 show_scenario_c=show_c,
-                down_payment=down_payment,
             )
             fig_outflows_pdf = create_outflow_chart(results.data)
             fig_net_pdf = create_net_value_chart(
@@ -730,14 +853,14 @@ def main():  # noqa: C901
         )
         if show_scenario_c and results.scenario_c_enabled:
             asset_description += (
-                "- **Purple line:** Cash + Savings portfolio (Scenario C)\n"
+                "- **Purple line:** Invested down payment + "
+                "Savings portfolio (Scenario C)\n"
             )
         asset_description += "- **Red dashed line:** Remaining mortgage balance"
         st.markdown(asset_description)
         fig_assets = create_asset_growth_chart(
             results.data,
             show_scenario_c=show_scenario_c and results.scenario_c_enabled,
-            down_payment=down_payment,
         )
         st.plotly_chart(fig_assets, use_container_width=True)
 
@@ -800,7 +923,9 @@ def main():  # noqa: C901
         ]
 
         if show_scenario_c and results.scenario_c_enabled:
-            currency_cols.extend(["Savings_Portfolio_Value", "Net_Rent_Savings"])
+            currency_cols.extend(
+                ["Down_Payment_Value", "Savings_Portfolio_Value", "Net_Rent_Savings"]
+            )
 
         st.dataframe(
             display_df[["Year", *currency_cols]],
@@ -846,9 +971,11 @@ def main():  # noqa: C901
         Your asset is the investment portfolio.
 
         **Strategy C (Rent + Invest Savings):** Available when mortgage > rent.
-        You rent and keep the down payment as cash (0% return). Monthly savings
-        (mortgage - rent) are invested at the same CAGR as Strategy B.
-        Your asset is cash + savings portfolio. Outflows are rent payments.
+        You rent and invest the down payment at a configurable rate (e.g. money
+        market fund or short-term bonds). Monthly savings (mortgage - rent) are
+        invested at the same CAGR as Strategy B.
+        Your asset is invested down payment + savings portfolio.
+        Outflows are rent payments.
 
         The **Net Value** metric (Asset - Outflows) is the key decision metric.
 

@@ -512,12 +512,11 @@ class TestScenarioC:
 
         results = calculate_scenarios(config)
 
-        # Verify formula: Net_Rent_Savings = (down_payment + savings_portfolio)
+        # Verify formula: Net_Rent_Savings = (Down_Payment_Value + savings_portfolio)
         # - rent_outflows
-        down_payment = 500000 * 0.20
         for idx in [0, 60, 120]:  # Check at different time points
             expected_net = (
-                down_payment
+                results.data["Down_Payment_Value"].iloc[idx]
                 + results.data["Savings_Portfolio_Value"].iloc[idx]
                 - results.data["Outflow_Rent"].iloc[idx]
             )
@@ -808,3 +807,86 @@ class TestEdgeCases:
         assert results.final_net_buy is not None
         assert results.final_net_rent is not None
         assert results.final_difference is not None
+
+
+class TestDownPaymentInvestment:
+    """Tests for the down payment investment rate in Scenario C."""
+
+    def _base_config(self, **overrides: object) -> SimulationConfig:
+        """Return a baseline ``SimulationConfig`` for Scenario C tests.
+
+        Parameters
+        ----------
+        **overrides : object
+            Keyword arguments forwarded to ``SimulationConfig`` to override
+            any of the default baseline values.
+
+        Returns
+        -------
+        SimulationConfig
+            Configuration with 10-year duration, $500k property, 20% down,
+            4.5% mortgage, 3% appreciation, 7% equity growth, $2000/month rent.
+
+        Examples
+        --------
+        Build a config with a custom down payment investment rate:
+
+        .. code-block:: python
+
+            config = self._base_config(down_payment_investment_rate=0.05)
+
+        """
+        return SimulationConfig(
+            duration_years=10,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+            **overrides,  # type: ignore[arg-type]
+        )
+
+    def test_down_payment_grows_with_positive_rate(self):
+        """Down payment column should grow when a positive rate is set."""
+        config = self._base_config(down_payment_investment_rate=0.025)
+        results = calculate_scenarios(config)
+        dp_initial = 500000 * 0.20  # 100_000
+        assert results.final_down_payment_value is not None
+        assert results.final_down_payment_value > dp_initial
+
+    def test_down_payment_constant_with_zero_rate(self):
+        """Down payment column should stay flat when rate is 0."""
+        config = self._base_config(down_payment_investment_rate=0.0)
+        results = calculate_scenarios(config)
+        dp_initial = 500000 * 0.20
+        assert results.data["Down_Payment_Value"].iloc[-1] == pytest.approx(dp_initial)
+
+    def test_net_value_higher_with_positive_rate(self):
+        """Scenario C net value should be higher when the down payment earns returns."""
+        config_zero = self._base_config(down_payment_investment_rate=0.0)
+        config_invested = self._base_config(down_payment_investment_rate=0.025)
+        res_zero = calculate_scenarios(config_zero)
+        res_invested = calculate_scenarios(config_invested)
+        assert res_invested.final_net_rent_savings > res_zero.final_net_rent_savings  # type: ignore[operator]
+
+    def test_invalid_rate_raises_error(self):
+        """A rate above 1 (i.e., >100%) should raise ValueError."""
+        with pytest.raises(ValueError, match="down_payment_investment_rate"):
+            self._base_config(down_payment_investment_rate=1.5)
+
+    def test_final_down_payment_value_none_when_scenario_c_disabled(self):
+        """final_down_payment_value should be None when Scenario C is not available."""
+        # Use 100% down payment so there is no mortgage and Scenario C is disabled
+        config = SimulationConfig(
+            duration_years=10,
+            property_price=500000,
+            down_payment_pct=100,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+        )
+        results = calculate_scenarios(config)
+        assert results.scenario_c_enabled is False
+        assert results.final_down_payment_value is None
