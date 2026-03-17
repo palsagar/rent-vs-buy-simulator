@@ -723,11 +723,11 @@ def main():  # noqa: C901
 
     with tab1:
         st.subheader("Asset Value Over Time")
-        asset_description = """
-        This chart shows how your assets grow over time:
-        - **Green line:** Property value (Scenario A)
-        - **Blue line:** Investment portfolio value (Scenario B)
-        """
+        asset_description = (
+            "This chart shows how your assets grow over time:\n"
+            "- **Green line:** Property value (Scenario A)\n"
+            "- **Blue line:** Investment portfolio value (Scenario B)\n"
+        )
         if show_scenario_c and results.scenario_c_enabled:
             asset_description += (
                 "- **Purple line:** Cash + Savings portfolio (Scenario C)\n"
@@ -743,11 +743,11 @@ def main():  # noqa: C901
 
     with tab2:
         st.subheader("Cumulative Outflows: Cost of Lifestyle")
-        st.markdown("""
-        This chart shows how much cash has physically left your pocket:
-        - **Red line:** Down payment + cumulative mortgage payments
-        - **Orange line:** Cumulative rent payments
-        """)
+        st.markdown(
+            "This chart shows how much cash has physically left your pocket:\n"
+            "- **Red line:** Down payment + cumulative mortgage payments\n"
+            "- **Orange line:** Cumulative rent payments"
+        )
         fig_outflows = create_outflow_chart(results.data)
         st.plotly_chart(fig_outflows, use_container_width=True)
 
@@ -758,11 +758,11 @@ def main():  # noqa: C901
 
     with tab3:
         st.subheader("Net Value Analysis: The Bottom Line")
-        net_description = """
-        This chart shows the **Net Value** (Asset Value - Cumulative Outflows):
-        - **Green dotted line:** Net value of buying (Scenario A)
-        - **Blue dotted line:** Net value of renting + investing (Scenario B)
-        """
+        net_description = (
+            "This chart shows the **Net Value** (Asset Value - Cumulative Outflows):\n"
+            "- **Green dotted line:** Net value of buying (Scenario A)\n"
+            "- **Blue dotted line:** Net value of renting + investing (Scenario B)\n"
+        )
         if show_scenario_c and results.scenario_c_enabled:
             net_description += (
                 "- **Purple dotted line:** Net value of renting + savings "
