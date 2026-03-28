@@ -8,8 +8,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 import numpy as np
 import pytest
 
+from simulator.engine import calculate_scenarios as deterministic_engine
 from simulator.models import MonteCarloConfig, MonteCarloResults, SimulationConfig
-from simulator.monte_carlo import _generate_annual_draws
+from simulator.monte_carlo import _generate_annual_draws, _simulate_single_path
 
 
 class TestMonteCarloConfig:
@@ -347,3 +348,157 @@ class TestGenerateAnnualDraws:
             draws1["equity_growth"],
             draws2["equity_growth"],
         )
+
+
+class TestSimulateSinglePath:
+    """Tests for _simulate_single_path."""
+
+    @pytest.fixture()
+    def base_config(self):
+        """Return a standard SimulationConfig.
+
+        Returns
+        -------
+        SimulationConfig
+            A 10-year, $500k property configuration.
+
+        Examples
+        --------
+        .. code-block:: python
+
+            config = base_config
+
+        """
+        return SimulationConfig(
+            duration_years=10,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+            rent_inflation_rate=0.03,
+        )
+
+    def test_output_shapes(self, base_config):
+        """Test that output arrays have correct length."""
+        n_years = base_config.duration_years
+        n_months = n_years * 12
+        # Constant rates = base config rates for every year
+        prop_rates = np.full(n_years, 3.0)
+        eq_rates = np.full(n_years, 7.0)
+        rent_rates = np.full(n_years, 3.0)
+
+        net_buy, net_rent = _simulate_single_path(
+            base_config, prop_rates, eq_rates, rent_rates
+        )
+        assert net_buy.shape == (n_months + 1,)
+        assert net_rent.shape == (n_months + 1,)
+
+    def test_initial_values(self, base_config):
+        """Test that initial net values are correct."""
+        n_years = base_config.duration_years
+        prop_rates = np.full(n_years, 3.0)
+        eq_rates = np.full(n_years, 7.0)
+        rent_rates = np.full(n_years, 3.0)
+
+        net_buy, net_rent = _simulate_single_path(
+            base_config, prop_rates, eq_rates, rent_rates
+        )
+        # At t=0: net_buy = home_value - down_payment - buyer_closing
+        down_payment = 500000 * 0.20
+        buyer_closing = 500000 * (base_config.closing_cost_buyer_pct / 100)
+        expected_net_buy_0 = 500000 - down_payment - buyer_closing
+        assert abs(net_buy[0] - expected_net_buy_0) < 1.0
+
+        # At t=0: net_rent = down_payment - 0 rent
+        assert abs(net_rent[0] - down_payment) < 1.0
+
+    def test_consistency_with_deterministic_engine(self, base_config):
+        """Test that constant-rate MC path matches deterministic engine.
+
+        When all annual rates are constant (matching base_config),
+        the MC single path should match the deterministic engine's
+        net_buy and net_rent within a small tolerance. The tolerance
+        accounts for the MC path applying seller closing costs and
+        tax adjustments at the final step only, matching the
+        deterministic engine's summary metrics (not the raw arrays).
+        """
+        det_results = deterministic_engine(base_config)
+        n_years = base_config.duration_years
+        prop_rates = np.full(n_years, base_config.property_appreciation_annual)
+        eq_rates = np.full(n_years, base_config.equity_growth_annual)
+        rent_rates = np.full(n_years, base_config.rent_inflation_rate * 100)
+
+        net_buy, net_rent = _simulate_single_path(
+            base_config, prop_rates, eq_rates, rent_rates
+        )
+
+        # Compare intermediate net values (before seller closing costs)
+        # The MC path's net_buy[:-1] should match the deterministic
+        # Net_Buy column (both exclude seller closing costs until end)
+        det_net_buy = det_results.data["Net_Buy"].values
+        det_net_rent = det_results.data["Net_Rent"].values
+
+        # Intermediate months should match closely
+        for m in [0, 12, 60, 119]:
+            assert abs(net_buy[m] - det_net_buy[m]) < 100, (
+                f"net_buy mismatch at month {m}: "
+                f"MC={net_buy[m]:.2f}, det={det_net_buy[m]:.2f}"
+            )
+            assert abs(net_rent[m] - det_net_rent[m]) < 100, (
+                f"net_rent mismatch at month {m}: "
+                f"MC={net_rent[m]:.2f}, det={det_net_rent[m]:.2f}"
+            )
+
+        # Final net_buy includes seller closing costs + tax benefits
+        # Should match deterministic final_net_buy_tax_adjusted
+        assert abs(net_buy[-1] - det_results.final_net_buy_tax_adjusted) < 500, (
+            f"Final net_buy mismatch: "
+            f"MC={net_buy[-1]:.2f}, "
+            f"det={det_results.final_net_buy_tax_adjusted:.2f}"
+        )
+
+        # Final net_rent should match exactly
+        assert abs(net_rent[-1] - det_results.final_net_rent) < 100
+
+    def test_varying_rates_affect_outcome(self, base_config):
+        """Test that different rates produce different outcomes."""
+        n_years = base_config.duration_years
+
+        # Low appreciation, high equity growth
+        prop_low = np.full(n_years, 1.0)
+        eq_high = np.full(n_years, 12.0)
+        rent_rates = np.full(n_years, 3.0)
+        net_buy_low, net_rent_high = _simulate_single_path(
+            base_config, prop_low, eq_high, rent_rates
+        )
+
+        # High appreciation, low equity growth
+        prop_high = np.full(n_years, 8.0)
+        eq_low = np.full(n_years, 2.0)
+        net_buy_high, net_rent_low = _simulate_single_path(
+            base_config, prop_high, eq_low, rent_rates
+        )
+
+        # When property appreciation is high + equity is low, buy should
+        # do relatively better
+        diff_buy_favored = net_buy_high[-1] - net_rent_low[-1]
+        diff_rent_favored = net_buy_low[-1] - net_rent_high[-1]
+        assert diff_buy_favored > diff_rent_favored
+
+    def test_net_values_monotonicity_not_required(self, base_config):
+        """Test that MC paths can be non-monotonic with volatile rates."""
+        n_years = base_config.duration_years
+        # Alternating boom/bust years
+        prop_rates = np.array([10, -5] * (n_years // 2))
+        eq_rates = np.full(n_years, 7.0)
+        rent_rates = np.full(n_years, 3.0)
+
+        net_buy, net_rent = _simulate_single_path(
+            base_config, prop_rates, eq_rates, rent_rates
+        )
+        # Just verify it runs without error and produces valid output
+        assert net_buy.shape == (n_years * 12 + 1,)
+        assert not np.any(np.isnan(net_buy))
+        assert not np.any(np.isnan(net_rent))
