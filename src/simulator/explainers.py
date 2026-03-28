@@ -133,9 +133,10 @@ _WELCOME_MODAL_HTML = """\
 @st.dialog("Welcome")
 def _welcome_dialog() -> None:
     """Render the welcome modal content inside a Streamlit dialog."""
+    # Mark as dismissed immediately so closing via X also works
+    st.session_state.welcome_dismissed = True
     st.markdown(_WELCOME_MODAL_HTML, unsafe_allow_html=True)
     if st.button("Start Exploring", use_container_width=True, type="primary"):
-        st.session_state.welcome_dismissed = True
         st.rerun()
 
 
