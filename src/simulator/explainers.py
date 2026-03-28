@@ -276,8 +276,8 @@ _GUIDE_MONTE_CARLO_HTML = """\
     <strong style="color: #e2e8f0;">Uncertainty Analysis</strong> tab
     runs hundreds of simulations where property appreciation, equity
     growth, and rent inflation <strong style="color: #e2e8f0;">vary
-    randomly each year</strong> using log-normal distributions (the
-    standard finance model).
+    randomly each year</strong> using bell-curve distributions
+    centered on your inputs.
 </p>
 <p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
     Instead of &ldquo;Buy wins by $142K,&rdquo; you see:

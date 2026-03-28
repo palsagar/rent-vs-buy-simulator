@@ -177,8 +177,11 @@ def _simulate_single_path(
 
     Returns
     -------
-    tuple[np.ndarray, np.ndarray]
-        ``(net_buy, net_rent)`` — each of shape ``(n_months + 1,)``.
+    tuple[np.ndarray, np.ndarray, float]
+        ``(net_buy, net_rent, end_adjustment)`` where the arrays are
+        shape ``(n_months + 1,)`` and ``end_adjustment`` is the scalar
+        net effect of seller closing costs, tax savings, and capital
+        gains exclusion (apply to summary stats only, not charts).
 
     Examples
     --------
@@ -199,7 +202,7 @@ def _simulate_single_path(
         prop = np.full(10, 3.0)
         eq = np.full(10, 7.0)
         rent = np.full(10, 3.0)
-        net_buy, net_rent = _simulate_single_path(
+        net_buy, net_rent, end_adj = _simulate_single_path(
             config, prop, eq, rent
         )
 
@@ -441,7 +444,7 @@ def _compute_sensitivity(
             param_names.append(display_name)
             low_vals.append(val_low)
             high_vals.append(val_high)
-        except (ValueError, Exception):
+        except ValueError:
             # Skip if perturbation produces invalid config
             continue
 

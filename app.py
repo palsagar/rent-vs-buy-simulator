@@ -702,6 +702,11 @@ def main() -> None:  # noqa: C901
         down_payment_investment_rate=down_pmt_investment_rate / 100,
     )
 
+    # Invalidate MC results when base config changes
+    if st.session_state.get("mc_base_config") != config:
+        st.session_state.pop("mc_results", None)
+        st.session_state["mc_base_config"] = config
+
     # Run simulation
     with st.spinner("Running simulation..."):
         try:
