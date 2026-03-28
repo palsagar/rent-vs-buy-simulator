@@ -8,6 +8,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import streamlit as st
 
 # Add src to path to import our modules
@@ -19,7 +20,13 @@ from simulator.explainers import (
     render_guide_panel,
     show_welcome_modal,
 )
-from simulator.models import SimulationConfig, SimulationResults
+from simulator.mc_visualization import (
+    create_probability_chart,
+    create_spaghetti_chart,
+    create_tornado_chart,
+)
+from simulator.models import MonteCarloConfig, SimulationConfig, SimulationResults
+from simulator.monte_carlo import run_monte_carlo
 from simulator.scenario_manager import (
     ScenarioManager,
     create_comparison_chart,
@@ -62,6 +69,8 @@ def init_session_state() -> None:
         st.session_state.saved_scenarios = []
     if "pdf_data" not in st.session_state:
         st.session_state.pdf_data = None
+    if "mc_results" not in st.session_state:
+        st.session_state.mc_results = None
     if "scenario_manager" not in st.session_state:
         st.session_state.scenario_manager = ScenarioManager(
             max_scenarios=MAX_SAVED_SCENARIOS
@@ -847,12 +856,13 @@ def main() -> None:  # noqa: C901
     st.header("📊 Detailed Analysis")
 
     # Create tabs for different views
-    tab1, tab2, tab3, tab4 = st.tabs(
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(
         [
             "Asset Growth",
             "Cumulative Costs",
             "Net Value Comparison",
             "Data Table",
+            "Uncertainty Analysis",
         ]
     )
 
@@ -953,6 +963,139 @@ def main() -> None:  # noqa: C901
             file_name="simulation_results.csv",
             mime="text/csv",
         )
+
+    with tab5:
+        st.subheader("Monte Carlo Uncertainty Analysis")
+        st.markdown(
+            "Explore how **randomness in market conditions** affects "
+            "the buy-vs-rent outcome. Instead of fixed annual rates, "
+            "this simulation draws random rates each year from "
+            "distributions centered on your inputs."
+        )
+
+        # MC settings in an expander (on the tab, not sidebar)
+        with st.expander("Tune Parameters", expanded=False):
+            mc_col1, mc_col2 = st.columns(2)
+            with mc_col1:
+                mc_n_sims = st.slider(
+                    "Number of Simulations",
+                    min_value=50,
+                    max_value=2000,
+                    value=500,
+                    step=50,
+                    help="More simulations = smoother results, slower",
+                )
+                mc_seed = st.number_input(
+                    "Random Seed",
+                    min_value=0,
+                    max_value=99999,
+                    value=42,
+                    step=1,
+                    help="Change for different random outcomes",
+                )
+            with mc_col2:
+                mc_prop_std = st.slider(
+                    "Property Appreciation Std (%)",
+                    min_value=0.0,
+                    max_value=15.0,
+                    value=5.0,
+                    step=0.5,
+                )
+                mc_eq_std = st.slider(
+                    "Equity Growth Std (%)",
+                    min_value=0.0,
+                    max_value=15.0,
+                    value=5.0,
+                    step=0.5,
+                )
+                mc_rent_std = st.slider(
+                    "Rent Inflation Std (%)",
+                    min_value=0.0,
+                    max_value=5.0,
+                    value=1.5,
+                    step=0.1,
+                )
+                mc_corr = st.slider(
+                    "Appreciation-Equity Correlation",
+                    min_value=-1.0,
+                    max_value=1.0,
+                    value=0.3,
+                    step=0.1,
+                )
+
+        # Run button
+        if st.button(
+            f"Run {mc_n_sims} Simulations",
+            use_container_width=True,
+            type="primary",
+        ):
+            mc_config = MonteCarloConfig(
+                n_simulations=mc_n_sims,
+                seed=int(mc_seed),
+                property_appreciation_std=mc_prop_std,
+                equity_growth_std=mc_eq_std,
+                rent_inflation_std=mc_rent_std,
+                appreciation_equity_correlation=mc_corr,
+            )
+
+            with st.spinner(f"Running {mc_n_sims} simulations..."):
+                mc_results = run_monte_carlo(config, mc_config)
+
+            # Store results in session state
+            st.session_state["mc_results"] = mc_results
+
+        # Display results if available
+        mc_results = st.session_state.get("mc_results")
+        if mc_results is not None:
+            # Headline metrics
+            mc_m1, mc_m2, mc_m3 = st.columns(3)
+            with mc_m1:
+                st.metric(
+                    "Buy Wins",
+                    f"{mc_results.buy_wins_pct:.1f}%",
+                    help="Fraction of simulations where buying wins",
+                )
+            with mc_m2:
+                st.metric(
+                    "Median Difference",
+                    f"${mc_results.median_difference:,.0f}",
+                    help="Median (Buy - Rent) across simulations",
+                )
+            with mc_m3:
+                st.metric(
+                    "90% Range",
+                    (
+                        f"${mc_results.p5_difference:,.0f} to "
+                        f"${mc_results.p95_difference:,.0f}"
+                    ),
+                    help="5th to 95th percentile of outcomes",
+                )
+
+            st.divider()
+
+            # Spaghetti chart (matplotlib)
+            st.subheader("Outcome Paths")
+            st.markdown(
+                "Each line is one possible future. "
+                "**Green** = buying wins, **Red** = renting wins, "
+                "**Blue dashed** = median path."
+            )
+            spaghetti_fig = create_spaghetti_chart(mc_results)
+            st.pyplot(spaghetti_fig)
+            plt.close(spaghetti_fig)
+
+            st.divider()
+
+            # Tornado + Probability side by side
+            tc1, tc2 = st.columns(2)
+            with tc1:
+                st.subheader("Sensitivity Analysis")
+                tornado_fig = create_tornado_chart(mc_results)
+                st.plotly_chart(tornado_fig, use_container_width=True)
+            with tc2:
+                st.subheader("Probability Over Time")
+                prob_fig = create_probability_chart(mc_results)
+                st.plotly_chart(prob_fig, use_container_width=True)
 
     # Footer with additional information
     st.divider()

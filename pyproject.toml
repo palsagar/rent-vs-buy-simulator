@@ -58,6 +58,7 @@ omit = [
     "*/scenario_manager.py",
     "*/utils.py",
     "*/visualization.py",
+    "*/mc_visualization.py",
 ]
 
 [tool.coverage.report]
