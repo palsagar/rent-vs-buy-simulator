@@ -8,6 +8,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import streamlit as st
 
 # Add src to path to import our modules
@@ -19,7 +20,13 @@ from simulator.explainers import (
     render_guide_panel,
     show_welcome_modal,
 )
-from simulator.models import SimulationConfig, SimulationResults
+from simulator.mc_visualization import (
+    create_probability_chart,
+    create_spaghetti_chart,
+    create_tornado_chart,
+)
+from simulator.models import MonteCarloConfig, SimulationConfig, SimulationResults
+from simulator.monte_carlo import run_monte_carlo
 from simulator.scenario_manager import (
     ScenarioManager,
     create_comparison_chart,
@@ -62,6 +69,8 @@ def init_session_state() -> None:
         st.session_state.saved_scenarios = []
     if "pdf_data" not in st.session_state:
         st.session_state.pdf_data = None
+    if "mc_results" not in st.session_state:
+        st.session_state.mc_results = None
     if "scenario_manager" not in st.session_state:
         st.session_state.scenario_manager = ScenarioManager(
             max_scenarios=MAX_SAVED_SCENARIOS
@@ -693,6 +702,11 @@ def main() -> None:  # noqa: C901
         down_payment_investment_rate=down_pmt_investment_rate / 100,
     )
 
+    # Invalidate MC results when base config changes
+    if st.session_state.get("mc_base_config") != config:
+        st.session_state.pop("mc_results", None)
+        st.session_state["mc_base_config"] = config
+
     # Run simulation
     with st.spinner("Running simulation..."):
         try:
@@ -847,12 +861,13 @@ def main() -> None:  # noqa: C901
     st.header("📊 Detailed Analysis")
 
     # Create tabs for different views
-    tab1, tab2, tab3, tab4 = st.tabs(
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(
         [
             "Asset Growth",
             "Cumulative Costs",
             "Net Value Comparison",
             "Data Table",
+            "Uncertainty Analysis",
         ]
     )
 
@@ -953,6 +968,188 @@ def main() -> None:  # noqa: C901
             file_name="simulation_results.csv",
             mime="text/csv",
         )
+
+    with tab5:
+        st.subheader("Monte Carlo Uncertainty Analysis")
+        st.markdown(
+            "Explore how **randomness in market conditions** affects "
+            "the buy-vs-rent outcome. Instead of fixed annual rates, "
+            "this simulation draws random rates each year from "
+            "distributions centered on your inputs."
+        )
+
+        # MC settings in an expander (on the tab, not sidebar)
+        with st.expander("Tune Parameters", expanded=False):
+            st.caption(
+                "Control how much randomness the simulation uses. "
+                "**Std (standard deviation)** sets how much each rate "
+                "can vary year-to-year around your chosen base values "
+                "in the sidebar."
+            )
+            mc_col1, mc_col2 = st.columns(2)
+            with mc_col1:
+                mc_n_sims = st.slider(
+                    "Number of Simulations",
+                    min_value=50,
+                    max_value=2000,
+                    value=500,
+                    step=50,
+                    help="More simulations = smoother results, slower.",
+                )
+                mc_seed = st.number_input(
+                    "Random Seed",
+                    min_value=0,
+                    max_value=99999,
+                    value=42,
+                    step=1,
+                    help=(
+                        "Controls the random number generator. Same seed "
+                        "= same results. Change it to see a different set "
+                        "of random outcomes."
+                    ),
+                )
+                mc_corr = st.slider(
+                    "Property–Equity Correlation",
+                    min_value=0.0,
+                    max_value=0.8,
+                    value=0.3,
+                    step=0.1,
+                    help=(
+                        "How closely property and stock markets move "
+                        "together. 0 = independent, 0.3 = weakly linked "
+                        "(default, matches historical data), 0.8 = move "
+                        "in lockstep. Higher correlation means crashes "
+                        "hit both assets simultaneously."
+                    ),
+                )
+            with mc_col2:
+                mc_prop_std = st.slider(
+                    "Property Appreciation Std (%)",
+                    min_value=0.0,
+                    max_value=15.0,
+                    value=5.0,
+                    step=0.5,
+                    help=(
+                        f"Year-to-year volatility around your "
+                        f"{prop_appreciation}% base rate. At 5%, annual "
+                        f"appreciation typically ranges from "
+                        f"{prop_appreciation - 10:.1f}% to "
+                        f"{prop_appreciation + 10:.1f}% (±2 std)."
+                    ),
+                )
+                mc_eq_std = st.slider(
+                    "Equity Growth Std (%)",
+                    min_value=0.0,
+                    max_value=15.0,
+                    value=5.0,
+                    step=0.5,
+                    help=(
+                        f"Year-to-year volatility around your "
+                        f"{equity_growth}% base CAGR. At 5%, annual "
+                        f"returns typically range from "
+                        f"{equity_growth - 10:.1f}% to "
+                        f"{equity_growth + 10:.1f}% (±2 std)."
+                    ),
+                )
+                mc_rent_std = st.slider(
+                    "Rent Inflation Std (%)",
+                    min_value=0.0,
+                    max_value=5.0,
+                    value=1.5,
+                    step=0.1,
+                    help=(
+                        f"Year-to-year volatility around your "
+                        f"{rent_inflation}% base rate. At 1.5%, annual "
+                        f"inflation typically ranges from "
+                        f"{rent_inflation - 3:.1f}% to "
+                        f"{rent_inflation + 3:.1f}% (±2 std)."
+                    ),
+                )
+
+        # Run button
+        if st.button(
+            f"Run {mc_n_sims} Simulations",
+            use_container_width=True,
+            type="primary",
+        ):
+            mc_config = MonteCarloConfig(
+                n_simulations=mc_n_sims,
+                seed=int(mc_seed),
+                property_appreciation_std=mc_prop_std,
+                equity_growth_std=mc_eq_std,
+                rent_inflation_std=mc_rent_std,
+                appreciation_equity_correlation=mc_corr,
+            )
+
+            with st.spinner(f"Running {mc_n_sims} simulations..."):
+                mc_results = run_monte_carlo(config, mc_config)
+
+            # Store results in session state
+            st.session_state["mc_results"] = mc_results
+
+        # Display results if available
+        mc_results = st.session_state.get("mc_results")
+        if mc_results is not None:
+            # Headline metrics
+            def _fmt_dollar(val: float) -> str:
+                return f"-${abs(val):,.0f}" if val < 0 else f"${val:,.0f}"
+
+            _mc_label = "font-size:0.875rem;color:#808495;margin-bottom:-0.25rem;"
+            _mc_value = "font-size:2.25rem;font-weight:700;margin-top:0;"
+
+            mc_m1, mc_m2, mc_m3 = st.columns(3)
+            with mc_m1:
+                st.markdown(
+                    f"<p style='{_mc_label}'>Buy Wins</p>"
+                    f"<p style='{_mc_value}'>"
+                    f"{mc_results.buy_wins_pct:.1f}%</p>",
+                    unsafe_allow_html=True,
+                )
+            with mc_m2:
+                st.markdown(
+                    f"<p style='{_mc_label}'>Median Difference</p>"
+                    f"<p style='{_mc_value}'>"
+                    f"${mc_results.median_difference:,.0f}</p>",
+                    unsafe_allow_html=True,
+                )
+            with mc_m3:
+                st.markdown(
+                    f"<p style='{_mc_label}'>90% Range</p>"
+                    f"<p style='{_mc_value}'>"
+                    f"{_fmt_dollar(mc_results.p5_difference)} to "
+                    f"{_fmt_dollar(mc_results.p95_difference)}</p>",
+                    unsafe_allow_html=True,
+                )
+
+            st.divider()
+
+            # Spaghetti chart (matplotlib)
+            st.subheader("Outcome Paths")
+            st.markdown(
+                "Each line is one possible future. "
+                "**Green** = buying wins, **Red** = renting wins, "
+                "**Blue dashed** = median path."
+            )
+            spaghetti_fig = create_spaghetti_chart(mc_results)
+            st.pyplot(spaghetti_fig)
+            plt.close(spaghetti_fig)
+
+            st.divider()
+
+            # Tornado + Probability side by side
+            tc1, tc2 = st.columns(2)
+            with tc1:
+                st.subheader("What Matters Most?")
+                st.caption(
+                    "Wider bar = bigger impact on the outcome. "
+                    "Green = parameter goes up, Red = goes down."
+                )
+                tornado_fig = create_tornado_chart(mc_results)
+                st.plotly_chart(tornado_fig, use_container_width=True)
+            with tc2:
+                st.subheader("Probability Over Time")
+                prob_fig = create_probability_chart(mc_results)
+                st.plotly_chart(prob_fig, use_container_width=True)
 
     # Footer with additional information
     st.divider()
