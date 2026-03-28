@@ -156,3 +156,6 @@ Thumbs.db
 *.tmp
 *.bak
 *.swp
+
+# Superpowers brainstorm sessions
+.superpowers/
