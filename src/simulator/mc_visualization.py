@@ -185,48 +185,65 @@ def create_tornado_chart(mc_results: MonteCarloResults) -> go.Figure:
 
     # Reverse order so widest bar is at top in horizontal layout
     params_rev = list(reversed(params))
-    low_rev = low[::-1]
-    high_rev = high[::-1]
+    low_shift = low[::-1] - base
+    high_shift = high[::-1] - base
+
+    # Compute total range per parameter for annotation
+    total_range = np.abs(high[::-1] - low[::-1])
 
     fig = go.Figure()
 
-    # Low-side bars (base to low value)
+    # "Parameter decreases" bars
     fig.add_trace(
         go.Bar(
             y=params_rev,
-            x=low_rev - base,
+            x=low_shift,
             orientation="h",
-            name="Low (-1 std)",
-            marker_color="#e74c3c",
+            name="↓ Parameter decreases",
+            marker_color="rgba(231, 76, 60, 0.7)",
             hovertemplate=(
-                "%{y}<br>Shift: $%{x:,.0f}<br>Value: $%{customdata:,.0f}<extra></extra>"
+                "<b>%{y}</b> decreases<br>"
+                "Buy advantage shifts by <b>$%{x:,.0f}</b>"
+                "<extra></extra>"
             ),
-            customdata=low_rev,
         )
     )
 
-    # High-side bars (base to high value)
+    # "Parameter increases" bars
     fig.add_trace(
         go.Bar(
             y=params_rev,
-            x=high_rev - base,
+            x=high_shift,
             orientation="h",
-            name="High (+1 std)",
-            marker_color="#2ecc71",
+            name="↑ Parameter increases",
+            marker_color="rgba(46, 204, 113, 0.7)",
             hovertemplate=(
-                "%{y}<br>Shift: $%{x:,.0f}<br>Value: $%{customdata:,.0f}<extra></extra>"
+                "<b>%{y}</b> increases<br>"
+                "Buy advantage shifts by <b>$%{x:,.0f}</b>"
+                "<extra></extra>"
             ),
-            customdata=high_rev,
         )
     )
+
+    # Add total impact range as text annotations on the right
+    for i, rng in enumerate(total_range):
+        fig.add_annotation(
+            y=params_rev[i],
+            x=max(high_shift[i], low_shift[i]),
+            text=f"  ±${rng / 2:,.0f}",
+            showarrow=False,
+            xanchor="left",
+            font=dict(size=11, color="#888"),
+        )
 
     fig.update_layout(
-        title="Sensitivity Analysis: Impact on Buy vs. Rent Difference",
-        xaxis_title="Change from Base Case ($)",
+        title="Which Parameters Move the Needle?",
+        xaxis_title="Impact on Buy Advantage ($)",
         barmode="overlay",
         template="plotly_white",
         height=400,
         xaxis_tickformat="$,.0f",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
     )
 
     return fig

@@ -1134,7 +1134,11 @@ def main() -> None:  # noqa: C901
             # Tornado + Probability side by side
             tc1, tc2 = st.columns(2)
             with tc1:
-                st.subheader("Sensitivity Analysis")
+                st.subheader("What Matters Most?")
+                st.caption(
+                    "Wider bar = bigger impact on the outcome. "
+                    "Green = parameter goes up, Red = goes down."
+                )
                 tornado_fig = create_tornado_chart(mc_results)
                 st.plotly_chart(tornado_fig, use_container_width=True)
             with tc2:
