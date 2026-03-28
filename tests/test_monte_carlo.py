@@ -5,10 +5,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+import matplotlib
+
+matplotlib.use("Agg")  # Non-interactive backend for testing
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
 from simulator.engine import calculate_scenarios as deterministic_engine
+from simulator.mc_visualization import create_spaghetti_chart
 from simulator.models import MonteCarloConfig, MonteCarloResults, SimulationConfig
 from simulator.monte_carlo import (
     _compute_sensitivity,
@@ -673,3 +678,66 @@ class TestRunMonteCarlo:
         # All final differences should be nearly the same
         diffs = results.final_differences
         assert np.std(diffs) < 1.0  # Near-zero variance
+
+
+class TestSpaghettiChart:
+    """Tests for the spaghetti chart visualization."""
+
+    @pytest.fixture()
+    def mc_results(self):
+        """Return MC results for visualization tests.
+
+        Returns
+        -------
+        MonteCarloResults
+            Results from a 50-sim, 10-year MC run.
+
+        Examples
+        --------
+        .. code-block:: python
+
+            fig = create_spaghetti_chart(mc_results)
+
+        """
+        config = SimulationConfig(
+            duration_years=10,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+        )
+        mc_config = MonteCarloConfig(n_simulations=50, seed=42)
+        return run_monte_carlo(config, mc_config)
+
+    def test_returns_figure(self, mc_results):
+        """Test that function returns a matplotlib Figure."""
+        fig = create_spaghetti_chart(mc_results)
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+    def test_has_two_axes(self, mc_results):
+        """Test that figure has main plot and marginal histogram."""
+        fig = create_spaghetti_chart(mc_results)
+        axes = fig.get_axes()
+        # Main axis + marginal axis = 2
+        assert len(axes) >= 2
+        plt.close(fig)
+
+    def test_main_axis_has_lines(self, mc_results):
+        """Test that main axis contains line paths."""
+        fig = create_spaghetti_chart(mc_results)
+        ax_main = fig.get_axes()[0]
+        # Should have at least n_simulations lines + median + zero line
+        assert len(ax_main.get_lines()) >= mc_results.n_simulations
+        plt.close(fig)
+
+    def test_figure_can_be_saved(self, mc_results, tmp_path):
+        """Test that figure can be saved to a file."""
+        fig = create_spaghetti_chart(mc_results)
+        save_path = tmp_path / "spaghetti.png"
+        fig.savefig(save_path, dpi=72)
+        assert save_path.exists()
+        assert save_path.stat().st_size > 0
+        plt.close(fig)
