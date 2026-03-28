@@ -975,6 +975,12 @@ def main() -> None:  # noqa: C901
 
         # MC settings in an expander (on the tab, not sidebar)
         with st.expander("Tune Parameters", expanded=False):
+            st.caption(
+                "Control how much randomness the simulation uses. "
+                "**Std (standard deviation)** sets how much each rate "
+                "can vary year-to-year around your chosen base values "
+                "in the sidebar."
+            )
             mc_col1, mc_col2 = st.columns(2)
             with mc_col1:
                 mc_n_sims = st.slider(
@@ -983,7 +989,7 @@ def main() -> None:  # noqa: C901
                     max_value=2000,
                     value=500,
                     step=50,
-                    help="More simulations = smoother results, slower",
+                    help="More simulations = smoother results, slower.",
                 )
                 mc_seed = st.number_input(
                     "Random Seed",
@@ -991,7 +997,25 @@ def main() -> None:  # noqa: C901
                     max_value=99999,
                     value=42,
                     step=1,
-                    help="Change for different random outcomes",
+                    help=(
+                        "Controls the random number generator. Same seed "
+                        "= same results. Change it to see a different set "
+                        "of random outcomes."
+                    ),
+                )
+                mc_corr = st.slider(
+                    "Property–Equity Correlation",
+                    min_value=0.0,
+                    max_value=0.8,
+                    value=0.3,
+                    step=0.1,
+                    help=(
+                        "How closely property and stock markets move "
+                        "together. 0 = independent, 0.3 = weakly linked "
+                        "(default, matches historical data), 0.8 = move "
+                        "in lockstep. Higher correlation means crashes "
+                        "hit both assets simultaneously."
+                    ),
                 )
             with mc_col2:
                 mc_prop_std = st.slider(
@@ -1000,6 +1024,13 @@ def main() -> None:  # noqa: C901
                     max_value=15.0,
                     value=5.0,
                     step=0.5,
+                    help=(
+                        f"Year-to-year volatility around your "
+                        f"{prop_appreciation}% base rate. At 5%, annual "
+                        f"appreciation typically ranges from "
+                        f"{prop_appreciation - 10:.1f}% to "
+                        f"{prop_appreciation + 10:.1f}% (±2 std)."
+                    ),
                 )
                 mc_eq_std = st.slider(
                     "Equity Growth Std (%)",
@@ -1007,6 +1038,13 @@ def main() -> None:  # noqa: C901
                     max_value=15.0,
                     value=5.0,
                     step=0.5,
+                    help=(
+                        f"Year-to-year volatility around your "
+                        f"{equity_growth}% base CAGR. At 5%, annual "
+                        f"returns typically range from "
+                        f"{equity_growth - 10:.1f}% to "
+                        f"{equity_growth + 10:.1f}% (±2 std)."
+                    ),
                 )
                 mc_rent_std = st.slider(
                     "Rent Inflation Std (%)",
@@ -1014,13 +1052,13 @@ def main() -> None:  # noqa: C901
                     max_value=5.0,
                     value=1.5,
                     step=0.1,
-                )
-                mc_corr = st.slider(
-                    "Appreciation-Equity Correlation",
-                    min_value=-1.0,
-                    max_value=1.0,
-                    value=0.3,
-                    step=0.1,
+                    help=(
+                        f"Year-to-year volatility around your "
+                        f"{rent_inflation}% base rate. At 1.5%, annual "
+                        f"inflation typically ranges from "
+                        f"{rent_inflation - 3:.1f}% to "
+                        f"{rent_inflation + 3:.1f}% (±2 std)."
+                    ),
                 )
 
         # Run button
@@ -1062,11 +1100,17 @@ def main() -> None:  # noqa: C901
                     help="Median (Buy - Rent) across simulations",
                 )
             with mc_m3:
+
+                def _fmt_dollar(val: float) -> str:
+                    if val < 0:
+                        return f"-${abs(val):,.0f}"
+                    return f"${val:,.0f}"
+
                 st.metric(
                     "90% Range",
                     (
-                        f"${mc_results.p5_difference:,.0f} to "
-                        f"${mc_results.p95_difference:,.0f}"
+                        f"{_fmt_dollar(mc_results.p5_difference)}  to  "
+                        f"{_fmt_dollar(mc_results.p95_difference)}"
                     ),
                     help="5th to 95th percentile of outcomes",
                 )
