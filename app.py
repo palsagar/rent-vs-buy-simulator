@@ -1100,19 +1100,16 @@ def main() -> None:  # noqa: C901
                     help="Median (Buy - Rent) across simulations",
                 )
             with mc_m3:
-
-                def _fmt_dollar(val: float) -> str:
-                    if val < 0:
-                        return f"-${abs(val):,.0f}"
-                    return f"${val:,.0f}"
-
-                st.metric(
-                    "90% Range",
-                    (
-                        f"{_fmt_dollar(mc_results.p5_difference)}  to  "
-                        f"{_fmt_dollar(mc_results.p95_difference)}"
-                    ),
-                    help="5th to 95th percentile of outcomes",
+                p5 = mc_results.p5_difference
+                p95 = mc_results.p95_difference
+                p5_str = f"-${abs(p5):,.0f}" if p5 < 0 else f"${p5:,.0f}"
+                p95_str = f"-${abs(p95):,.0f}" if p95 < 0 else f"${p95:,.0f}"
+                st.markdown(
+                    "<p style='font-size:0.85rem;color:#808495;margin-bottom:0;'>"
+                    "90% Range</p>"
+                    f"<p style='font-size:1.75rem;font-weight:700;"
+                    f"margin-top:0;'>{p5_str} to {p95_str}</p>",
+                    unsafe_allow_html=True,
                 )
 
             st.divider()
