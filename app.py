@@ -14,6 +14,11 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from simulator.engine import calculate_scenarios
+from simulator.explainers import (
+    inject_explainer_css,
+    render_guide_panel,
+    show_welcome_modal,
+)
 from simulator.models import SimulationConfig, SimulationResults
 from simulator.scenario_manager import (
     ScenarioManager,
@@ -325,8 +330,20 @@ def main() -> None:  # noqa: C901
         page_icon="🏠",
     )
 
-    # Title and description
-    st.title("🏠 Financial Simulator: Buy vs. Rent")
+    # Inject custom CSS for explainer components
+    inject_explainer_css()
+
+    # Show welcome modal on first visit
+    show_welcome_modal()
+
+    # Title with guide toggle button
+    title_col, btn_col = st.columns([20, 1])
+    with title_col:
+        st.title("🏠 Financial Simulator: Buy vs. Rent")
+    with btn_col:
+        st.write("")  # vertical spacer to align with title
+        if st.button("?", help="Learn how this simulator works"):
+            st.session_state.show_guide = not st.session_state.get("show_guide", False)
 
     # GitHub star link
     st.markdown(
@@ -343,13 +360,8 @@ def main() -> None:  # noqa: C901
         unsafe_allow_html=True,
     )
 
-    st.markdown("""
-    Compare capital allocation strategies over time:
-    - **Strategy A (Buy):** Purchase property with a mortgage
-    - **Strategy B (Rent + Invest):** Rent and invest the down payment in equities
-    - **Strategy C (Rent + Invest Savings):** Rent, invest down payment at a
-      configurable rate, invest monthly savings
-    """)
+    # Expandable guide panel (shown when "?" is toggled)
+    render_guide_panel()
 
     # Check for scenario to load
     load_params = st.session_state.get("load_scenario", None)
@@ -957,34 +969,6 @@ def main() -> None:  # noqa: C901
     - **Scenario C** available when mortgage payment > rent
     - No taxes on investment gains for the rent scenario
     """)
-
-    with st.expander("ℹ️ About This Tool"):
-        st.markdown("""
-        This simulation engine helps compare three financial strategies:
-
-        **Strategy A (Buy):** You purchase a property with a mortgage. Outflows
-        include the down payment, closing costs, monthly mortgage payments,
-        property tax, insurance, and maintenance. Your asset is the property value.
-
-        **Strategy B (Rent + Invest):** You rent and invest the down payment
-        into a diversified equity portfolio. Your outflows are rent payments.
-        Your asset is the investment portfolio.
-
-        **Strategy C (Rent + Invest Savings):** Available when mortgage > rent.
-        You rent and invest the down payment at a configurable rate (e.g. money
-        market fund or short-term bonds). Monthly savings (mortgage - rent) are
-        invested at the same CAGR as Strategy B.
-        Your asset is invested down payment + savings portfolio.
-        Outflows are rent payments.
-
-        The **Net Value** metric (Asset - Outflows) is the key decision metric.
-
-        **Features:** Tax benefits (mortgage interest deduction, capital gains
-        exclusion), cost breakdown analysis, scenario comparison, PDF report
-        generation.
-
-        **Developed using:** Python, NumPy, Pandas, Plotly, and Streamlit
-        """)
 
     # Privacy and hosting notice
     st.caption(
