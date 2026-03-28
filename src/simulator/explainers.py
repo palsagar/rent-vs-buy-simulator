@@ -80,3 +80,82 @@ def inject_explainer_css() -> None:
         inject_explainer_css()
     """
     st.markdown(_EXPLAINER_CSS, unsafe_allow_html=True)
+
+
+# -- Welcome modal ---------------------------------------------------------
+
+_WELCOME_MODAL_HTML = """\
+<div style="text-align: center; margin-bottom: 16px;">
+    <p style="color: #888; font-size: 0.95rem; margin: 0;">
+        Compare capital allocation strategies over time
+    </p>
+</div>
+<p style="color: #ccc; font-size: 0.95rem; line-height: 1.6; margin-bottom: 20px;">
+    Should you buy a home or rent and invest the difference? This simulator
+    models <strong style="color: #fff;">three financial strategies</strong>
+    side-by-side so you can compare outcomes with your own numbers.
+</p>
+<div class="explainer-card explainer-card--a">
+    <span class="explainer-badge explainer-badge--a">A</span>
+    <div>
+        <strong style="color: #4ade80;">Buy</strong>
+        <p>Purchase property with a mortgage. Your asset is the home value;
+        outflows include mortgage payments, taxes, insurance, and
+        maintenance.</p>
+    </div>
+</div>
+<div class="explainer-card explainer-card--b">
+    <span class="explainer-badge explainer-badge--b">B</span>
+    <div>
+        <strong style="color: #60a5fa;">Rent + Invest</strong>
+        <p>Rent and invest the full down payment in equities. Your asset is
+        the investment portfolio; outflows are rent payments.</p>
+    </div>
+</div>
+<div class="explainer-card explainer-card--c">
+    <span class="explainer-badge explainer-badge--c">C</span>
+    <div>
+        <strong style="color: #c084fc;">Rent + Invest Savings</strong>
+        <p>Rent, invest the down payment conservatively, and invest monthly
+        savings (mortgage &minus; rent) in equities. Available when
+        mortgage &gt; rent.</p>
+    </div>
+</div>
+<div class="explainer-tip">
+    <p><strong style="color: #e2e8f0;">Tip:</strong> Adjust parameters in
+    the sidebar and watch the charts update. The <strong
+    style="color: #e2e8f0;">Net Value</strong> chart is the key decision
+    metric.</p>
+</div>
+"""
+
+
+@st.dialog("Welcome")
+def _welcome_dialog() -> None:
+    """Render the welcome modal content inside a Streamlit dialog."""
+    st.markdown(_WELCOME_MODAL_HTML, unsafe_allow_html=True)
+    if st.button(
+        "Start Exploring", use_container_width=True, type="primary"
+    ):
+        st.session_state.welcome_dismissed = True
+        st.rerun()
+
+
+def show_welcome_modal() -> None:
+    """Show the welcome modal on first visit.
+
+    Displays a dialog explaining the three scenarios and how to use
+    the simulator. Dismissed by clicking "Start Exploring", after
+    which it does not reappear for the rest of the session.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from simulator.explainers import show_welcome_modal
+
+        show_welcome_modal()
+    """
+    # Only show on first visit; session_state persists across reruns
+    if not st.session_state.get("welcome_dismissed", False):
+        _welcome_dialog()
