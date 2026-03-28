@@ -10,7 +10,15 @@ import pytest
 
 from simulator.engine import calculate_scenarios as deterministic_engine
 from simulator.models import MonteCarloConfig, MonteCarloResults, SimulationConfig
-from simulator.monte_carlo import _generate_annual_draws, _simulate_single_path
+from simulator.monte_carlo import (
+    _compute_sensitivity,
+    _generate_annual_draws,
+    _simulate_single_path,
+    run_monte_carlo,
+)
+
+# Floating-point tolerance for comparisons
+_FLOAT_TOLERANCE = 1e-9
 
 
 class TestMonteCarloConfig:
@@ -502,3 +510,166 @@ class TestSimulateSinglePath:
         assert net_buy.shape == (n_years * 12 + 1,)
         assert not np.any(np.isnan(net_buy))
         assert not np.any(np.isnan(net_rent))
+
+
+class TestComputeSensitivity:
+    """Tests for _compute_sensitivity (tornado chart data)."""
+
+    @pytest.fixture()
+    def base_config(self):
+        """Return a standard SimulationConfig.
+
+        Returns
+        -------
+        SimulationConfig
+            A 10-year, $500k property configuration.
+
+        Examples
+        --------
+        .. code-block:: python
+
+            config = base_config
+
+        """
+        return SimulationConfig(
+            duration_years=10,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+        )
+
+    def test_returns_sorted_params(self, base_config):
+        """Test that sensitivity params are sorted by impact range."""
+        params, low, high, _base_val = _compute_sensitivity(base_config)
+        assert len(params) == len(low) == len(high)
+        assert len(params) > 0
+
+        # Should be sorted by descending impact range
+        ranges = np.abs(high - low)
+        for i in range(len(ranges) - 1):
+            assert ranges[i] >= ranges[i + 1] - _FLOAT_TOLERANCE
+
+    def test_base_value_matches_deterministic(self, base_config):
+        """Test that base value matches deterministic engine output."""
+        _, _, _, base_val = _compute_sensitivity(base_config)
+        det_results = deterministic_engine(base_config)
+        expected = det_results.final_net_buy_tax_adjusted - det_results.final_net_rent
+        assert abs(base_val - expected) < 1.0
+
+    def test_known_param_directions(self, base_config):
+        """Test that known params have expected directional effects."""
+        params, low, high, _base_val = _compute_sensitivity(base_config)
+
+        # Higher property appreciation should help buying
+        if "Property Appreciation" in params:
+            idx = params.index("Property Appreciation")
+            assert high[idx] > low[idx]
+
+        # Higher equity growth should help renting
+        if "Equity Growth" in params:
+            idx = params.index("Equity Growth")
+            assert high[idx] < low[idx]
+
+    def test_number_of_params(self, base_config):
+        """Test that we get 8 sensitivity parameters."""
+        params, _low, _high, _base_val = _compute_sensitivity(base_config)
+        assert len(params) == 8
+
+
+class TestRunMonteCarlo:
+    """Tests for the main run_monte_carlo orchestrator."""
+
+    @pytest.fixture()
+    def base_config(self):
+        """Return a standard SimulationConfig for MC runner tests.
+
+        Returns
+        -------
+        SimulationConfig
+            A 10-year, $500k property configuration.
+
+        Examples
+        --------
+        .. code-block:: python
+
+            config = base_config
+
+        """
+        return SimulationConfig(
+            duration_years=10,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+        )
+
+    def test_basic_run(self, base_config):
+        """Test that run_monte_carlo produces valid results."""
+        mc_config = MonteCarloConfig(n_simulations=50, seed=42)
+        results = run_monte_carlo(base_config, mc_config)
+
+        assert isinstance(results, MonteCarloResults)
+        assert results.n_simulations == 50
+        assert results.all_net_buy.shape == (50, 121)
+        assert results.all_net_rent.shape == (50, 121)
+        assert results.all_differences.shape == (50, 121)
+        assert results.final_differences.shape == (50,)
+        assert results.year_arr.shape == (121,)
+
+    def test_buy_wins_pct_in_range(self, base_config):
+        """Test that buy_wins_pct is between 0 and 100."""
+        mc_config = MonteCarloConfig(n_simulations=100, seed=42)
+        results = run_monte_carlo(base_config, mc_config)
+        assert 0 <= results.buy_wins_pct <= 100
+
+    def test_percentiles_ordered(self, base_config):
+        """Test that percentile bands are properly ordered."""
+        mc_config = MonteCarloConfig(n_simulations=200, seed=42)
+        results = run_monte_carlo(base_config, mc_config)
+
+        # At every time step, p5 <= p25 <= p50 <= p75 <= p95
+        for t in range(results.difference_percentiles.shape[1]):
+            vals = results.difference_percentiles[:, t]
+            for i in range(len(vals) - 1):
+                assert vals[i] <= vals[i + 1] + _FLOAT_TOLERANCE
+
+    def test_reproducibility(self, base_config):
+        """Test that same seed produces identical results."""
+        mc_config = MonteCarloConfig(n_simulations=50, seed=99)
+        r1 = run_monte_carlo(base_config, mc_config)
+        r2 = run_monte_carlo(base_config, mc_config)
+        np.testing.assert_array_equal(r1.final_differences, r2.final_differences)
+
+    def test_sensitivity_populated(self, base_config):
+        """Test that sensitivity analysis data is populated."""
+        mc_config = MonteCarloConfig(n_simulations=50, seed=42)
+        results = run_monte_carlo(base_config, mc_config)
+        assert len(results.sensitivity_params) > 0
+        assert results.sensitivity_low.shape[0] == len(results.sensitivity_params)
+        assert results.sensitivity_high.shape[0] == len(results.sensitivity_params)
+
+    def test_configs_stored_in_results(self, base_config):
+        """Test that base and MC configs are stored in results."""
+        mc_config = MonteCarloConfig(n_simulations=50, seed=42)
+        results = run_monte_carlo(base_config, mc_config)
+        assert results.base_config is base_config
+        assert results.mc_config is mc_config
+
+    def test_zero_std_produces_identical_paths(self, base_config):
+        """Test that zero stds produce near-identical final values."""
+        mc_config = MonteCarloConfig(
+            n_simulations=20,
+            seed=42,
+            property_appreciation_std=0.0,
+            equity_growth_std=0.0,
+            rent_inflation_std=0.0,
+        )
+        results = run_monte_carlo(base_config, mc_config)
+        # All final differences should be nearly the same
+        diffs = results.final_differences
+        assert np.std(diffs) < 1.0  # Near-zero variance
