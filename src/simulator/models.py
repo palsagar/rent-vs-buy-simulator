@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
 
 
@@ -288,3 +289,208 @@ class SimulationResults:
     capital_gains_tax_saved: float = 0.0
     final_net_buy_tax_adjusted: float = 0.0
     tax_adjusted_difference: float = 0.0
+
+
+@dataclass
+class MonteCarloConfig:
+    """Configuration for Monte Carlo uncertainty analysis.
+
+    Controls the number of simulations, random seed, which parameters
+    to randomize, their standard deviations (in percentage points),
+    and the correlation between property appreciation and equity growth.
+
+    Parameters
+    ----------
+    n_simulations : int
+        Number of Monte Carlo paths to simulate. Default is 500.
+    seed : int | None
+        Random seed for reproducibility. None for non-deterministic.
+        Default is 42.
+    randomize_property_appreciation : bool
+        Whether to randomize annual property appreciation. Default True.
+    property_appreciation_std : float
+        Standard deviation (in percentage points) for property
+        appreciation draws. Default is 5.0.
+    randomize_equity_growth : bool
+        Whether to randomize annual equity growth. Default True.
+    equity_growth_std : float
+        Standard deviation (in percentage points) for equity growth
+        draws. Default is 5.0.
+    randomize_rent_inflation : bool
+        Whether to randomize annual rent inflation. Default True.
+    rent_inflation_std : float
+        Standard deviation (in percentage points) for rent inflation
+        draws. Default is 1.5.
+    appreciation_equity_correlation : float
+        Pearson correlation between property appreciation and equity
+        growth annual draws. Default is 0.3.
+
+    Raises
+    ------
+    ValueError
+        If n_simulations is not positive, any std is negative, or
+        correlation is outside [-1, 1].
+
+    Examples
+    --------
+    Create a Monte Carlo configuration with defaults:
+
+    .. code-block:: python
+
+        from simulator.models import MonteCarloConfig
+
+        mc_config = MonteCarloConfig()
+        print(mc_config.n_simulations)  # 500
+
+    """
+
+    n_simulations: int = 500
+    seed: int | None = 42
+    randomize_property_appreciation: bool = True
+    property_appreciation_std: float = 5.0
+    randomize_equity_growth: bool = True
+    equity_growth_std: float = 5.0
+    randomize_rent_inflation: bool = True
+    rent_inflation_std: float = 1.5
+    appreciation_equity_correlation: float = 0.3
+
+    def __post_init__(self) -> None:
+        """Validate Monte Carlo configuration parameters.
+
+        Raises
+        ------
+        ValueError
+            If any parameter fails validation.
+
+        Examples
+        --------
+        Validation runs automatically on creation:
+
+        .. code-block:: python
+
+            from simulator.models import MonteCarloConfig
+
+            mc = MonteCarloConfig(n_simulations=1000)
+
+        """
+        if self.n_simulations <= 0:
+            raise ValueError(
+                f"n_simulations must be positive (got {self.n_simulations})."
+            )
+        if self.property_appreciation_std < 0:
+            raise ValueError(
+                "property_appreciation_std must be non-negative "
+                f"(got {self.property_appreciation_std})."
+            )
+        if self.equity_growth_std < 0:
+            raise ValueError(
+                "equity_growth_std must be non-negative "
+                f"(got {self.equity_growth_std})."
+            )
+        if self.rent_inflation_std < 0:
+            raise ValueError(
+                "rent_inflation_std must be non-negative "
+                f"(got {self.rent_inflation_std})."
+            )
+        if not (-1 <= self.appreciation_equity_correlation <= 1):
+            raise ValueError(
+                "appreciation_equity_correlation must be "
+                "between -1 and 1 "
+                f"(got {self.appreciation_equity_correlation})."
+            )
+
+
+@dataclass
+class MonteCarloResults:
+    """Results from Monte Carlo uncertainty analysis.
+
+    Contains per-simulation final values, full time-series paths for
+    spaghetti charts, percentile bands, summary statistics, and
+    sensitivity analysis data for tornado charts.
+
+    Parameters
+    ----------
+    final_net_buy : np.ndarray
+        Final net buy value per simulation. Shape: (n_simulations,).
+    final_net_rent : np.ndarray
+        Final net rent value per simulation. Shape: (n_simulations,).
+    final_differences : np.ndarray
+        Final (net_buy - net_rent) per simulation. Shape:
+        (n_simulations,).
+    all_net_buy : np.ndarray
+        Full net buy paths. Shape: (n_simulations, n_months+1).
+    all_net_rent : np.ndarray
+        Full net rent paths. Shape: (n_simulations, n_months+1).
+    all_differences : np.ndarray
+        Full difference paths. Shape: (n_simulations, n_months+1).
+    year_arr : np.ndarray
+        Shared time axis in years. Shape: (n_months+1,).
+    percentile_levels : list[int]
+        Percentile levels computed (e.g. [5, 25, 50, 75, 95]).
+    difference_percentiles : np.ndarray
+        Percentiles of differences over time. Shape:
+        (len(percentile_levels), n_months+1).
+    buy_wins_pct : float
+        Percentage of simulations where buying wins (0-100).
+    median_difference : float
+        Median final difference across simulations.
+    p5_difference : float
+        5th percentile of final differences.
+    p95_difference : float
+        95th percentile of final differences.
+    sensitivity_params : list[str]
+        Parameter names for tornado chart.
+    sensitivity_low : np.ndarray
+        Final difference when each param is set to mean - 1 std.
+    sensitivity_high : np.ndarray
+        Final difference when each param is set to mean + 1 std.
+    sensitivity_base : float
+        Base-case final difference (deterministic).
+    base_config : SimulationConfig
+        The base configuration used.
+    mc_config : MonteCarloConfig
+        The Monte Carlo configuration used.
+    n_simulations : int
+        Number of simulations that were run.
+
+    Examples
+    --------
+    Access summary statistics from results:
+
+    .. code-block:: python
+
+        from simulator.monte_carlo import run_monte_carlo
+        from simulator.models import SimulationConfig, MonteCarloConfig
+
+        config = SimulationConfig(
+            duration_years=10, property_price=500000,
+            down_payment_pct=20, mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0, monthly_rent=2000,
+        )
+        mc_config = MonteCarloConfig(n_simulations=100)
+        results = run_monte_carlo(config, mc_config)
+        print(f"Buy wins {results.buy_wins_pct:.1f}% of the time")
+
+    """
+
+    final_net_buy: np.ndarray
+    final_net_rent: np.ndarray
+    final_differences: np.ndarray
+    all_net_buy: np.ndarray
+    all_net_rent: np.ndarray
+    all_differences: np.ndarray
+    year_arr: np.ndarray
+    percentile_levels: list[int]
+    difference_percentiles: np.ndarray
+    buy_wins_pct: float
+    median_difference: float
+    p5_difference: float
+    p95_difference: float
+    sensitivity_params: list[str]
+    sensitivity_low: np.ndarray
+    sensitivity_high: np.ndarray
+    sensitivity_base: float
+    base_config: SimulationConfig
+    mc_config: MonteCarloConfig
+    n_simulations: int
