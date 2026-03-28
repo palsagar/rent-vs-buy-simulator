@@ -407,11 +407,12 @@ class TestSimulateSinglePath:
         eq_rates = np.full(n_years, 7.0)
         rent_rates = np.full(n_years, 3.0)
 
-        net_buy, net_rent = _simulate_single_path(
+        net_buy, net_rent, end_adj = _simulate_single_path(
             base_config, prop_rates, eq_rates, rent_rates
         )
         assert net_buy.shape == (n_months + 1,)
         assert net_rent.shape == (n_months + 1,)
+        assert isinstance(end_adj, float)
 
     def test_initial_values(self, base_config):
         """Test that initial net values are correct."""
@@ -420,7 +421,7 @@ class TestSimulateSinglePath:
         eq_rates = np.full(n_years, 7.0)
         rent_rates = np.full(n_years, 3.0)
 
-        net_buy, net_rent = _simulate_single_path(
+        net_buy, net_rent, _end_adj = _simulate_single_path(
             base_config, prop_rates, eq_rates, rent_rates
         )
         # At t=0: net_buy = home_value - down_payment - buyer_closing
@@ -448,18 +449,16 @@ class TestSimulateSinglePath:
         eq_rates = np.full(n_years, base_config.equity_growth_annual)
         rent_rates = np.full(n_years, base_config.rent_inflation_rate * 100)
 
-        net_buy, net_rent = _simulate_single_path(
+        net_buy, net_rent, end_adj = _simulate_single_path(
             base_config, prop_rates, eq_rates, rent_rates
         )
 
-        # Compare intermediate net values (before seller closing costs)
-        # The MC path's net_buy[:-1] should match the deterministic
-        # Net_Buy column (both exclude seller closing costs until end)
+        # Compare net values — MC arrays are clean (no end adjustments)
         det_net_buy = det_results.data["Net_Buy"].values
         det_net_rent = det_results.data["Net_Rent"].values
 
-        # Intermediate months should match closely
-        for m in [0, 12, 60, 119]:
+        # All months should match the deterministic engine closely
+        for m in [0, 12, 60, 119, 120]:
             assert abs(net_buy[m] - det_net_buy[m]) < 100, (
                 f"net_buy mismatch at month {m}: "
                 f"MC={net_buy[m]:.2f}, det={det_net_buy[m]:.2f}"
@@ -469,11 +468,12 @@ class TestSimulateSinglePath:
                 f"MC={net_rent[m]:.2f}, det={det_net_rent[m]:.2f}"
             )
 
-        # Final net_buy includes seller closing costs + tax benefits
-        # Should match deterministic final_net_buy_tax_adjusted
-        assert abs(net_buy[-1] - det_results.final_net_buy_tax_adjusted) < 500, (
-            f"Final net_buy mismatch: "
-            f"MC={net_buy[-1]:.2f}, "
+        # End adjustment + final net_buy should match the deterministic
+        # tax-adjusted final value
+        adjusted_final = net_buy[-1] + end_adj
+        assert abs(adjusted_final - det_results.final_net_buy_tax_adjusted) < 500, (
+            f"Adjusted final mismatch: "
+            f"MC={adjusted_final:.2f}, "
             f"det={det_results.final_net_buy_tax_adjusted:.2f}"
         )
 
@@ -488,21 +488,21 @@ class TestSimulateSinglePath:
         prop_low = np.full(n_years, 1.0)
         eq_high = np.full(n_years, 12.0)
         rent_rates = np.full(n_years, 3.0)
-        net_buy_low, net_rent_high = _simulate_single_path(
+        net_buy_low, net_rent_high, adj1 = _simulate_single_path(
             base_config, prop_low, eq_high, rent_rates
         )
 
         # High appreciation, low equity growth
         prop_high = np.full(n_years, 8.0)
         eq_low = np.full(n_years, 2.0)
-        net_buy_high, net_rent_low = _simulate_single_path(
+        net_buy_high, net_rent_low, adj2 = _simulate_single_path(
             base_config, prop_high, eq_low, rent_rates
         )
 
         # When property appreciation is high + equity is low, buy should
-        # do relatively better
-        diff_buy_favored = net_buy_high[-1] - net_rent_low[-1]
-        diff_rent_favored = net_buy_low[-1] - net_rent_high[-1]
+        # do relatively better (include end adjustments for fair comparison)
+        diff_buy_favored = (net_buy_high[-1] + adj2) - net_rent_low[-1]
+        diff_rent_favored = (net_buy_low[-1] + adj1) - net_rent_high[-1]
         assert diff_buy_favored > diff_rent_favored
 
     def test_net_values_monotonicity_not_required(self, base_config):
@@ -513,13 +513,14 @@ class TestSimulateSinglePath:
         eq_rates = np.full(n_years, 7.0)
         rent_rates = np.full(n_years, 3.0)
 
-        net_buy, net_rent = _simulate_single_path(
+        net_buy, net_rent, end_adj = _simulate_single_path(
             base_config, prop_rates, eq_rates, rent_rates
         )
         # Just verify it runs without error and produces valid output
         assert net_buy.shape == (n_years * 12 + 1,)
         assert not np.any(np.isnan(net_buy))
         assert not np.any(np.isnan(net_rent))
+        assert np.isfinite(end_adj)
 
 
 class TestComputeSensitivity:

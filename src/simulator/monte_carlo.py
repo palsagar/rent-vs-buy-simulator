@@ -144,15 +144,18 @@ def _simulate_single_path(
     annual_prop_rates: np.ndarray,
     annual_equity_rates: np.ndarray,
     annual_rent_rates: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, float]:
     """Simulate one MC path with year-varying rates.
 
     Reimplements the full financial math from ``engine.py`` using
     per-year stochastic rates instead of fixed annual rates. The
     mortgage is still fixed-rate (amortization doesn't change).
 
-    Final ``net_buy[-1]`` includes: seller closing costs (subtracted),
-    cumulative tax savings (added), and capital gains tax saved (added).
+    Returns clean time-series arrays (no end-of-period adjustments)
+    plus a scalar ``end_adjustment`` containing the net effect of
+    seller closing costs, cumulative tax savings, and capital gains
+    exclusion. Callers should add ``end_adjustment`` to the final
+    net_buy value for summary statistics only — not for charts.
     Intermediate values ``net_buy[0..n_months-1]`` do NOT include
     seller closing costs (same convention as the deterministic engine's
     ``Net_Buy`` column).
@@ -323,16 +326,15 @@ def _simulate_single_path(
     # --- Seller closing costs ---
     seller_closing = home_value[-1] * (config.closing_cost_seller_pct / 100)
 
-    # --- Net value arrays ---
+    # --- Net value arrays (clean, no end-of-period adjustments) ---
     net_buy = home_value - cum_outflow_buy
     net_rent = equity_value - cum_outflow_rent
 
-    # Apply end-of-period adjustments to the final month only
-    net_buy[-1] = (
-        net_buy[-1] - seller_closing + cumulative_tax_savings + capital_gains_tax_saved
-    )
+    # End-of-period adjustment applied only to summary stats, not charts
+    # (seller closing costs, cumulative tax savings, capital gains exclusion)
+    end_adjustment = -seller_closing + cumulative_tax_savings + capital_gains_tax_saved
 
-    return net_buy, net_rent
+    return net_buy, net_rent, end_adjustment
 
 
 def _compute_sensitivity(
@@ -514,10 +516,11 @@ def run_monte_carlo(
     # Allocate result arrays
     all_net_buy = np.zeros((n_sims, n_points))
     all_net_rent = np.zeros((n_sims, n_points))
+    end_adjustments = np.zeros(n_sims)
 
     # Simulate each path
     for i in range(n_sims):
-        net_buy, net_rent = _simulate_single_path(
+        net_buy, net_rent, end_adj = _simulate_single_path(
             config=base_config,
             annual_prop_rates=draws["property_appreciation"][i],
             annual_equity_rates=draws["equity_growth"][i],
@@ -525,10 +528,14 @@ def run_monte_carlo(
         )
         all_net_buy[i] = net_buy
         all_net_rent[i] = net_rent
+        end_adjustments[i] = end_adj
 
-    # Compute differences
+    # Chart data uses clean time series (no end-of-period kink)
     all_diffs = all_net_buy - all_net_rent
-    final_diffs = all_diffs[:, -1]
+
+    # Summary stats include end-of-period adjustments (seller closing,
+    # tax savings, capital gains) for accurate final comparison
+    final_diffs = all_diffs[:, -1] + end_adjustments
 
     # Time axis
     year_arr = np.arange(n_points) / 12
