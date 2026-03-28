@@ -8,7 +8,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 import numpy as np
 import pytest
 
-from simulator.models import MonteCarloConfig, MonteCarloResults
+from simulator.models import MonteCarloConfig, MonteCarloResults, SimulationConfig
+from simulator.monte_carlo import _generate_annual_draws
 
 
 class TestMonteCarloConfig:
@@ -201,3 +202,148 @@ class TestMonteCarloResults:
         results = self._make_results(n_sims=25, n_months=60)
         assert results.n_simulations == 25
         assert results.all_net_buy.shape[0] == 25
+
+
+class TestGenerateAnnualDraws:
+    """Tests for _generate_annual_draws."""
+
+    @pytest.fixture()
+    def base_config(self):
+        """Return a standard SimulationConfig for MC tests.
+
+        Returns
+        -------
+        SimulationConfig
+            A 10-year, $500k property configuration.
+
+        Examples
+        --------
+        .. code-block:: python
+
+            config = base_config
+
+        """
+        return SimulationConfig(
+            duration_years=10,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+        )
+
+    def test_output_shapes(self, base_config):
+        """Test that output arrays have correct shapes."""
+        mc_config = MonteCarloConfig(n_simulations=50, seed=42)
+        rng = np.random.default_rng(mc_config.seed)
+        draws = _generate_annual_draws(
+            base_config, mc_config, base_config.duration_years, rng
+        )
+        assert draws["property_appreciation"].shape == (50, 10)
+        assert draws["equity_growth"].shape == (50, 10)
+        assert draws["rent_inflation"].shape == (50, 10)
+
+    def test_means_near_base_rates(self, base_config):
+        """Test that mean draws are near the base config rates."""
+        mc_config = MonteCarloConfig(n_simulations=5000, seed=42)
+        rng = np.random.default_rng(mc_config.seed)
+        draws = _generate_annual_draws(
+            base_config, mc_config, base_config.duration_years, rng
+        )
+        # Mean property appreciation should be near 3.0
+        mean_prop = np.mean(draws["property_appreciation"])
+        assert abs(mean_prop - 3.0) < 0.5
+
+        # Mean equity growth should be near 7.0
+        mean_eq = np.mean(draws["equity_growth"])
+        assert abs(mean_eq - 7.0) < 0.5
+
+        # Mean rent inflation should be near 3.0 (config has 0.03 = 3%)
+        mean_rent = np.mean(draws["rent_inflation"])
+        assert abs(mean_rent - 3.0) < 0.5
+
+    def test_correlation_positive(self, base_config):
+        """Test that property and equity draws are positively correlated."""
+        mc_config = MonteCarloConfig(
+            n_simulations=10000,
+            seed=42,
+            appreciation_equity_correlation=0.8,
+        )
+        rng = np.random.default_rng(mc_config.seed)
+        draws = _generate_annual_draws(
+            base_config, mc_config, base_config.duration_years, rng
+        )
+        # Flatten and compute correlation
+        prop_flat = draws["property_appreciation"].flatten()
+        eq_flat = draws["equity_growth"].flatten()
+        corr = np.corrcoef(prop_flat, eq_flat)[0, 1]
+        assert corr > 0.5  # Should be strongly positive
+
+    def test_zero_correlation(self, base_config):
+        """Test that zero correlation produces near-zero correlation."""
+        mc_config = MonteCarloConfig(
+            n_simulations=10000,
+            seed=42,
+            appreciation_equity_correlation=0.0,
+        )
+        rng = np.random.default_rng(mc_config.seed)
+        draws = _generate_annual_draws(
+            base_config, mc_config, base_config.duration_years, rng
+        )
+        prop_flat = draws["property_appreciation"].flatten()
+        eq_flat = draws["equity_growth"].flatten()
+        corr = np.corrcoef(prop_flat, eq_flat)[0, 1]
+        assert abs(corr) < 0.1
+
+    def test_rent_inflation_clamped_non_negative(self, base_config):
+        """Test that rent inflation draws are clamped at zero."""
+        mc_config = MonteCarloConfig(
+            n_simulations=1000,
+            seed=42,
+            rent_inflation_std=10.0,  # High std to force some negatives
+        )
+        rng = np.random.default_rng(mc_config.seed)
+        draws = _generate_annual_draws(
+            base_config, mc_config, base_config.duration_years, rng
+        )
+        assert np.all(draws["rent_inflation"] >= 0)
+
+    def test_disabled_randomization_returns_constant(self, base_config):
+        """Test that disabling randomization returns base rates."""
+        mc_config = MonteCarloConfig(
+            n_simulations=100,
+            seed=42,
+            randomize_property_appreciation=False,
+            randomize_equity_growth=False,
+            randomize_rent_inflation=False,
+        )
+        rng = np.random.default_rng(mc_config.seed)
+        draws = _generate_annual_draws(
+            base_config, mc_config, base_config.duration_years, rng
+        )
+        # All values should be the base rates
+        assert np.allclose(draws["property_appreciation"], 3.0)
+        assert np.allclose(draws["equity_growth"], 7.0)
+        # Rent inflation is stored as 0.03 in config, converted to 3.0 pct
+        assert np.allclose(draws["rent_inflation"], 3.0)
+
+    def test_reproducibility_with_seed(self, base_config):
+        """Test that same seed produces identical draws."""
+        mc_config = MonteCarloConfig(n_simulations=50, seed=123)
+        rng1 = np.random.default_rng(mc_config.seed)
+        draws1 = _generate_annual_draws(
+            base_config, mc_config, base_config.duration_years, rng1
+        )
+        rng2 = np.random.default_rng(mc_config.seed)
+        draws2 = _generate_annual_draws(
+            base_config, mc_config, base_config.duration_years, rng2
+        )
+        np.testing.assert_array_equal(
+            draws1["property_appreciation"],
+            draws2["property_appreciation"],
+        )
+        np.testing.assert_array_equal(
+            draws1["equity_growth"],
+            draws2["equity_growth"],
+        )
