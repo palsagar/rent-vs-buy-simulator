@@ -22,6 +22,8 @@ _EXPLAINER_CSS = """\
 .explainer-card--a { background: #1a2e1a; border-left: 4px solid #4ade80; }
 .explainer-card--b { background: #1a1a2e; border-left: 4px solid #60a5fa; }
 .explainer-card--c { background: #2a1a2e; border-left: 4px solid #c084fc; }
+.explainer-card--mc { background: #1a2a2e; border-left: 4px solid #f59e0b; }
+.explainer-badge--mc { background: #f59e0b; }
 .explainer-badge {
     font-size: 0.75rem;
     font-weight: 700;
@@ -85,20 +87,29 @@ def inject_explainer_css() -> None:
 # -- Welcome modal ---------------------------------------------------------
 
 _WELCOME_MODAL_HTML = """\
-<div style="text-align: center; margin-bottom: 16px;">
-    <p style="color: #888; font-size: 0.95rem; margin: 0;">
+<div style="text-align: center; margin-bottom: 20px;">
+    <div style="font-size: 3rem; margin-bottom: 8px;">🏠</div>
+    <h2 style="color: #fafafa; margin: 0 0 6px; font-size: 1.5rem;">
+        Buy vs. Rent Financial Simulator
+    </h2>
+    <p style="color: #888; font-size: 1rem; margin: 0;">
         Compare capital allocation strategies over time
     </p>
 </div>
-<p style="color: #ccc; font-size: 0.95rem; line-height: 1.6; margin-bottom: 20px;">
+<p style="color: #ccc; font-size: 1rem; line-height: 1.7; margin-bottom: 24px;">
     Should you buy a home or rent and invest the difference? This simulator
     models <strong style="color: #fff;">three financial strategies</strong>
     side-by-side so you can compare outcomes with your own numbers.
 </p>
+
+<h3 style="color: #e2e8f0; font-size: 1rem; margin: 0 0 12px;
+    letter-spacing: 0.05em; text-transform: uppercase;">
+    The Three Strategies
+</h3>
 <div class="explainer-card explainer-card--a">
     <span class="explainer-badge explainer-badge--a">A</span>
     <div>
-        <strong style="color: #4ade80;">Buy</strong>
+        <strong style="color: #4ade80; font-size: 1rem;">Buy</strong>
         <p>Purchase property with a mortgage. Your asset is the home value;
         outflows include mortgage payments, taxes, insurance, and
         maintenance.</p>
@@ -107,7 +118,7 @@ _WELCOME_MODAL_HTML = """\
 <div class="explainer-card explainer-card--b">
     <span class="explainer-badge explainer-badge--b">B</span>
     <div>
-        <strong style="color: #60a5fa;">Rent + Invest</strong>
+        <strong style="color: #60a5fa; font-size: 1rem;">Rent + Invest</strong>
         <p>Rent and invest the full down payment in equities. Your asset is
         the investment portfolio; outflows are rent payments.</p>
     </div>
@@ -115,22 +126,41 @@ _WELCOME_MODAL_HTML = """\
 <div class="explainer-card explainer-card--c">
     <span class="explainer-badge explainer-badge--c">C</span>
     <div>
-        <strong style="color: #c084fc;">Rent + Invest Savings</strong>
+        <strong style="color: #c084fc; font-size: 1rem;">
+            Rent + Invest Savings</strong>
         <p>Rent, invest the down payment conservatively, and invest monthly
         savings (mortgage &minus; rent) in equities. Available when
         mortgage &gt; rent.</p>
     </div>
 </div>
+
+<h3 style="color: #e2e8f0; font-size: 1rem; margin: 24px 0 12px;
+    letter-spacing: 0.05em; text-transform: uppercase;">
+    Uncertainty Analysis
+</h3>
+<div class="explainer-card explainer-card--mc">
+    <span class="explainer-badge explainer-badge--mc">🎲</span>
+    <div>
+        <strong style="color: #f59e0b; font-size: 1rem;">
+            Monte Carlo Simulation</strong>
+        <p>Nobody can predict 30 years of returns. The
+        <em>Uncertainty Analysis</em> tab runs hundreds of simulations
+        with randomized year-by-year returns to show how often buying
+        wins and the range of possible outcomes.</p>
+    </div>
+</div>
+
 <div class="explainer-tip">
     <p><strong style="color: #e2e8f0;">Tip:</strong> Adjust parameters in
     the sidebar and watch the charts update. The <strong
     style="color: #e2e8f0;">Net Value</strong> chart is the key decision
-    metric.</p>
+    metric. For a probabilistic view, try the
+    <strong style="color: #e2e8f0;">Uncertainty Analysis</strong> tab.</p>
 </div>
 """
 
 
-@st.dialog("Welcome")
+@st.dialog("Welcome", width="large")
 def _welcome_dialog() -> None:
     """Render the welcome modal content inside a Streamlit dialog."""
     # Mark as dismissed immediately so closing via X also works
@@ -239,6 +269,25 @@ _GUIDE_SCENARIO_C_HTML = """\
 </p>
 """
 
+_GUIDE_MONTE_CARLO_HTML = """\
+<p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+    The main charts assume growth rates play out exactly as configured.
+    But nobody can predict 30 years of returns. The
+    <strong style="color: #e2e8f0;">Uncertainty Analysis</strong> tab
+    runs hundreds of simulations where property appreciation, equity
+    growth, and rent inflation <strong style="color: #e2e8f0;">vary
+    randomly each year</strong> using log-normal distributions (the
+    standard finance model).
+</p>
+<p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+    Instead of &ldquo;Buy wins by $142K,&rdquo; you see:
+    <strong style="color: #e2e8f0;">&ldquo;Buying wins in 68% of
+    simulations.&rdquo;</strong> The spaghetti chart shows every
+    possible path, and the tornado chart reveals which parameters
+    matter most.
+</p>
+"""
+
 
 def render_guide_panel() -> None:
     """Render the guide accordion when the user has toggled it open.
@@ -268,3 +317,5 @@ def render_guide_panel() -> None:
             st.markdown(_GUIDE_BREAKEVEN_HTML, unsafe_allow_html=True)
         with st.expander("🔒 When is Scenario C Available?"):
             st.markdown(_GUIDE_SCENARIO_C_HTML, unsafe_allow_html=True)
+        with st.expander("🎲 Uncertainty Analysis (Monte Carlo)"):
+            st.markdown(_GUIDE_MONTE_CARLO_HTML, unsafe_allow_html=True)
