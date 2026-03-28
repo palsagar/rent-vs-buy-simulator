@@ -1066,7 +1066,7 @@ requires-dist = [
     { name = "plotly", specifier = ">=5.18.0" },
     { name = "pytest", specifier = ">=7.4.0" },
     { name = "pytest-cov", specifier = ">=4.1.0" },
-    { name = "streamlit", specifier = ">=1.29.0" },
+    { name = "streamlit", specifier = ">=1.37.0" },
 ]
 
 [[package]]
