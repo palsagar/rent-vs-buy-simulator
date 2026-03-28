@@ -10,6 +10,7 @@ from __future__ import annotations
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
 
 from .models import MonteCarloResults
 
@@ -143,4 +144,160 @@ def create_spaghetti_chart(mc_results: MonteCarloResults) -> plt.Figure:
     ax_marginal.tick_params(axis="y", labelleft=False)
 
     fig.tight_layout()
+    return fig
+
+
+def create_tornado_chart(mc_results: MonteCarloResults) -> go.Figure:
+    """Create a tornado (sensitivity) chart.
+
+    Horizontal bar chart showing how each parameter's +/- 1 std
+    perturbation affects the final buy-vs-rent difference. Sorted by
+    impact range (widest at top).
+
+    Parameters
+    ----------
+    mc_results : MonteCarloResults
+        MC results containing ``sensitivity_params``,
+        ``sensitivity_low``, ``sensitivity_high``, and
+        ``sensitivity_base``.
+
+    Returns
+    -------
+    go.Figure
+        Plotly Figure with horizontal bar chart.
+
+    Examples
+    --------
+    Create a tornado chart:
+
+    .. code-block:: python
+
+        from simulator.mc_visualization import create_tornado_chart
+
+        fig = create_tornado_chart(mc_results)
+        fig.show()
+
+    """
+    params = mc_results.sensitivity_params
+    low = mc_results.sensitivity_low
+    high = mc_results.sensitivity_high
+    base = mc_results.sensitivity_base
+
+    # Reverse order so widest bar is at top in horizontal layout
+    params_rev = list(reversed(params))
+    low_rev = low[::-1]
+    high_rev = high[::-1]
+
+    fig = go.Figure()
+
+    # Low-side bars (base to low value)
+    fig.add_trace(
+        go.Bar(
+            y=params_rev,
+            x=low_rev - base,
+            orientation="h",
+            name="Low (-1 std)",
+            marker_color="#e74c3c",
+            hovertemplate=(
+                "%{y}<br>Shift: $%{x:,.0f}<br>Value: $%{customdata:,.0f}<extra></extra>"
+            ),
+            customdata=low_rev,
+        )
+    )
+
+    # High-side bars (base to high value)
+    fig.add_trace(
+        go.Bar(
+            y=params_rev,
+            x=high_rev - base,
+            orientation="h",
+            name="High (+1 std)",
+            marker_color="#2ecc71",
+            hovertemplate=(
+                "%{y}<br>Shift: $%{x:,.0f}<br>Value: $%{customdata:,.0f}<extra></extra>"
+            ),
+            customdata=high_rev,
+        )
+    )
+
+    fig.update_layout(
+        title="Sensitivity Analysis: Impact on Buy vs. Rent Difference",
+        xaxis_title="Change from Base Case ($)",
+        barmode="overlay",
+        template="plotly_white",
+        height=400,
+        xaxis_tickformat="$,.0f",
+    )
+
+    return fig
+
+
+def create_probability_chart(
+    mc_results: MonteCarloResults,
+) -> go.Figure:
+    """Create a probability-over-time chart.
+
+    Line chart showing the fraction of simulations where buying
+    beats renting at each point in time.
+
+    Parameters
+    ----------
+    mc_results : MonteCarloResults
+        MC results containing ``all_differences`` and ``year_arr``.
+
+    Returns
+    -------
+    go.Figure
+        Plotly Figure with probability line and 50% reference.
+
+    Examples
+    --------
+    Create a probability chart:
+
+    .. code-block:: python
+
+        from simulator.mc_visualization import create_probability_chart
+
+        fig = create_probability_chart(mc_results)
+        fig.show()
+
+    """
+    years = mc_results.year_arr
+    all_diffs = mc_results.all_differences
+
+    # Fraction of sims where buy wins at each month
+    buy_wins_frac = np.mean(all_diffs > 0, axis=0) * 100
+
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Scatter(
+            x=years,
+            y=buy_wins_frac,
+            mode="lines",
+            name="P(Buy Wins)",
+            line=dict(color="#3498db", width=3),
+            hovertemplate=("Year %{x:.1f}<br>%{y:.1f}% chance buy wins<extra></extra>"),
+        )
+    )
+
+    # 50% reference line
+    fig.add_hline(
+        y=50,
+        line_dash="dash",
+        line_color="gray",
+        opacity=0.7,
+        annotation_text="50%",
+        annotation_position="bottom right",
+    )
+
+    fig.update_layout(
+        title="Probability of Buying Winning Over Time",
+        xaxis_title="Years",
+        yaxis_title="Probability Buy Wins (%)",
+        yaxis_range=[0, 100],
+        template="plotly_white",
+        height=400,
+    )
+
     return fig

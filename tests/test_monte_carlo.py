@@ -10,10 +10,15 @@ import matplotlib
 matplotlib.use("Agg")  # Non-interactive backend for testing
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
 import pytest
 
 from simulator.engine import calculate_scenarios as deterministic_engine
-from simulator.mc_visualization import create_spaghetti_chart
+from simulator.mc_visualization import (
+    create_probability_chart,
+    create_spaghetti_chart,
+    create_tornado_chart,
+)
 from simulator.models import MonteCarloConfig, MonteCarloResults, SimulationConfig
 from simulator.monte_carlo import (
     _compute_sensitivity,
@@ -741,3 +746,112 @@ class TestSpaghettiChart:
         assert save_path.exists()
         assert save_path.stat().st_size > 0
         plt.close(fig)
+
+
+class TestTornadoChart:
+    """Tests for the tornado chart visualization."""
+
+    @pytest.fixture()
+    def mc_results(self):
+        """Return MC results for tornado chart tests.
+
+        Returns
+        -------
+        MonteCarloResults
+            Results from a 50-sim, 10-year MC run.
+
+        Examples
+        --------
+        .. code-block:: python
+
+            fig = create_tornado_chart(mc_results)
+
+        """
+        config = SimulationConfig(
+            duration_years=10,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+        )
+        mc_config = MonteCarloConfig(n_simulations=50, seed=42)
+        return run_monte_carlo(config, mc_config)
+
+    def test_returns_plotly_figure(self, mc_results):
+        """Test that function returns a Plotly Figure."""
+        fig = create_tornado_chart(mc_results)
+        assert isinstance(fig, go.Figure)
+
+    def test_has_traces(self, mc_results):
+        """Test that tornado chart has bar traces."""
+        fig = create_tornado_chart(mc_results)
+        # Should have 2 traces: low and high bars
+        assert len(fig.data) == 2
+
+    def test_bar_count_matches_params(self, mc_results):
+        """Test that number of bars matches number of params."""
+        fig = create_tornado_chart(mc_results)
+        n_params = len(mc_results.sensitivity_params)
+        # Each trace should have n_params bars
+        assert len(fig.data[0].y) == n_params
+
+
+class TestProbabilityChart:
+    """Tests for the probability-over-time chart."""
+
+    @pytest.fixture()
+    def mc_results(self):
+        """Return MC results for probability chart tests.
+
+        Returns
+        -------
+        MonteCarloResults
+            Results from a 100-sim, 10-year MC run.
+
+        Examples
+        --------
+        .. code-block:: python
+
+            fig = create_probability_chart(mc_results)
+
+        """
+        config = SimulationConfig(
+            duration_years=10,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2000,
+        )
+        mc_config = MonteCarloConfig(n_simulations=100, seed=42)
+        return run_monte_carlo(config, mc_config)
+
+    def test_returns_plotly_figure(self, mc_results):
+        """Test that function returns a Plotly Figure."""
+        fig = create_probability_chart(mc_results)
+        assert isinstance(fig, go.Figure)
+
+    def test_probability_values_in_range(self, mc_results):
+        """Test that probability values are between 0 and 100."""
+        fig = create_probability_chart(mc_results)
+        # The first trace should be the probability line
+        y_values = fig.data[0].y
+        assert all(0 <= v <= 100 for v in y_values)
+
+    def test_has_50_percent_reference(self, mc_results):
+        """Test that chart has a 50% reference line."""
+        fig = create_probability_chart(mc_results)
+        # Check layout for horizontal line shapes
+        shapes = fig.layout.shapes
+        has_50_line = any(hasattr(s, "y0") and s.y0 == 50 for s in shapes)
+        assert has_50_line
+
+    def test_x_axis_matches_years(self, mc_results):
+        """Test that x-axis spans the simulation duration."""
+        fig = create_probability_chart(mc_results)
+        x_values = fig.data[0].x
+        assert x_values[0] == pytest.approx(0.0, abs=0.1)
+        assert x_values[-1] == pytest.approx(10.0, abs=0.1)
