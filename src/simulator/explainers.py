@@ -134,9 +134,7 @@ _WELCOME_MODAL_HTML = """\
 def _welcome_dialog() -> None:
     """Render the welcome modal content inside a Streamlit dialog."""
     st.markdown(_WELCOME_MODAL_HTML, unsafe_allow_html=True)
-    if st.button(
-        "Start Exploring", use_container_width=True, type="primary"
-    ):
+    if st.button("Start Exploring", use_container_width=True, type="primary"):
         st.session_state.welcome_dismissed = True
         st.rerun()
 
@@ -159,3 +157,113 @@ def show_welcome_modal() -> None:
     # Only show on first visit; session_state persists across reruns
     if not st.session_state.get("welcome_dismissed", False):
         _welcome_dialog()
+
+
+# -- Guide panel -----------------------------------------------------------
+
+_GUIDE_SCENARIOS_HTML = """\
+<div class="explainer-card explainer-card--a">
+    <span class="explainer-badge explainer-badge--a">A</span>
+    <div>
+        <strong style="color: #4ade80;">Buy</strong>
+        <p>You purchase property with a mortgage. Your asset is the home
+        value. Outflows include the down payment, closing costs, monthly
+        mortgage payments, property tax, insurance, and maintenance.</p>
+    </div>
+</div>
+<div class="explainer-card explainer-card--b">
+    <span class="explainer-badge explainer-badge--b">B</span>
+    <div>
+        <strong style="color: #60a5fa;">Rent + Invest</strong>
+        <p>You rent and invest the full down payment into a diversified
+        equity portfolio. Your asset is the investment portfolio. Outflows
+        are rent payments.</p>
+    </div>
+</div>
+<div class="explainer-card explainer-card--c">
+    <span class="explainer-badge explainer-badge--c">C</span>
+    <div>
+        <strong style="color: #c084fc;">Rent + Invest Savings</strong>
+        <p>You rent and invest the down payment at a conservative rate
+        (e.g. money market fund). Monthly savings (mortgage &minus; rent)
+        are invested in equities at the same growth rate as Strategy B.
+        Available when mortgage &gt; rent.</p>
+    </div>
+</div>
+"""
+
+_GUIDE_NET_VALUE_HTML = """\
+<p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+    A home appreciating in value looks great — but you're also paying
+    mortgage interest, property tax, insurance, and maintenance.
+    <strong style="color: #e2e8f0;">Net Value</strong> captures the full
+    picture:
+</p>
+<div class="explainer-formula">
+    <code>Net Value = Asset Value − Total Outflows</code>
+</div>
+<p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+    This tells you which strategy actually leaves you wealthier. A scenario
+    can have higher asset growth but <em>lower</em> net value if the costs
+    are steep enough.
+</p>
+"""
+
+_GUIDE_BREAKEVEN_HTML = """\
+<p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+    The breakeven point is the year when
+    <strong style="color: #4ade80;">buying</strong> overtakes
+    <strong style="color: #60a5fa;">renting + investing</strong> in net
+    value. Before this point, the renter is wealthier. After it, the buyer
+    pulls ahead.
+</p>
+<p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+    <strong style="color: #e2e8f0;">No breakeven?</strong> That means one
+    strategy dominates for the entire simulation period. If you're planning
+    to sell before the breakeven year, the dominant strategy may flip.
+</p>
+"""
+
+_GUIDE_SCENARIO_C_HTML = """\
+<p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+    Scenario C only appears when your <strong style="color: #e2e8f0;">
+    monthly mortgage payment is higher than rent</strong>. The difference
+    (mortgage &minus; rent) is the "savings" you invest each month in
+    equities.
+</p>
+<p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+    If rent &ge; mortgage, there are no monthly savings to invest, so
+    Scenario C is disabled. Try increasing the property price, lowering
+    the down payment, or decreasing rent to unlock it.
+</p>
+"""
+
+
+def render_guide_panel() -> None:
+    """Render the guide accordion when the user has toggled it open.
+
+    Checks ``st.session_state.show_guide`` and, when ``True``, renders
+    a bordered container with four expandable topic sections. Does
+    nothing when the guide is hidden.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from simulator.explainers import render_guide_panel
+
+        render_guide_panel()
+    """
+    if not st.session_state.get("show_guide", False):
+        return
+
+    with st.container(border=True):
+        st.markdown("#### 📖 How It Works")
+        with st.expander("🏠 The Three Scenarios"):
+            st.markdown(_GUIDE_SCENARIOS_HTML, unsafe_allow_html=True)
+        with st.expander("📊 Net Value — The Key Metric"):
+            st.markdown(_GUIDE_NET_VALUE_HTML, unsafe_allow_html=True)
+        with st.expander("🎯 Breakeven Point"):
+            st.markdown(_GUIDE_BREAKEVEN_HTML, unsafe_allow_html=True)
+        with st.expander("🔒 When is Scenario C Available?"):
+            st.markdown(_GUIDE_SCENARIO_C_HTML, unsafe_allow_html=True)
