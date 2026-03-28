@@ -1086,29 +1086,33 @@ def main() -> None:  # noqa: C901
         mc_results = st.session_state.get("mc_results")
         if mc_results is not None:
             # Headline metrics
+            def _fmt_dollar(val: float) -> str:
+                return f"-${abs(val):,.0f}" if val < 0 else f"${val:,.0f}"
+
+            _mc_label = "font-size:0.875rem;color:#808495;margin-bottom:-0.25rem;"
+            _mc_value = "font-size:2.25rem;font-weight:700;margin-top:0;"
+
             mc_m1, mc_m2, mc_m3 = st.columns(3)
             with mc_m1:
-                st.metric(
-                    "Buy Wins",
-                    f"{mc_results.buy_wins_pct:.1f}%",
-                    help="Fraction of simulations where buying wins",
+                st.markdown(
+                    f"<p style='{_mc_label}'>Buy Wins</p>"
+                    f"<p style='{_mc_value}'>"
+                    f"{mc_results.buy_wins_pct:.1f}%</p>",
+                    unsafe_allow_html=True,
                 )
             with mc_m2:
-                st.metric(
-                    "Median Difference",
-                    f"${mc_results.median_difference:,.0f}",
-                    help="Median (Buy - Rent) across simulations",
+                st.markdown(
+                    f"<p style='{_mc_label}'>Median Difference</p>"
+                    f"<p style='{_mc_value}'>"
+                    f"${mc_results.median_difference:,.0f}</p>",
+                    unsafe_allow_html=True,
                 )
             with mc_m3:
-                p5 = mc_results.p5_difference
-                p95 = mc_results.p95_difference
-                p5_str = f"-${abs(p5):,.0f}" if p5 < 0 else f"${p5:,.0f}"
-                p95_str = f"-${abs(p95):,.0f}" if p95 < 0 else f"${p95:,.0f}"
                 st.markdown(
-                    "<p style='font-size:0.85rem;color:#808495;margin-bottom:0;'>"
-                    "90% Range</p>"
-                    f"<p style='font-size:1.75rem;font-weight:700;"
-                    f"margin-top:0;'>{p5_str} to {p95_str}</p>",
+                    f"<p style='{_mc_label}'>90% Range</p>"
+                    f"<p style='{_mc_value}'>"
+                    f"{_fmt_dollar(mc_results.p5_difference)} to "
+                    f"{_fmt_dollar(mc_results.p95_difference)}</p>",
                     unsafe_allow_html=True,
                 )
 
