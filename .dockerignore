@@ -4,4 +4,4 @@ __pycache__/
 .git/
 tests/
 *.md
-LICENSE
+!README.md
