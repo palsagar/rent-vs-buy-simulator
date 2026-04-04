@@ -6,14 +6,15 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 # Set working directory
 WORKDIR /app
 
-# Copy dependency and metadata files first (for layer caching)
+# Copy dependency metadata first (for layer caching)
 COPY pyproject.toml uv.lock README.md LICENSE ./
 
-# Create venv and install dependencies
-RUN uv venv /app/.venv && uv pip install --python /app/.venv/bin/python --no-cache .
+# Install dependencies only (cached until pyproject.toml or uv.lock change)
+RUN uv sync --frozen --no-install-project --no-dev
 
-# Copy application code
+# Copy source and install the local package
 COPY src/ ./src/
+RUN uv sync --frozen --no-dev
 
 # Expose Streamlit port
 EXPOSE 8501
