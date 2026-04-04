@@ -1,8 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
-name = "simulator"
-version = "0.1.0"
+name = "rent-vs-buy-simulator"
+version = "1.0.0"
 description = "Real Estate vs. Equity Simulation Engine"
 readme = "README.md"
+license = "MIT"
+authors = [{ name = "Sagar Pal" }]
+keywords = ["real-estate", "rent-vs-buy", "financial-simulation", "mortgage"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Topic :: Office/Business :: Financial",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+]
 requires-python = ">=3.12"
 dependencies = [
     "numpy>=1.26.0",
@@ -10,13 +24,29 @@ dependencies = [
     "pandas>=2.1.0",
     "plotly>=5.18.0",
     "streamlit>=1.37.0",
-    "pytest>=7.4.0",
-    "pytest-cov>=4.1.0",
     "fpdf2>=2.7.0",
     "kaleido>=0.2.0",
     "matplotlib>=3.8.0",
     "aleatory>=0.4.0",
 ]
+
+[project.urls]
+Homepage = "https://rent-or-buy-sim.com"
+Repository = "https://github.com/palsagar/rent-vs-buy-simulator"
+
+[dependency-groups]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.4.0",
+    "ty>=0.0.1a0",
+]
+
+[project.scripts]
+rent-vs-buy = "simulator.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/simulator"]
 
 # Ruff global configuration for linting & formatting
 # --------------------------------------------------------
@@ -55,6 +85,9 @@ indent-style = "space"
 source = ["src/simulator"]
 branch = true
 omit = [
+    "*/app.py",
+    "*/cli.py",
+    "*/explainers.py",
     "*/scenario_manager.py",
     "*/utils.py",
     "*/visualization.py",

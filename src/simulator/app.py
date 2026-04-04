@@ -1,18 +1,13 @@
 """Streamlit application for Real Estate vs. Equity Simulation.
 
 This is the main entry point for the interactive web application.
-Run with: streamlit run app.py
+Run with: rent-vs-buy (after pip install) or streamlit run src/simulator/app.py
 """
 
-import sys
 from datetime import datetime
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import streamlit as st
-
-# Add src to path to import our modules
-sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from simulator.engine import calculate_scenarios
 from simulator.explainers import (

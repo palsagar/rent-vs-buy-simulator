@@ -27,7 +27,9 @@ Basic usage:
 
 """
 
-__version__ = "0.1.0"
+from importlib.metadata import version as _get_version
+
+__version__ = _get_version("rent-vs-buy-simulator")
 
 from .engine import _find_breakeven, _is_close, _is_close_to_zero, calculate_scenarios
 from .models import SimulationConfig, SimulationResults
