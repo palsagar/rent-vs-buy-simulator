@@ -95,4 +95,4 @@ See [FORMULAS.md](FORMULAS.md) for the mathematical reference.
 
 ## License
 
-This project is provided as-is for educational and analytical purposes.
+MIT License. See [LICENSE](LICENSE) for details.

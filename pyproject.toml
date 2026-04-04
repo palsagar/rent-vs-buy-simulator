@@ -7,6 +7,16 @@ name = "rent-vs-buy-simulator"
 version = "1.0.0"
 description = "Real Estate vs. Equity Simulation Engine"
 readme = "README.md"
+license = "MIT"
+authors = [{ name = "Sagar Pal" }]
+keywords = ["real-estate", "rent-vs-buy", "financial-simulation", "mortgage"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Topic :: Office/Business :: Financial",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+]
 requires-python = ">=3.12"
 dependencies = [
     "numpy>=1.26.0",
