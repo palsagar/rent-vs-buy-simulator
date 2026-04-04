@@ -6,9 +6,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 # Set working directory
 WORKDIR /app
 
-# Copy dependency files first (for layer caching)
-COPY pyproject.toml .
-COPY uv.lock .
+# Copy dependency and metadata files first (for layer caching)
+COPY pyproject.toml uv.lock README.md LICENSE ./
 
 # Create venv and install dependencies
 RUN uv venv /app/.venv && uv pip install --python /app/.venv/bin/python --no-cache .
