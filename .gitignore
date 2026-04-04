@@ -159,3 +159,8 @@ Thumbs.db
 
 # Superpowers brainstorm sessions
 .superpowers/
+docs/superpowers/
+
+# Test artifacts
+test-results/
+output/
