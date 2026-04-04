@@ -1,5 +1,9 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
-name = "simulator"
+name = "rent-vs-buy-simulator"
 version = "0.1.0"
 description = "Real Estate vs. Equity Simulation Engine"
 readme = "README.md"
@@ -10,13 +14,25 @@ dependencies = [
     "pandas>=2.1.0",
     "plotly>=5.18.0",
     "streamlit>=1.37.0",
-    "pytest>=7.4.0",
-    "pytest-cov>=4.1.0",
     "fpdf2>=2.7.0",
     "kaleido>=0.2.0",
     "matplotlib>=3.8.0",
     "aleatory>=0.4.0",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.4.0",
+    "ty>=0.0.1a0",
+]
+
+[project.scripts]
+rent-vs-buy = "simulator.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/simulator"]
 
 # Ruff global configuration for linting & formatting
 # --------------------------------------------------------
