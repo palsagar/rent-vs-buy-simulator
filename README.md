@@ -96,7 +96,7 @@ uv pip install -e .
 Start the Streamlit application:
 
 ```bash
-streamlit run app.py
+streamlit run src/simulator/app.py
 ```
 
 The application will open in your browser at `http://localhost:8501`.
@@ -154,7 +154,6 @@ if results.scenario_c_enabled:
 
 ```
 simulator/
-├── app.py                          # Streamlit web application
 ├── pyproject.toml                  # Project dependencies
 ├── README.md                       # This file
 ├── FORMULAS.md                     # Mathematical reference
@@ -291,7 +290,7 @@ The application follows an MVC (Model-View-Controller) pattern:
 
 - **Model** (`models.py`, `engine.py`): Pure calculation logic with NumPy
 - **View** (`visualization.py`): Plotly chart generation
-- **Controller** (`app.py`): Streamlit UI and user interaction
+- **Controller** (`src/simulator/app.py`): Streamlit UI and user interaction
 
 ## Contributing
 
@@ -310,8 +309,8 @@ Contributions are welcome! Here's how to get started:
 5. **Run tests and linting before submitting:**
    ```bash
    uv run pytest tests/ --cov --cov-report=term   # 80% coverage minimum
-   uv run ruff check src/ tests/ app.py            # lint
-   uv run ruff format src/ tests/ app.py           # format
+   uv run ruff check src/ tests/            # lint
+   uv run ruff format src/ tests/           # format
    ```
 6. **Open a pull request** against `main` with a clear description of your changes
 

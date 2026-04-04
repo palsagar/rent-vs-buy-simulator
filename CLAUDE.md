@@ -10,7 +10,7 @@ A Streamlit web app that compares buying property vs. renting and investing in e
 
 ```bash
 # Run the app
-streamlit run app.py
+streamlit run src/simulator/app.py
 
 # Tests
 uv run pytest tests/                        # all tests
@@ -19,9 +19,9 @@ uv run pytest tests/test_engine.py::TestClassName::test_name  # single test
 uv run pytest --cov --cov-report=term        # with coverage (80% min enforced)
 
 # Lint & format
-uv run ruff check src/ tests/ app.py         # lint
-uv run ruff check --fix src/ tests/ app.py   # lint + autofix
-uv run ruff format src/ tests/ app.py        # format
+uv run ruff check src/ tests/         # lint
+uv run ruff check --fix src/ tests/   # lint + autofix
+uv run ruff format src/ tests/        # format
 
 # Setup
 uv venv --seed && uv pip install -e .
@@ -29,9 +29,9 @@ uv venv --seed && uv pip install -e .
 
 ## Architecture
 
-**Data flow:** `User Input (app.py) → SimulationConfig (models.py) → calculate_scenarios (engine.py) → SimulationResults (models.py) → Visualization (visualization.py) / PDF (utils.py)`
+**Data flow:** `User Input (src/simulator/app.py) → SimulationConfig (models.py) → calculate_scenarios (engine.py) → SimulationResults (models.py) → Visualization (visualization.py) / PDF (utils.py)`
 
-- **`app.py`** — Streamlit UI entry point. Sidebar inputs, chart rendering, scenario management. Uses `st.session_state` for state.
+- **`src/simulator/app.py`** — Streamlit UI entry point. Sidebar inputs, chart rendering, scenario management. Uses `st.session_state` for state.
 - **`src/simulator/models.py`** — `SimulationConfig` and `SimulationResults` dataclasses. Validation in `__post_init__`.
 - **`src/simulator/engine.py`** — Pure calculation engine. `calculate_scenarios(config)` returns `SimulationResults`. All time-series math uses NumPy vectorized arrays (no Python loops). Uses `numpy_financial.pmt()`/`pv()` for mortgage amortization.
 - **`src/simulator/visualization.py`** — Plotly chart builders (asset growth, cumulative outflows, net value).
