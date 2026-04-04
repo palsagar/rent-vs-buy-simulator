@@ -1,7 +1,7 @@
 """Streamlit application for Real Estate vs. Equity Simulation.
 
 This is the main entry point for the interactive web application.
-Run with: streamlit run app.py
+Run with: rent-vs-buy (after pip install) or streamlit run src/simulator/app.py
 """
 
 from datetime import datetime

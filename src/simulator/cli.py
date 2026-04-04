@@ -11,7 +11,6 @@ After installing the package:
     rent-vs-buy
 """
 
-import sys
 from pathlib import Path
 
 
@@ -20,5 +19,4 @@ def main() -> None:
     from streamlit.web.cli import main_run
 
     app_path = str(Path(__file__).parent / "app.py")
-    sys.argv = ["streamlit", "run", app_path, "--server.headless=false"]
-    main_run(args=[app_path, "--server.headless=false"])
+    main_run(args=[app_path])

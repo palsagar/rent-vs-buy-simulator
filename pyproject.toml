@@ -20,7 +20,11 @@ dependencies = [
     "aleatory>=0.4.0",
 ]
 
-[project.optional-dependencies]
+[project.urls]
+Homepage = "https://rent-or-buy-sim.com"
+Repository = "https://github.com/palsagar/rent-vs-buy-simulator"
+
+[dependency-groups]
 dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
@@ -71,6 +75,9 @@ indent-style = "space"
 source = ["src/simulator"]
 branch = true
 omit = [
+    "*/app.py",
+    "*/cli.py",
+    "*/explainers.py",
     "*/scenario_manager.py",
     "*/utils.py",
     "*/visualization.py",
