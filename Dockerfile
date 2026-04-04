@@ -20,10 +20,9 @@ RUN uv venv /app/.venv && uv pip install --python /app/.venv/bin/python --no-cac
 
 # Copy application code
 COPY src/ ./src/
-COPY app.py .
 
 # Expose Streamlit port
 EXPOSE 8501
 
 # Run Streamlit
-CMD ["/app/.venv/bin/streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501", "--server.enableCORS=false", "--server.enableXsrfProtection=false"]
+CMD ["/app/.venv/bin/streamlit", "run", "src/simulator/app.py", "--server.address=0.0.0.0", "--server.port=8501", "--server.enableCORS=false", "--server.enableXsrfProtection=false"]
