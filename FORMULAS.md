@@ -194,6 +194,8 @@ basis_buy(t)  = Σ_{m=1}^{t} contrib_buy(m)
 
 ## 6. Taxes
 
+This section documents the app's **Tax primitives** (CONTEXT.md): the deductibility of mortgage interest and property levy, the home-sale capital-gains regime, and the symmetric portfolio capital-gains treatment at exit.
+
 ### Deduction savings (buyer)
 
 Mortgage interest and (capped) property levy paid are deductible at the
@@ -282,7 +284,10 @@ t* = year_i - diff_i × (year_{i+1} - year_i) / (diff_{i+1} - diff_i)
 (If `diff` lands exactly on zero at some month i > 0 rather than crossing
 between two months, the Breakeven is that month's year directly, no
 interpolation needed.) If no sign change occurs across the whole Horizon,
-there is no Breakeven (one strategy dominates throughout).
+there is no Breakeven (one strategy dominates throughout). The search skips
+any trivial t=0 equality, and when a sign change is detected but the
+bracketing values are numerically close, it reports the crossing at the
+earlier point to avoid dividing by a near-zero denominator.
 
 ## 8. Monte Carlo
 
