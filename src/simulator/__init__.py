@@ -31,7 +31,7 @@ from importlib.metadata import version as _get_version
 
 __version__ = _get_version("rent-vs-buy-simulator")
 
-from .engine import _find_breakeven, _is_close, _is_close_to_zero, calculate_scenarios
+from .engine import _find_breakeven, _is_close, _is_close_to_zero
 from .models import SimulationConfig, SimulationResults
 
 __all__ = [
@@ -40,5 +40,4 @@ __all__ = [
     "_find_breakeven",
     "_is_close",
     "_is_close_to_zero",
-    "calculate_scenarios",
 ]
