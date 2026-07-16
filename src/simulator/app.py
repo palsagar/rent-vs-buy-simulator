@@ -4,7 +4,6 @@ This is the main entry point for the interactive web application.
 Run with: rent-vs-buy (after pip install) or streamlit run src/simulator/app.py
 """
 
-import matplotlib.pyplot as plt
 import streamlit as st
 
 from simulator.engine import calculate_scenarios
@@ -13,11 +12,7 @@ from simulator.explainers import (
     render_guide_panel,
     show_welcome_modal,
 )
-from simulator.mc_visualization import (
-    create_probability_chart,
-    create_spaghetti_chart,
-    create_tornado_chart,
-)
+from simulator.mc_visualization import create_fan_chart, create_tornado_chart
 from simulator.models import MonteCarloConfig, SimulationConfig
 from simulator.monte_carlo import run_monte_carlo
 from simulator.visualization import (
@@ -51,7 +46,7 @@ def init_session_state() -> None:
         st.session_state.mc_results = None
 
 
-def main() -> None:  # noqa: C901
+def main() -> None:
     """Run the Streamlit application.
 
     Orchestrates the full UI lifecycle: initialises session state,
@@ -170,22 +165,27 @@ def main() -> None:  # noqa: C901
     # Common parameters
     st.sidebar.subheader("Common Settings")
 
-    default_years = 30
     default_price = 500000
     default_down_pct = p.get("down_pmt_pct", 20)
-    default_mortgage_rate = p.get("mortgage_rate", 4.5)
+    default_mortgage_rate = p.get("mortgage_rate", 6.5)
     default_appreciation = p.get("prop_appreciation", 3.0)
     default_equity_growth = p.get("equity_growth", 7.0)
-    default_rent = 2000
+    default_rent = 2400
     default_rent_inflation = p.get("rent_inflation", 3.0)
 
-    years = st.sidebar.slider(
-        "Duration (Years)",
-        min_value=10,
+    horizon = st.sidebar.slider(
+        "Horizon (Years until you'd sell)",
+        min_value=2,
         max_value=40,
-        value=int(default_years),
+        value=10,
         step=1,
-        help="How many years to simulate",
+        help="How long you expect to stay before selling / moving out",
+    )
+    mortgage_term = st.sidebar.selectbox(
+        "Mortgage Term (Years)",
+        options=[15, 20, 30],
+        index=2,
+        help="Loan amortization period — independent of the horizon",
     )
 
     # Scenario A: Buy
@@ -307,96 +307,66 @@ def main() -> None:  # noqa: C901
             help="Annual inflation rate for insurance and maintenance costs",
         )
         st.divider()
-        tax_bracket = st.selectbox(
-            "Federal Tax Bracket (%)",
-            options=[0, 12, 22, 24, 32, 35, 37],
-            index=3,
-            help="Marginal federal income tax rate for deduction calculations",
-        )
-        enable_mortgage_deduction = st.checkbox(
-            "Enable Mortgage Interest Deduction",
+        interest_deduction = st.checkbox(
+            "Mortgage Interest Deductible",
             value=True,
-            help="Deduct mortgage interest from taxable income",
+            help="Deduct mortgage interest (and capped property levy) "
+            "from taxable income",
         )
-        enable_capital_gains_exclusion = st.checkbox(
-            "Enable Capital Gains Exclusion",
-            value=True,
-            help="Exclude capital gains on primary residence sale (Section 121)",
+        marginal_rate = st.slider(
+            "Marginal Income Tax Rate (%)",
+            0.0,
+            60.0,
+            24.0,
+            1.0,
+            help="Your top income tax rate, used for the deduction",
         )
-        capital_gains_exemption_limit = st.selectbox(
-            "Capital Gains Exemption Limit",
-            options=[250000, 500000],
-            format_func=lambda x: (
-                f"${x:,.0f} ({'Single' if x == 250000 else 'Married'})"
-            ),
-            index=0,
-            help="Maximum capital gains exclusion amount",
+        levy_cap_value = st.number_input(
+            "Levy Deduction Cap ($, 0 = uncapped)",
+            0,
+            50_000,
+            10_000,
+            1_000,
+            help="Cap on deductible property levy (US: SALT cap)",
         )
-        salt_cap = st.number_input(
-            "SALT Deduction Cap ($)",
-            min_value=0,
-            max_value=50000,
-            value=10000,
-            step=1000,
-            help="State and Local Tax deduction cap (set to $0 for pre-2018 behavior)",
+        sale_regime = st.selectbox(
+            "Home-Sale Capital Gains Rule",
+            options=["exempt_amount", "exempt_after_years", "fully_exempt"],
+            format_func=lambda r: {
+                "exempt_amount": "Exempt up to a fixed amount (US §121)",
+                "exempt_after_years": "Exempt after N years of holding",
+                "fully_exempt": "Always exempt (primary residence)",
+            }[r],
+            help="How your jurisdiction taxes the gain when you sell",
         )
-
-    # Calculate preliminary values to determine if Scenario C is available
-    down_payment = prop_price * (down_pmt_pct / 100)
-    loan_amount = prop_price - down_payment
-    monthly_rate = (mortgage_rate / 100) / 12
-    n_months = years * 12
-
-    # Calculate monthly mortgage payment
-    if monthly_rate > 0 and loan_amount > 0:
-        import numpy_financial as npf
-
-        preliminary_monthly_payment = -npf.pmt(monthly_rate, n_months, loan_amount)
-    else:
-        preliminary_monthly_payment = loan_amount / n_months if n_months > 0 else 0
-
-    # Scenario C toggle (only available when mortgage > rent)
-    scenario_c_available = preliminary_monthly_payment > monthly_rent
-
-    st.sidebar.subheader("📈 Scenario C: Rent + Invest Savings")
-    default_down_pmt_investment_rate = 2.5
-    if scenario_c_available:
-        monthly_savings = preliminary_monthly_payment - monthly_rent
-        st.sidebar.caption(
-            f"Monthly mortgage (\\${preliminary_monthly_payment:,.0f}) > "
-            f"Monthly rent (\\${monthly_rent:,.0f})"
+        sale_exempt_amount = st.number_input(
+            "Exempt Gain Amount ($)",
+            0,
+            1_000_000,
+            250_000,
+            50_000,
         )
-        st.sidebar.caption(f"💰 Monthly savings: \\${monthly_savings:,.0f}")
-        show_scenario_c = st.sidebar.checkbox(
-            "Show Scenario C",
-            value=True,
-            help=(
-                "Rent and invest the monthly savings (mortgage - rent) at the "
-                "same CAGR. Down payment invested at the configured rate."
-            ),
+        sale_exempt_years = st.number_input(
+            "Exempt After (Years)",
+            0,
+            30,
+            10,
+            1,
         )
-        down_pmt_investment_rate = st.sidebar.slider(
-            "Down Pmt Investment Rate (% Annual)",
-            min_value=0.0,
-            max_value=10.0,
-            value=float(default_down_pmt_investment_rate),
-            step=0.1,
-            help=(
-                "Annual return on the idle down payment (e.g. money market fund "
-                "or short-term government bonds). Applies to Scenario C only."
-            ),
+        sale_cg_rate = st.slider("Home-Sale CG Rate (%)", 0.0, 40.0, 15.0, 0.5)
+        portfolio_cg_rate = st.slider(
+            "Investment CG Rate (%)",
+            0.0,
+            40.0,
+            15.0,
+            0.5,
+            help="Capital-gains rate on the investment portfolio at exit",
         )
-    else:
-        st.sidebar.caption(
-            f"⚠️ Not available: Monthly rent (\\${monthly_rent:,.0f}) ≥ "
-            f"Monthly mortgage (\\${preliminary_monthly_payment:,.0f})"
-        )
-        show_scenario_c = False
-        down_pmt_investment_rate = 2.5
 
     # Create configuration
     config = SimulationConfig(
-        duration_years=years,
+        horizon_years=horizon,
+        mortgage_term_years=int(mortgage_term),
         property_price=prop_price,
         down_payment_pct=down_pmt_pct,
         mortgage_rate_annual=mortgage_rate,
@@ -406,16 +376,18 @@ def main() -> None:  # noqa: C901
         rent_inflation_rate=rent_inflation / 100,
         closing_cost_buyer_pct=closing_cost_buyer_pct,
         closing_cost_seller_pct=closing_cost_seller_pct,
+        property_tax_rate=property_tax_rate,
         annual_home_insurance=float(annual_home_insurance),
         annual_maintenance_pct=annual_maintenance_pct,
         cost_inflation_rate=cost_inflation_rate / 100,
-        tax_bracket=float(tax_bracket),
-        enable_mortgage_deduction=enable_mortgage_deduction,
-        enable_capital_gains_exclusion=enable_capital_gains_exclusion,
-        capital_gains_exemption_limit=float(capital_gains_exemption_limit),
-        property_tax_rate=property_tax_rate,
-        salt_cap=float(salt_cap),
-        down_payment_investment_rate=down_pmt_investment_rate / 100,
+        interest_deduction_enabled=interest_deduction,
+        marginal_tax_rate_pct=float(marginal_rate),
+        levy_deduction_cap=float(levy_cap_value) if levy_cap_value > 0 else None,
+        sale_cg_regime=sale_regime,
+        sale_cg_exempt_amount=float(sale_exempt_amount),
+        sale_cg_exempt_after_years=int(sale_exempt_years),
+        sale_cg_rate_pct=float(sale_cg_rate),
+        portfolio_cg_rate_pct=float(portfolio_cg_rate),
     )
 
     # Invalidate MC results when base config changes
@@ -434,12 +406,7 @@ def main() -> None:  # noqa: C901
     # Display key metrics at the top
     st.header("📈 Summary Metrics")
 
-    # Determine number of columns based on whether Scenario C is shown
-    if show_scenario_c and results.scenario_c_enabled:
-        col1, col2, col3, col4, col5 = st.columns(5)
-    else:
-        col1, col2, col3 = st.columns(3)
-        col4 = col5 = None
+    col1, col2, col3 = st.columns(3)
 
     with col1:
         st.metric(
@@ -466,45 +433,14 @@ def main() -> None:  # noqa: C901
             help="Positive means buying is better, negative means renting is better",
         )
 
-    if col4 is not None and results.final_net_rent_savings is not None:
-        with col4:
-            diff_a_vs_c = results.final_net_buy - results.final_net_rent_savings
-            delta_color_c = "normal" if diff_a_vs_c > 0 else "inverse"
-            winner_c = "Buy (A)" if diff_a_vs_c > 0 else "Rent+Savings (C)"
-            st.metric(
-                label="Final Net Value: Rent + Savings (C)",
-                value=f"${results.final_net_rent_savings:,.0f}",
-                delta=f"{winner_c} wins",
-                delta_color=delta_color_c,
-                help="Invested down payment + savings portfolio - rent payments",
-            )
-
-    if col5 is not None and results.final_down_payment_value is not None:
-        with col5:
-            dp_initial = prop_price * (down_pmt_pct / 100)
-            dp_gain = results.final_down_payment_value - dp_initial
-            st.metric(
-                label="Down Pmt Final Value (C)",
-                value=f"${results.final_down_payment_value:,.0f}",
-                delta=f"+${dp_gain:,.0f} earned",
-                help="Final value of the invested down payment (Scenario C)",
-            )
+    st.caption(
+        f"Year-1 monthly cost — Buy: ${results.monthly_cost_buy_year1:,.0f} "
+        f"vs Rent: ${results.monthly_cost_rent_year1:,.0f}"
+    )
 
     # Breakeven information
-    breakeven_messages = []
     if results.breakeven_year is not None:
-        breakeven_messages.append(f"**A vs B:** {results.breakeven_year:.1f} years")
-    if (
-        show_scenario_c
-        and results.scenario_c_enabled
-        and results.breakeven_year_vs_rent_savings is not None
-    ):
-        breakeven_messages.append(
-            f"**A vs C:** {results.breakeven_year_vs_rent_savings:.1f} years"
-        )
-
-    if breakeven_messages:
-        st.info("🎯 **Breakeven Points:** " + " | ".join(breakeven_messages))
+        st.info(f"🎯 **Breakeven Point:** {results.breakeven_year:.1f} years")
     else:
         st.info(
             "🎯 **No breakeven point** - One strategy dominates for the entire period."
@@ -532,18 +468,10 @@ def main() -> None:  # noqa: C901
             "This chart shows how your assets grow over time:\n"
             "- **Green line:** Property value (Scenario A)\n"
             "- **Blue line:** Investment portfolio value (Scenario B)\n"
+            "- **Red dashed line:** Remaining mortgage balance"
         )
-        if show_scenario_c and results.scenario_c_enabled:
-            asset_description += (
-                "- **Purple line:** Invested down payment + "
-                "Savings portfolio (Scenario C)\n"
-            )
-        asset_description += "- **Red dashed line:** Remaining mortgage balance"
         st.markdown(asset_description)
-        fig_assets = create_asset_growth_chart(
-            results.data,
-            show_scenario_c=show_scenario_c and results.scenario_c_enabled,
-        )
+        fig_assets = create_asset_growth_chart(results.data)
         st.plotly_chart(fig_assets, use_container_width=True)
 
     with tab2:
@@ -567,19 +495,12 @@ def main() -> None:  # noqa: C901
             "This chart shows the **Net Value** (Asset Value - Cumulative Outflows):\n"
             "- **Green dotted line:** Net value of buying (Scenario A)\n"
             "- **Blue dotted line:** Net value of renting + investing (Scenario B)\n"
+            "- **Markers:** Breakeven points (if they exist)"
         )
-        if show_scenario_c and results.scenario_c_enabled:
-            net_description += (
-                "- **Purple dotted line:** Net value of renting + savings "
-                "(Scenario C)\n"
-            )
-        net_description += "- **Markers:** Breakeven points (if they exist)"
         st.markdown(net_description)
         fig_net = create_net_value_chart(
             results.data,
             breakeven_year=results.breakeven_year,
-            show_scenario_c=show_scenario_c and results.scenario_c_enabled,
-            breakeven_year_vs_rent_savings=results.breakeven_year_vs_rent_savings,
         )
         st.plotly_chart(fig_net, use_container_width=True)
 
@@ -593,21 +514,17 @@ def main() -> None:  # noqa: C901
         # Round Year to 1 decimal
         display_df["Year"] = display_df["Year"].round(1)
 
-        # Format currency columns (include Scenario C columns when applicable)
+        # Format currency columns
         currency_cols = [
             "Home_Value",
             "Equity_Value",
+            "Buy_Portfolio_Value",
             "Mortgage_Balance",
             "Outflow_Buy",
             "Outflow_Rent",
             "Net_Buy",
             "Net_Rent",
         ]
-
-        if show_scenario_c and results.scenario_c_enabled:
-            currency_cols.extend(
-                ["Down_Payment_Value", "Savings_Portfolio_Value", "Net_Rent_Savings"]
-            )
 
         st.dataframe(
             display_df[["Year", *currency_cols]],
@@ -633,114 +550,14 @@ def main() -> None:  # noqa: C901
             "distributions centered on your inputs."
         )
 
-        # MC settings in an expander (on the tab, not sidebar)
-        with st.expander("Tune Parameters", expanded=False):
-            st.caption(
-                "Control how much randomness the simulation uses. "
-                "**Std (standard deviation)** sets how much each rate "
-                "can vary year-to-year around your chosen base values "
-                "in the sidebar."
-            )
-            mc_col1, mc_col2 = st.columns(2)
-            with mc_col1:
-                mc_n_sims = st.slider(
-                    "Number of Simulations",
-                    min_value=50,
-                    max_value=2000,
-                    value=500,
-                    step=50,
-                    help="More simulations = smoother results, slower.",
-                )
-                mc_seed = st.number_input(
-                    "Random Seed",
-                    min_value=0,
-                    max_value=99999,
-                    value=42,
-                    step=1,
-                    help=(
-                        "Controls the random number generator. Same seed "
-                        "= same results. Change it to see a different set "
-                        "of random outcomes."
-                    ),
-                )
-                mc_corr = st.slider(
-                    "Property–Equity Correlation",
-                    min_value=0.0,
-                    max_value=0.8,
-                    value=0.3,
-                    step=0.1,
-                    help=(
-                        "How closely property and stock markets move "
-                        "together. 0 = independent, 0.3 = weakly linked "
-                        "(default, matches historical data), 0.8 = move "
-                        "in lockstep. Higher correlation means crashes "
-                        "hit both assets simultaneously."
-                    ),
-                )
-            with mc_col2:
-                mc_prop_std = st.slider(
-                    "Property Appreciation Std (%)",
-                    min_value=0.0,
-                    max_value=15.0,
-                    value=5.0,
-                    step=0.5,
-                    help=(
-                        f"Year-to-year volatility around your "
-                        f"{prop_appreciation}% base rate. At 5%, annual "
-                        f"appreciation typically ranges from "
-                        f"{prop_appreciation - 10:.1f}% to "
-                        f"{prop_appreciation + 10:.1f}% (±2 std)."
-                    ),
-                )
-                mc_eq_std = st.slider(
-                    "Equity Growth Std (%)",
-                    min_value=0.0,
-                    max_value=15.0,
-                    value=5.0,
-                    step=0.5,
-                    help=(
-                        f"Year-to-year volatility around your "
-                        f"{equity_growth}% base CAGR. At 5%, annual "
-                        f"returns typically range from "
-                        f"{equity_growth - 10:.1f}% to "
-                        f"{equity_growth + 10:.1f}% (±2 std)."
-                    ),
-                )
-                mc_rent_std = st.slider(
-                    "Rent Inflation Std (%)",
-                    min_value=0.0,
-                    max_value=5.0,
-                    value=1.5,
-                    step=0.1,
-                    help=(
-                        f"Year-to-year volatility around your "
-                        f"{rent_inflation}% base rate. At 1.5%, annual "
-                        f"inflation typically ranges from "
-                        f"{rent_inflation - 3:.1f}% to "
-                        f"{rent_inflation + 3:.1f}% (±2 std)."
-                    ),
-                )
-
         # Run button
         if st.button(
-            f"Run {mc_n_sims} Simulations",
-            use_container_width=True,
-            type="primary",
+            "Run Uncertainty Analysis", use_container_width=True, type="primary"
         ):
-            mc_config = MonteCarloConfig(
-                n_simulations=mc_n_sims,
-                seed=int(mc_seed),
-                property_appreciation_std=mc_prop_std,
-                equity_growth_std=mc_eq_std,
-                rent_inflation_std=mc_rent_std,
-                appreciation_equity_correlation=mc_corr,
-            )
-
-            with st.spinner(f"Running {mc_n_sims} simulations..."):
-                mc_results = run_monte_carlo(config, mc_config)
-
-            # Store results in session state
-            st.session_state["mc_results"] = mc_results
+            with st.spinner("Simulating 500 futures..."):
+                st.session_state["mc_results"] = run_monte_carlo(
+                    config, MonteCarloConfig()
+                )
 
         # Display results if available
         mc_results = st.session_state.get("mc_results")
@@ -778,21 +595,18 @@ def main() -> None:  # noqa: C901
 
             st.divider()
 
-            # Spaghetti chart (matplotlib)
+            # Fan chart of the buy-vs-rent advantage across simulated futures
             st.subheader("Outcome Paths")
             st.markdown(
-                "Each line is one possible future. "
-                "**Green** = buying wins, **Red** = renting wins, "
-                "**Blue dashed** = median path."
+                "The shaded bands show where most simulated futures land. "
+                "**Median** = the middle-of-the-road outcome."
             )
-            spaghetti_fig = create_spaghetti_chart(mc_results)
-            st.pyplot(spaghetti_fig)
-            plt.close(spaghetti_fig)
+            st.plotly_chart(create_fan_chart(mc_results), use_container_width=True)
 
             st.divider()
 
-            # Tornado + Probability side by side
-            tc1, tc2 = st.columns(2)
+            # Tornado (sensitivity) chart
+            tc1, _ = st.columns(2)
             with tc1:
                 st.subheader("What Matters Most?")
                 st.caption(
@@ -801,10 +615,6 @@ def main() -> None:  # noqa: C901
                 )
                 tornado_fig = create_tornado_chart(mc_results)
                 st.plotly_chart(tornado_fig, use_container_width=True)
-            with tc2:
-                st.subheader("Probability Over Time")
-                prob_fig = create_probability_chart(mc_results)
-                st.plotly_chart(prob_fig, use_container_width=True)
 
     # Footer with additional information
     st.divider()
@@ -818,8 +628,10 @@ def main() -> None:  # noqa: C901
     - **Ongoing costs:** Property tax, insurance, maintenance (inflation-adjusted)
     - **Tax benefits:** Mortgage interest deduction, capital gains exclusion
       (Section 121), SALT cap for property tax deduction
-    - **Scenario C** available when mortgage payment > rent
-    - No taxes on investment gains for the rent scenario
+    - **Exit pricing:** Net value at every year includes selling costs and
+      capital-gains tax on both the home and the portfolio
+    - **Cash-flow matching:** whichever side pays less each month invests
+      the difference in equities
     """)
 
     # Privacy and hosting notice
