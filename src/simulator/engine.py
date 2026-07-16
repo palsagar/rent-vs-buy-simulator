@@ -215,11 +215,38 @@ def _net_value_series(
     outflow_buy = initial_outlay + np.cumsum(housing_cost_buy)
     outflow_rent = np.cumsum(housing_cost_rent)
 
-    # --- Taxes (Task 4 fills these in; zeros keep this task green)
+    # --- Deduction savings: (interest + capped levy) * marginal rate,
+    # credited at the end of each completed year
     cum_tax_savings = np.zeros(h + 1)
-    sale_cg_tax = np.zeros(h + 1)
-    portfolio_tax_rent = np.zeros(h + 1)
-    portfolio_tax_buy = np.zeros(h + 1)
+    if (
+        config.interest_deduction_enabled
+        and config.marginal_tax_rate_pct > _FLOAT_TOLERANCE
+    ):
+        yearly_interest = interest[1:].reshape(config.horizon_years, 12).sum(axis=1)
+        yearly_levy = levy[1:].reshape(config.horizon_years, 12).sum(axis=1)
+        if config.levy_deduction_cap is not None:
+            yearly_levy = np.minimum(yearly_levy, config.levy_deduction_cap)
+        yearly_savings = (yearly_interest + yearly_levy) * (
+            config.marginal_tax_rate_pct / 100
+        )
+        cum_by_year = np.concatenate([[0.0], np.cumsum(yearly_savings)])
+        cum_tax_savings = cum_by_year[t_arr // 12]
+
+    # --- Sale capital gains: regime-dependent taxable gain (ADR-0007)
+    home_gain = np.maximum(home_value - config.property_price, 0.0)
+    if config.sale_cg_regime == "fully_exempt":
+        taxable_gain = np.zeros(h + 1)
+    elif config.sale_cg_regime == "exempt_amount":
+        taxable_gain = np.maximum(home_gain - config.sale_cg_exempt_amount, 0.0)
+    else:  # exempt_after_years: taxed only if sold before the holding period
+        held_long_enough = t_arr >= config.sale_cg_exempt_after_years * 12
+        taxable_gain = np.where(held_long_enough, 0.0, home_gain)
+    sale_cg_tax = taxable_gain * (config.sale_cg_rate_pct / 100)
+
+    # --- Portfolio capital gains: symmetric on both strategies' exits
+    portfolio_rate = config.portfolio_cg_rate_pct / 100
+    portfolio_tax_rent = np.maximum(rent_portfolio - basis_rent, 0.0) * portfolio_rate
+    portfolio_tax_buy = np.maximum(buy_portfolio - basis_buy, 0.0) * portfolio_rate
 
     # --- Liquidation-priced Net Value at every t (ADR-0001)
     seller_cost = home_value * (config.closing_cost_seller_pct / 100)
