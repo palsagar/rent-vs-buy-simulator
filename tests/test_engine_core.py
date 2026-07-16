@@ -12,7 +12,7 @@ from simulator.engine import _net_value_series
 from simulator.models import SimulationConfig
 
 
-def taxfree_config(**overrides):
+def taxfree_config(**overrides: object) -> SimulationConfig:
     """Config with every tax and ongoing cost zeroed, flat 0% growth."""
     base = dict(
         horizon_years=2,
@@ -38,7 +38,7 @@ def taxfree_config(**overrides):
     return SimulationConfig(**base)
 
 
-def run_flat(config):
+def run_flat(config: SimulationConfig) -> dict[str, np.ndarray]:
     """Run the core with constant monthly rates derived from the config."""
     h = config.horizon_years * 12
     return _net_value_series(

@@ -113,12 +113,6 @@ def _generate_annual_draws(
         prop_draws = np.full((n_sims, n_years), mu_prop)
         eq_draws = np.full((n_sims, n_years), mu_eq)
 
-    # Override with constant if specific param is not randomized
-    if not mc_config.randomize_property_appreciation:
-        prop_draws = np.full((n_sims, n_years), mu_prop)
-    if not mc_config.randomize_equity_growth:
-        eq_draws = np.full((n_sims, n_years), mu_eq)
-
     # --- Rent inflation: independent normal, clamped >= 0 ---
     if mc_config.randomize_rent_inflation:
         rent_draws = rng.normal(
@@ -255,15 +249,19 @@ def _compute_sensitivity(
     base_value = _run_with_override()
 
     # Parameters to perturb: (display_name, config_field, delta)
-    # Delta is +-1 "standard deviation" in the same units as the field
+    # Delta is +-1 "standard deviation" in the same units as the field.
+    # The first three deltas mirror the fixed MC calibration so there is a
+    # single source of truth (stds are in percentage points; rent_inflation_rate
+    # is a decimal, hence /100).
+    mc_defaults = MonteCarloConfig()
     perturbations = [
         (
             "Property Appreciation",
             "property_appreciation_annual",
-            8.0,
+            mc_defaults.property_appreciation_std,
         ),
-        ("Equity Growth", "equity_growth_annual", 15.0),
-        ("Rent Inflation", "rent_inflation_rate", 0.015),
+        ("Equity Growth", "equity_growth_annual", mc_defaults.equity_growth_std),
+        ("Rent Inflation", "rent_inflation_rate", mc_defaults.rent_inflation_std / 100),
         ("Property Price", "property_price", 100000),
         ("Down Payment %", "down_payment_pct", 5.0),
         ("Monthly Rent", "monthly_rent", 500),

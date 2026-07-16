@@ -247,8 +247,8 @@ _GUIDE_MONTE_CARLO_HTML = """\
 <p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
     Instead of &ldquo;Buy wins by $142K,&rdquo; you see:
     <strong style="color: #e2e8f0;">&ldquo;Buying wins in 68% of
-    simulations.&rdquo;</strong> The spaghetti chart shows every
-    possible path, and the tornado chart reveals which parameters
+    simulations.&rdquo;</strong> The fan chart shows the range of
+    possible outcomes, and the tornado chart reveals which parameters
     matter most.
 </p>
 """

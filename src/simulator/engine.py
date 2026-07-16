@@ -275,7 +275,7 @@ def _net_value_series(
         "cum_tax_savings": cum_tax_savings,
         "net_buy": net_buy,
         "net_rent": net_rent,
-        # internals Task 4 needs; underscore keys are not exported to the df
+        # internal series (underscore keys) consumed by callers; not exported to the df
         "_interest": interest,
         "_levy": levy,
         "_insurance": insurance,

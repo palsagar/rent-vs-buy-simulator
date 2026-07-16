@@ -10,7 +10,7 @@ import pytest
 from simulator.models import MonteCarloConfig, SimulationConfig
 
 
-def make_config(**overrides):
+def make_config(**overrides: object) -> SimulationConfig:
     """Minimal valid config; overrides applied on top."""
     base = dict(
         horizon_years=10,

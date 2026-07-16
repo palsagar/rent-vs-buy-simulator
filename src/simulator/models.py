@@ -272,8 +272,7 @@ class SimulationResults:
     Parameters
     ----------
     data : pd.DataFrame
-        DataFrame containing time-series data (columns detailed in
-        Task 5 of the migration plan).
+        DataFrame containing the per-month time-series columns.
     final_net_buy : float
         Final net value for the buying scenario.
     final_net_rent : float
