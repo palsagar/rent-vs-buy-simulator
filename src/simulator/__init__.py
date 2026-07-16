@@ -13,7 +13,7 @@ Basic usage:
     from simulator import SimulationConfig, calculate_scenarios
 
     config = SimulationConfig(
-        duration_years=30,
+        horizon_years=30,
         property_price=500000,
         down_payment_pct=20,
         mortgage_rate_annual=4.5,
@@ -31,7 +31,7 @@ from importlib.metadata import version as _get_version
 
 __version__ = _get_version("rent-vs-buy-simulator")
 
-from .engine import _find_breakeven, _is_close, _is_close_to_zero
+from .engine import _find_breakeven, _is_close, _is_close_to_zero, calculate_scenarios
 from .models import SimulationConfig, SimulationResults
 
 __all__ = [
@@ -40,4 +40,5 @@ __all__ = [
     "_find_breakeven",
     "_is_close",
     "_is_close_to_zero",
+    "calculate_scenarios",
 ]

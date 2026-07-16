@@ -6,8 +6,9 @@ two financial strategies: buying property vs. renting and investing.
 
 import numpy as np
 import numpy_financial as npf
+import pandas as pd
 
-from .models import SimulationConfig
+from .models import SimulationConfig, SimulationResults
 
 # Floating-point tolerance for comparisons
 _FLOAT_TOLERANCE = 1e-9
@@ -348,3 +349,95 @@ def _find_breakeven(
             return float(years[i])
 
     return None
+
+
+def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
+    """Run the deterministic simulation on the shared Net Value core.
+
+    Feeds constant monthly rates (derived from the config's annual
+    rates) into :func:`_net_value_series` and assembles the results
+    DataFrame and summary fields. The Verdict (``final_difference``),
+    the charted series (``results.data``), and the Breakeven all read
+    the same ``net_buy``/``net_rent`` arrays, so they can never
+    disagree (CONTEXT.md: "Net Value", "Verdict", "Breakeven").
+
+    Parameters
+    ----------
+    config : SimulationConfig
+        Configuration object with all input parameters for the
+        simulation, including the Horizon (``horizon_years``).
+
+    Returns
+    -------
+    SimulationResults
+        Assembled time series and summary statistics for both
+        strategies.
+
+    Examples
+    --------
+    Run the deterministic simulation and read the Verdict:
+
+    .. code-block:: python
+
+        from simulator.models import SimulationConfig
+        from simulator.engine import calculate_scenarios
+
+        config = SimulationConfig(
+            horizon_years=10,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3,
+            equity_growth_annual=7,
+            monthly_rent=2000,
+        )
+        results = calculate_scenarios(config)
+        print(f"Final difference: ${results.final_difference:,.0f}")
+
+    """
+    h = config.horizon_years * 12
+    series = _net_value_series(
+        config,
+        np.full(h, (config.property_appreciation_annual / 100) / 12),
+        np.full(h, (config.equity_growth_annual / 100) / 12),
+        np.full(h, config.rent_inflation_rate / 12),
+    )
+
+    t_arr = np.arange(h + 1)
+    year_arr = t_arr / 12
+    df = pd.DataFrame(
+        {
+            "Month": t_arr,
+            "Year": year_arr,
+            "Home_Value": series["home_value"],
+            "Equity_Value": series["rent_portfolio"],
+            "Buy_Portfolio_Value": series["buy_portfolio"],
+            "Mortgage_Balance": series["mortgage_balance"],
+            "Outflow_Buy": series["outflow_buy"],
+            "Outflow_Rent": series["outflow_rent"],
+            "Cash_Committed": series["cash_committed"],
+            "Net_Buy": series["net_buy"],
+            "Net_Rent": series["net_rent"],
+        }
+    )
+
+    net_buy, net_rent = series["net_buy"], series["net_rent"]
+    return SimulationResults(
+        data=df,
+        final_net_buy=float(net_buy[-1]),
+        final_net_rent=float(net_rent[-1]),
+        final_difference=float(net_buy[-1] - net_rent[-1]),
+        breakeven_year=_find_breakeven(year_arr, net_buy, net_rent),
+        monthly_mortgage_payment=float(series["_monthly_payment"][0]),
+        monthly_cost_buy_year1=float(np.mean(series["housing_cost_buy"][1:13])),
+        monthly_cost_rent_year1=float(np.mean(series["housing_cost_rent"][1:13])),
+        total_closing_costs_buyer=config.property_price
+        * (config.closing_cost_buyer_pct / 100),
+        total_closing_costs_seller=float(
+            series["home_value"][-1] * (config.closing_cost_seller_pct / 100)
+        ),
+        total_property_tax_paid=float(np.sum(series["_levy"])),
+        total_insurance_paid=float(np.sum(series["_insurance"])),
+        total_maintenance_paid=float(np.sum(series["_maintenance"])),
+        total_tax_savings=float(series["cum_tax_savings"][-1]),
+    )
