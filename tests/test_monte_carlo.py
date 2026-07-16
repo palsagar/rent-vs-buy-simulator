@@ -9,7 +9,7 @@ import numpy as np
 
 from simulator.engine import calculate_scenarios
 from simulator.models import MonteCarloConfig
-from simulator.monte_carlo import run_monte_carlo
+from simulator.monte_carlo import _compute_sensitivity, run_monte_carlo
 from tests.test_models import make_config
 
 
@@ -59,3 +59,15 @@ class TestSensitivity:
         assert abs(res.sensitivity_base - det.final_difference) < 1e-6
         assert len(res.sensitivity_params) > 0
         assert len(res.sensitivity_low) == len(res.sensitivity_params)
+
+    def test_tornado_low_uses_negative_growth_rate(self):
+        # Equity Growth low perturbation must reflect the true negative rate,
+        # not a clamped near-zero floor. With default std=15, the low target
+        # for equity_growth_annual=7.0 is -8.0.
+        base_cfg = make_config(equity_growth_annual=7.0)
+        names, low, _high, _base = _compute_sensitivity(base_cfg)
+        idx = names.index("Equity Growth")
+        expected_low = calculate_scenarios(
+            make_config(equity_growth_annual=-8.0)
+        ).final_difference
+        assert abs(low[idx] - expected_low) < 1e-6

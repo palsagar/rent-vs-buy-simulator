@@ -276,8 +276,13 @@ def _compute_sensitivity(
     for display_name, field, delta in perturbations:
         base_val = getattr(base_config, field)
 
-        # Low perturbation (subtract delta)
-        low_override = max(base_val - delta, 0.001)
+        # Low perturbation (subtract delta). Growth rates may legitimately
+        # go negative; floor them just above -100% so the monthly compounding
+        # factor stays positive. Positive-only fields keep the 0.001 floor.
+        if field in ("property_appreciation_annual", "equity_growth_annual"):
+            low_override = max(base_val - delta, -99.0)
+        else:
+            low_override = max(base_val - delta, 0.001)
         # Clamp down_payment_pct to [5, 100]
         if field == "down_payment_pct":
             low_override = max(low_override, 5.0)
