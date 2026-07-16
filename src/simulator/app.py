@@ -327,13 +327,13 @@ def main() -> None:
             50_000,
             10_000,
             1_000,
-            help="Cap on deductible property levy (US: SALT cap)",
+            help="Cap on deductible property levy (e.g. US SALT cap)",
         )
         sale_regime = st.selectbox(
             "Home-Sale Capital Gains Rule",
             options=["exempt_amount", "exempt_after_years", "fully_exempt"],
             format_func=lambda r: {
-                "exempt_amount": "Exempt up to a fixed amount (US §121)",
+                "exempt_amount": "Exempt up to a fixed amount (e.g. US §121)",
                 "exempt_after_years": "Exempt after N years of holding",
                 "fully_exempt": "Always exempt (primary residence)",
             }[r],

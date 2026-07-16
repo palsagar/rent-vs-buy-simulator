@@ -16,7 +16,7 @@ A financial simulation tool that compares two capital allocation strategies over
 ## Features
 
 - Mortgage amortization, property appreciation, equity growth, closing costs, property tax, insurance, and maintenance
-- Tax benefit modeling: mortgage interest deduction, capital gains exclusion (Section 121), SALT cap
+- Tax primitives: mortgage-interest and property-levy deductibility (with a configurable levy cap), plus a selectable home-sale capital-gains regime (US defaults provided)
 - Four interactive Plotly charts with breakeven analysis
 - Quick presets for common scenarios (High Interest, Bull Market, Conservative, First-Time Buyer)
 - Liquidation-based Net Value — a single wealth series, at every year, that drives every chart, the verdict, and Monte Carlo alike (see [FORMULAS.md](FORMULAS.md))
