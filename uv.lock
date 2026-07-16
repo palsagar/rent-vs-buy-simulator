@@ -1155,7 +1155,6 @@ source = { editable = "." }
 dependencies = [
     { name = "aleatory" },
     { name = "kaleido" },
-    { name = "matplotlib" },
     { name = "numpy" },
     { name = "numpy-financial" },
     { name = "pandas" },
@@ -1175,7 +1174,6 @@ dev = [
 requires-dist = [
     { name = "aleatory", specifier = ">=0.4.0" },
     { name = "kaleido", specifier = ">=0.2.0" },
-    { name = "matplotlib", specifier = ">=3.8.0" },
     { name = "numpy", specifier = ">=1.26.0" },
     { name = "numpy-financial", specifier = ">=1.0.0" },
     { name = "pandas", specifier = ">=2.1.0" },
