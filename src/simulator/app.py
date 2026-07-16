@@ -626,8 +626,9 @@ def main() -> None:
     - Rent increases with inflation annually
     - **Closing costs:** Buyer and seller costs modeled (configurable %)
     - **Ongoing costs:** Property tax, insurance, maintenance (inflation-adjusted)
-    - **Tax benefits:** Mortgage interest deduction, capital gains exclusion
-      (Section 121), SALT cap for property tax deduction
+    - **Tax benefits:** Mortgage-interest and property-levy deductions
+      (with a configurable levy cap), plus a configurable home-sale
+      capital-gains regime
     - **Exit pricing:** Net value at every year includes selling costs and
       capital-gains tax on both the home and the portfolio
     - **Cash-flow matching:** whichever side pays less each month invests
