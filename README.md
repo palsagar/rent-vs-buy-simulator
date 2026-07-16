@@ -8,21 +8,21 @@
 
 **[Try the Live App](https://rent-or-buy-sim.com/)**
 
-A financial simulation tool that compares three capital allocation strategies over time:
+A financial simulation tool that compares two capital allocation strategies over time:
 
 - **Buy** — Purchase property with a mortgage
-- **Rent & Invest** — Rent and invest the down payment in equities
-- **Rent & Invest Savings** — Rent and invest monthly savings (when mortgage > rent)
+- **Rent & Invest** — Rent and invest the down payment (and any monthly surplus) in equities
 
 ## Features
 
 - Mortgage amortization, property appreciation, equity growth, closing costs, property tax, insurance, and maintenance
-- Tax benefit modeling: mortgage interest deduction, capital gains exclusion (Section 121), SALT cap
+- Tax primitives: mortgage-interest and property-levy deductibility (with a configurable levy cap), plus a selectable home-sale capital-gains regime (US defaults provided)
 - Four interactive Plotly charts with breakeven analysis
 - Quick presets for common scenarios (High Interest, Bull Market, Conservative, First-Time Buyer)
-- Save, compare, and export up to 5 scenarios side-by-side
-- PDF report export with charts and configuration summary
-- Monte Carlo uncertainty analysis with stochastic simulation
+- Liquidation-based Net Value — a single wealth series, at every year, that drives every chart, the verdict, and Monte Carlo alike (see [FORMULAS.md](FORMULAS.md))
+- Cash-flow matching — whichever side is cheaper each month invests the difference in equities
+- Independent horizon (when you'd sell) and mortgage term, instead of one combined duration
+- Auto-calibrated Monte Carlo uncertainty analysis — no manual parameter tuning required
 - Vectorized NumPy engine — no Python loops
 
 ## Installation
@@ -65,7 +65,8 @@ docker run -p 8501:8501 rent-vs-buy-simulator
 from simulator import SimulationConfig, calculate_scenarios
 
 config = SimulationConfig(
-    duration_years=30,
+    horizon_years=10,
+    mortgage_term_years=30,
     property_price=500000,
     down_payment_pct=20,
     mortgage_rate_annual=4.5,

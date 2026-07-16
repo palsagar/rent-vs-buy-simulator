@@ -1,149 +1,91 @@
 """Monte Carlo visualization module.
 
-Provides matplotlib and Plotly charts for MC uncertainty analysis:
-spaghetti chart (matplotlib + aleatory), tornado chart (Plotly),
-and probability-over-time chart (Plotly).
+Provides Plotly charts for MC uncertainty analysis: a percentile fan
+chart and a tornado (sensitivity) chart.
 """
 
 from __future__ import annotations
 
-import matplotlib
-import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
 
 from .models import MonteCarloResults
 
-# Non-interactive backend for Streamlit compatibility
-matplotlib.use("Agg")
 
+def create_fan_chart(mc_results: MonteCarloResults) -> go.Figure:
+    """Percentile fan of the Buy - Rent Net Value difference over time.
 
-def create_spaghetti_chart(mc_results: MonteCarloResults) -> plt.Figure:
-    """Create a spaghetti chart with marginal distribution.
-
-    Shows individual MC paths colored by final outcome (green if
-    buying wins, red if renting wins), a bold median path, and a
-    marginal histogram/KDE of final differences on the right.
-
-    Uses aleatory's ``qp_style()`` for publication-quality styling.
+    Median line with 50% and 90% bands; where the bands sit relative
+    to the zero line is the visual answer to "how sure is this?".
 
     Parameters
     ----------
     mc_results : MonteCarloResults
-        Full MC results containing ``all_differences``, ``year_arr``,
-        ``final_differences``, and ``median_difference``.
+        MC results containing ``year_arr``, ``difference_percentiles``,
+        and ``percentile_levels`` (must include 5, 25, 50, 75, 95).
 
     Returns
     -------
-    plt.Figure
-        Matplotlib Figure with two panels: main spaghetti plot (left)
-        and marginal distribution (right).
+    go.Figure
+        Plotly Figure with a 90% band, a 50% band, a median line, and
+        a zero reference line.
 
     Examples
     --------
-    Create and display a spaghetti chart:
+    Create a fan chart:
 
     .. code-block:: python
 
-        from simulator.mc_visualization import create_spaghetti_chart
+        from simulator.mc_visualization import create_fan_chart
 
-        fig = create_spaghetti_chart(mc_results)
-        fig.savefig("spaghetti.png", dpi=150)
+        fig = create_fan_chart(mc_results)
+        fig.show()
 
     """
-    # Apply aleatory's quant-plot style (colors, layout)
-    try:
-        from aleatory.styles import qp_style
-
-        qp_style()
-    except ImportError:
-        pass  # Graceful fallback if aleatory unavailable
-
-    # Disable LaTeX rendering — qp_style enables it but a full
-    # LaTeX installation may not be available in all environments
-    plt.rcParams["text.usetex"] = False
-
-    fig, (ax_main, ax_marginal) = plt.subplots(
-        1,
-        2,
-        gridspec_kw={"width_ratios": [4, 1]},
-        sharey=True,
-        figsize=(14, 6),
-    )
-
     years = mc_results.year_arr
-    all_diffs = mc_results.all_differences
-    final_diffs = mc_results.final_differences
-
-    # Individual paths: green if final > 0 (buy wins), red otherwise
-    for i in range(mc_results.n_simulations):
-        color = "#2ecc71" if final_diffs[i] > 0 else "#e74c3c"
-        ax_main.plot(years, all_diffs[i], color=color, alpha=0.08, linewidth=0.5)
-
-    # Median path as bold dashed blue line
-    median_path = np.median(all_diffs, axis=0)
-    ax_main.plot(
-        years,
-        median_path,
-        color="#3498db",
-        linewidth=2.5,
-        linestyle="--",
-        label="Median path",
-        zorder=10,
-    )
-
-    # Zero reference line
-    ax_main.axhline(y=0, color="gray", linewidth=1, linestyle="--", alpha=0.7)
-
-    ax_main.set_xlabel("Years")
-    ax_main.set_ylabel("Net Difference (Buy - Rent) ($)")
-    ax_main.set_title(
-        "Monte Carlo Simulation: Buy vs. Rent Outcomes",
-        fontsize=14,
-    )
-    ax_main.legend(loc="upper left")
-
-    # Format y-axis as currency
-    ax_main.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f"${x:,.0f}"))
-
-    # --- Marginal distribution (right panel) ---
-    # Color bins by sign
-    pos_diffs = final_diffs[final_diffs > 0]
-    neg_diffs = final_diffs[final_diffs <= 0]
-
-    # Determine common bin edges
-    n_bins = 40
-    all_range = (final_diffs.min(), final_diffs.max())
-    bins = np.linspace(all_range[0], all_range[1], n_bins + 1)
-
-    if len(pos_diffs) > 0:
-        ax_marginal.hist(
-            pos_diffs,
-            bins=bins,
-            orientation="horizontal",
-            color="#2ecc71",
-            alpha=0.7,
-            label="Buy wins",
+    p = {
+        level: mc_results.difference_percentiles[i]
+        for i, level in enumerate(mc_results.percentile_levels)
+    }
+    fig = go.Figure()
+    # 90% band (p5-p95), drawn first so the 50% band sits on top
+    fig.add_trace(go.Scatter(x=years, y=p[95], line={"width": 0}, showlegend=False))
+    fig.add_trace(
+        go.Scatter(
+            x=years,
+            y=p[5],
+            fill="tonexty",
+            line={"width": 0},
+            fillcolor="rgba(99, 110, 250, 0.15)",
+            name="90% of futures",
         )
-    if len(neg_diffs) > 0:
-        ax_marginal.hist(
-            neg_diffs,
-            bins=bins,
-            orientation="horizontal",
-            color="#e74c3c",
-            alpha=0.7,
-            label="Rent wins",
+    )
+    fig.add_trace(go.Scatter(x=years, y=p[75], line={"width": 0}, showlegend=False))
+    fig.add_trace(
+        go.Scatter(
+            x=years,
+            y=p[25],
+            fill="tonexty",
+            line={"width": 0},
+            fillcolor="rgba(99, 110, 250, 0.35)",
+            name="50% of futures",
         )
-
-    ax_marginal.axhline(y=0, color="gray", linewidth=1, linestyle="--", alpha=0.7)
-    ax_marginal.set_xlabel("Count")
-    ax_marginal.set_title("Final Distribution", fontsize=11)
-    ax_marginal.legend(loc="upper right", fontsize=8)
-
-    # Shared y-axis: suppress labels on marginal
-    ax_marginal.tick_params(axis="y", labelleft=False)
-
-    fig.tight_layout()
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=years,
+            y=p[50],
+            name="Median",
+            line={"color": "#636efa", "width": 2},
+        )
+    )
+    fig.add_hline(y=0, line_dash="dash", line_color="gray")
+    fig.update_layout(
+        title="Buy vs. Rent advantage across simulated futures",
+        xaxis_title="Years",
+        yaxis_title="Buy advantage ($)",
+        hovermode="x unified",
+    )
     return fig
 
 
@@ -244,77 +186,6 @@ def create_tornado_chart(mc_results: MonteCarloResults) -> go.Figure:
         height=400,
         xaxis_tickformat="$,.0f",
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
-    )
-
-    return fig
-
-
-def create_probability_chart(
-    mc_results: MonteCarloResults,
-) -> go.Figure:
-    """Create a probability-over-time chart.
-
-    Line chart showing the fraction of simulations where buying
-    beats renting at each point in time.
-
-    Parameters
-    ----------
-    mc_results : MonteCarloResults
-        MC results containing ``all_differences`` and ``year_arr``.
-
-    Returns
-    -------
-    go.Figure
-        Plotly Figure with probability line and 50% reference.
-
-    Examples
-    --------
-    Create a probability chart:
-
-    .. code-block:: python
-
-        from simulator.mc_visualization import create_probability_chart
-
-        fig = create_probability_chart(mc_results)
-        fig.show()
-
-    """
-    years = mc_results.year_arr
-    all_diffs = mc_results.all_differences
-
-    # Fraction of sims where buy wins at each month
-    buy_wins_frac = np.mean(all_diffs > 0, axis=0) * 100
-
-    fig = go.Figure()
-
-    fig.add_trace(
-        go.Scatter(
-            x=years,
-            y=buy_wins_frac,
-            mode="lines",
-            name="P(Buy Wins)",
-            line=dict(color="#3498db", width=3),
-            hovertemplate=("Year %{x:.1f}<br>%{y:.1f}% chance buy wins<extra></extra>"),
-        )
-    )
-
-    # 50% reference line
-    fig.add_hline(
-        y=50,
-        line_dash="dash",
-        line_color="gray",
-        opacity=0.7,
-        annotation_text="50%",
-        annotation_position="bottom right",
-    )
-
-    fig.update_layout(
-        title="Probability of Buying Winning Over Time",
-        xaxis_title="Years",
-        yaxis_title="Probability Buy Wins (%)",
-        yaxis_range=[0, 100],
-        template="plotly_white",
-        height=400,
     )
 
     return fig

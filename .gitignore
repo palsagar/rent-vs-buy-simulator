@@ -164,3 +164,6 @@ docs/superpowers/
 # Test artifacts
 test-results/
 output/
+
+# Browser automation scratch
+.playwright-mcp/

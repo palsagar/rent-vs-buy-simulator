@@ -1,9 +1,13 @@
 """Data models for the simulation engine."""
 
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 import pandas as pd
+
+# Capital gains treatment on the sale of the home at the end of the horizon.
+SaleCgRegime = Literal["exempt_amount", "exempt_after_years", "fully_exempt"]
 
 
 @dataclass
@@ -12,22 +16,25 @@ class SimulationConfig:
 
     Parameters
     ----------
-    duration_years : int
-        Number of years to simulate.
+    horizon_years : int
+        Number of years until you'd sell (simulation horizon).
     property_price : float
         Initial price of the property ($).
     down_payment_pct : float
-        Down payment as percentage of property price.
+        Down payment as percentage of property price (5-100).
     mortgage_rate_annual : float
         Annual mortgage interest rate (as percentage, e.g., 4.5 for 4.5%).
     property_appreciation_annual : float
         Annual property appreciation rate (as percentage).
     equity_growth_annual : float
-        Annual equity portfolio growth rate (as percentage).
+        Annual equity portfolio growth rate (as percentage, CAGR).
     monthly_rent : float
         Monthly rent payment ($).
+    mortgage_term_years : int, optional
+        Length of the mortgage amortization schedule in years.
+        Default is 30.
     rent_inflation_rate : float, optional
-        Annual rent inflation rate (as percentage). Default is 0.03 (3%).
+        Annual rent inflation rate (as a decimal). Default is 0.03 (3%).
     closing_cost_buyer_pct : float, optional
         Buyer closing costs as percentage of property price.
         Default is 3.0 (3%).
@@ -35,24 +42,45 @@ class SimulationConfig:
         Seller closing costs as percentage of sale price.
         Default is 6.0 (6%).
     property_tax_rate : float, optional
-        Annual property tax rate as percentage of property value.
+        Annual property tax levy as percentage of home value.
         Default is 1.2 (1.2%).
     annual_home_insurance : float, optional
         Annual home insurance cost ($). Default is 1200.
     annual_maintenance_pct : float, optional
-        Annual maintenance cost as percentage of property value.
+        Annual maintenance cost as percentage of current home value.
         Default is 1.0 (1%).
     cost_inflation_rate : float, optional
-        Annual inflation rate for ongoing costs (tax, insurance, maintenance).
-        Default is 0.03 (3%).
+        Annual inflation rate for ongoing costs (insurance only), as a
+        decimal. Default is 0.025 (2.5%).
+    interest_deduction_enabled : bool, optional
+        Whether mortgage interest is tax-deductible. Default is True.
+    marginal_tax_rate_pct : float, optional
+        Marginal income tax rate as a percentage. Default is 24.0.
+    levy_deduction_cap : float | None, optional
+        Cap on deductible property tax/levy ($). None means uncapped.
+        Default is 10000.0.
+    sale_cg_regime : SaleCgRegime, optional
+        Capital gains treatment applied on sale of the home. One of
+        "exempt_amount", "exempt_after_years", "fully_exempt".
+        Default is "exempt_amount".
+    sale_cg_exempt_amount : float, optional
+        Capital gains exempt from tax when sale_cg_regime is
+        "exempt_amount" ($). Default is 250000.0.
+    sale_cg_exempt_after_years : int, optional
+        Years of ownership after which gains become exempt when
+        sale_cg_regime is "exempt_after_years". Default is 10.
+    sale_cg_rate_pct : float, optional
+        Tax rate applied to non-exempt capital gains on sale, as a
+        percentage. Default is 15.0.
+    portfolio_cg_rate_pct : float, optional
+        Tax rate applied to capital gains on the equity portfolio, as a
+        percentage. Default is 15.0.
 
     Raises
     ------
     ValueError
-        If duration_years is not positive, property_price is not positive,
-        down_payment_pct is not between 5 and 100, mortgage_rate_annual is
-        not positive, monthly_rent is not positive, or rent_inflation_rate
-        is not between 0 and 1 (0-100%).
+        If any parameter fails its validation check (see
+        :meth:`__post_init__`).
 
     Examples
     --------
@@ -63,7 +91,7 @@ class SimulationConfig:
         from simulator.models import SimulationConfig
 
         config = SimulationConfig(
-            duration_years=30,
+            horizon_years=10,
             property_price=500000,
             down_payment_pct=20,
             mortgage_rate_annual=4.5,
@@ -74,30 +102,32 @@ class SimulationConfig:
 
     """
 
-    duration_years: int
+    horizon_years: int
     property_price: float
     down_payment_pct: float
     mortgage_rate_annual: float
     property_appreciation_annual: float
     equity_growth_annual: float
     monthly_rent: float
+    mortgage_term_years: int = 30
     rent_inflation_rate: float = 0.03
-    # Tax benefit parameters
-    tax_bracket: float = 24.0
-    enable_mortgage_deduction: bool = True
-    enable_capital_gains_exclusion: bool = True
-    capital_gains_exemption_limit: float = 250000.0
-    salt_cap: float = 10000.0
-    # Closing cost and ongoing expense parameters
     closing_cost_buyer_pct: float = 3.0
     closing_cost_seller_pct: float = 6.0
     property_tax_rate: float = 1.2
     annual_home_insurance: float = 1200.0
     annual_maintenance_pct: float = 1.0
-    cost_inflation_rate: float = 0.03
-    down_payment_investment_rate: float = 0.025
+    cost_inflation_rate: float = 0.025
+    # Tax benefit parameters
+    interest_deduction_enabled: bool = True
+    marginal_tax_rate_pct: float = 24.0
+    levy_deduction_cap: float | None = 10000.0
+    sale_cg_regime: SaleCgRegime = "exempt_amount"
+    sale_cg_exempt_amount: float = 250000.0
+    sale_cg_exempt_after_years: int = 10
+    sale_cg_rate_pct: float = 15.0
+    portfolio_cg_rate_pct: float = 15.0
 
-    def __post_init__(self):  # noqa: C901
+    def __post_init__(self) -> None:  # noqa: C901
         """Validate input parameters.
 
         Raises
@@ -114,7 +144,7 @@ class SimulationConfig:
             from simulator.models import SimulationConfig
 
             config = SimulationConfig(
-                duration_years=30,
+                horizon_years=10,
                 property_price=500000,
                 down_payment_pct=20,
                 mortgage_rate_annual=4.5,
@@ -125,11 +155,18 @@ class SimulationConfig:
             # Validation passed successfully
 
         """
-        # Validate duration_years
-        if self.duration_years <= 0:
+        # Validate horizon_years
+        if self.horizon_years <= 0:
             raise ValueError(
-                f"duration_years must be positive (got {self.duration_years}). "
-                "Please specify a duration greater than 0 years."
+                f"horizon_years must be positive (got {self.horizon_years}). "
+                "Please specify a horizon greater than 0 years."
+            )
+
+        # Validate mortgage_term_years
+        if self.mortgage_term_years <= 0:
+            raise ValueError(
+                "mortgage_term_years must be positive "
+                f"(got {self.mortgage_term_years})."
             )
 
         # Validate property_price
@@ -169,29 +206,62 @@ class SimulationConfig:
                 "For 3% annual inflation, use 0.03. For no inflation, use 0."
             )
 
-        # Validate tax_bracket (must be between 0 and 100)
-        if not (0 <= self.tax_bracket <= 100):
+        # Validate cost_inflation_rate (must be between 0 and 1, i.e., 0-100%)
+        if not (0 <= self.cost_inflation_rate <= 1):
             raise ValueError(
-                f"tax_bracket must be between 0 and 100 (got {self.tax_bracket}). "
+                f"cost_inflation_rate must be 0-1 (got {self.cost_inflation_rate}). "
+                "For 2.5% annual inflation, use 0.025. For no inflation, use 0."
+            )
+
+        # Validate marginal_tax_rate_pct (must be between 0 and 100)
+        if not (0 <= self.marginal_tax_rate_pct <= 100):
+            raise ValueError(
+                "marginal_tax_rate_pct must be between 0 and 100 "
+                f"(got {self.marginal_tax_rate_pct}). "
                 "For no tax benefits, use 0."
             )
 
-        # Validate capital_gains_exemption_limit (must be non-negative)
-        if self.capital_gains_exemption_limit < 0:
+        # Validate levy_deduction_cap (None means uncapped; else non-negative)
+        if self.levy_deduction_cap is not None and self.levy_deduction_cap < 0:
             raise ValueError(
-                "capital_gains_exemption_limit cannot be negative "
-                f"(got {self.capital_gains_exemption_limit})."
+                "levy_deduction_cap cannot be negative "
+                f"(got {self.levy_deduction_cap}). Use None for uncapped."
             )
 
-        # Validate salt_cap (must be non-negative)
-        if self.salt_cap < 0:
-            raise ValueError(f"salt_cap cannot be negative (got {self.salt_cap}).")
-
-        if not (0 <= self.down_payment_investment_rate <= 1):
+        # Validate sale_cg_regime
+        valid_regimes = ("exempt_amount", "exempt_after_years", "fully_exempt")
+        if self.sale_cg_regime not in valid_regimes:
             raise ValueError(
-                f"down_payment_investment_rate must be 0–1 "
-                f"(got {self.down_payment_investment_rate}). "
-                "For 2.5% annual return use 0.025. For no return use 0."
+                f"sale_cg_regime must be one of {valid_regimes} "
+                f"(got {self.sale_cg_regime!r})."
+            )
+
+        # Validate sale_cg_exempt_amount (must be non-negative)
+        if self.sale_cg_exempt_amount < 0:
+            raise ValueError(
+                "sale_cg_exempt_amount cannot be negative "
+                f"(got {self.sale_cg_exempt_amount})."
+            )
+
+        # Validate sale_cg_exempt_after_years (must be non-negative)
+        if self.sale_cg_exempt_after_years < 0:
+            raise ValueError(
+                "sale_cg_exempt_after_years cannot be negative "
+                f"(got {self.sale_cg_exempt_after_years})."
+            )
+
+        # Validate sale_cg_rate_pct (must be between 0 and 100)
+        if not (0 <= self.sale_cg_rate_pct <= 100):
+            raise ValueError(
+                "sale_cg_rate_pct must be between 0 and 100 "
+                f"(got {self.sale_cg_rate_pct})."
+            )
+
+        # Validate portfolio_cg_rate_pct (must be between 0 and 100)
+        if not (0 <= self.portfolio_cg_rate_pct <= 100):
+            raise ValueError(
+                "portfolio_cg_rate_pct must be between 0 and 100 "
+                f"(got {self.portfolio_cg_rate_pct})."
             )
 
 
@@ -202,34 +272,33 @@ class SimulationResults:
     Parameters
     ----------
     data : pd.DataFrame
-        DataFrame containing time-series data with columns:
-        - Month: Month number (0 to duration_years * 12)
-        - Year: Year number (0 to duration_years)
-        - Home_Value: Property value over time
-        - Equity_Value: Investment portfolio value over time
-        - Mortgage_Balance: Remaining mortgage principal
-        - Outflow_Buy: Cumulative outflows for buying scenario
-        - Outflow_Rent: Cumulative outflows for renting scenario
-        - Net_Buy: Net value for buying (Home_Value - Outflow_Buy)
-        - Net_Rent: Net value for renting (Equity_Value - Outflow_Rent)
-        - Savings_Portfolio_Value: Scenario C investment from monthly savings
-        - Net_Rent_Savings: Scenario C net value (down payment + savings - rent)
+        DataFrame containing the per-month time-series columns.
     final_net_buy : float
-        Final net value for buying scenario.
+        Final net value for the buying scenario.
     final_net_rent : float
-        Final net value for renting scenario.
+        Final net value for the rent-and-invest scenario.
     final_difference : float
-        Difference between buying and renting (Buy - Rent).
+        Difference between buying and renting (Buy - Rent); the Verdict.
     breakeven_year : float | None
         Year when net values cross (None if they never cross).
     monthly_mortgage_payment : float
         Monthly mortgage payment amount.
-    scenario_c_enabled : bool
-        Whether Scenario C is applicable (mortgage > initial rent).
-    final_net_rent_savings : float | None
-        Final net value for Scenario C (rent + invest savings).
-    breakeven_year_vs_rent_savings : float | None
-        Year when Buy crosses Rent+Savings (None if never crosses).
+    monthly_cost_buy_year1 : float
+        Mean month-1..12 buyer housing cost.
+    monthly_cost_rent_year1 : float
+        Mean month-1..12 renter housing cost.
+    total_closing_costs_buyer : float
+        Total closing costs paid by the buyer.
+    total_closing_costs_seller : float
+        Total closing costs paid by the seller on sale.
+    total_property_tax_paid : float
+        Total property tax paid over the horizon.
+    total_insurance_paid : float
+        Total home insurance paid over the horizon.
+    total_maintenance_paid : float
+        Total maintenance cost paid over the horizon.
+    total_tax_savings : float
+        Total tax savings from mortgage interest / levy deductions.
 
     Examples
     --------
@@ -244,14 +313,8 @@ class SimulationResults:
             'Month': [0, 12, 24],
             'Year': [0, 1, 2],
             'Home_Value': [500000, 515000, 530450],
-            'Equity_Value': [100000, 107000, 114490],
-            'Mortgage_Balance': [400000, 390000, 380000],
-            'Outflow_Buy': [100000, 118000, 136000],
-            'Outflow_Rent': [0, 24000, 48000],
             'Net_Buy': [400000, 397000, 394450],
             'Net_Rent': [100000, 83000, 66490],
-            'Savings_Portfolio_Value': [0, 5000, 10500],
-            'Net_Rent_Savings': [100000, 81000, 62500]
         })
 
         results = SimulationResults(
@@ -261,9 +324,14 @@ class SimulationResults:
             final_difference=327960,
             breakeven_year=None,
             monthly_mortgage_payment=2500,
-            scenario_c_enabled=True,
-            final_net_rent_savings=62500,
-            breakeven_year_vs_rent_savings=None,
+            monthly_cost_buy_year1=3200,
+            monthly_cost_rent_year1=2400,
+            total_closing_costs_buyer=15000,
+            total_closing_costs_seller=0,
+            total_property_tax_paid=6000,
+            total_insurance_paid=1200,
+            total_maintenance_paid=5000,
+            total_tax_savings=8000,
         )
 
     """
@@ -274,21 +342,14 @@ class SimulationResults:
     final_difference: float
     breakeven_year: float | None
     monthly_mortgage_payment: float
-    scenario_c_enabled: bool
-    final_net_rent_savings: float | None
-    breakeven_year_vs_rent_savings: float | None
-    # Closing cost and ongoing expense totals
-    total_closing_costs_buyer: float = 0.0
-    total_closing_costs_seller: float = 0.0
-    total_property_tax_paid: float = 0.0
-    total_insurance_paid: float = 0.0
-    total_maintenance_paid: float = 0.0
-    final_down_payment_value: float | None = None
-    # Tax benefit totals
-    total_tax_savings: float = 0.0
-    capital_gains_tax_saved: float = 0.0
-    final_net_buy_tax_adjusted: float = 0.0
-    tax_adjusted_difference: float = 0.0
+    monthly_cost_buy_year1: float
+    monthly_cost_rent_year1: float
+    total_closing_costs_buyer: float
+    total_closing_costs_seller: float
+    total_property_tax_paid: float
+    total_insurance_paid: float
+    total_maintenance_paid: float
+    total_tax_savings: float
 
 
 @dataclass
@@ -310,12 +371,12 @@ class MonteCarloConfig:
         Whether to randomize annual property appreciation. Default True.
     property_appreciation_std : float
         Standard deviation (in percentage points) for property
-        appreciation draws. Default is 5.0.
+        appreciation draws. Default is 8.0.
     randomize_equity_growth : bool
         Whether to randomize annual equity growth. Default True.
     equity_growth_std : float
         Standard deviation (in percentage points) for equity growth
-        draws. Default is 5.0.
+        draws. Default is 15.0.
     randomize_rent_inflation : bool
         Whether to randomize annual rent inflation. Default True.
     rent_inflation_std : float
@@ -347,9 +408,9 @@ class MonteCarloConfig:
     n_simulations: int = 500
     seed: int | None = 42
     randomize_property_appreciation: bool = True
-    property_appreciation_std: float = 5.0
+    property_appreciation_std: float = 8.0
     randomize_equity_growth: bool = True
-    equity_growth_std: float = 5.0
+    equity_growth_std: float = 15.0
     randomize_rent_inflation: bool = True
     rent_inflation_std: float = 1.5
     appreciation_equity_correlation: float = 0.3
@@ -463,7 +524,7 @@ class MonteCarloResults:
         from simulator.models import SimulationConfig, MonteCarloConfig
 
         config = SimulationConfig(
-            duration_years=10, property_price=500000,
+            horizon_years=10, property_price=500000,
             down_payment_pct=20, mortgage_rate_annual=4.5,
             property_appreciation_annual=3.0,
             equity_growth_annual=7.0, monthly_rent=2000,

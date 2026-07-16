@@ -13,7 +13,7 @@ Basic usage:
     from simulator import SimulationConfig, calculate_scenarios
 
     config = SimulationConfig(
-        duration_years=30,
+        horizon_years=30,
         property_price=500000,
         down_payment_pct=20,
         mortgage_rate_annual=4.5,

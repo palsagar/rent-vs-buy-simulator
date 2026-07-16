@@ -73,327 +73,217 @@ def _is_close(a: float, b: float) -> bool:
     return abs(a - b) < _FLOAT_TOLERANCE
 
 
-def calculate_scenarios(config: SimulationConfig) -> SimulationResults:  # noqa: C901
-    """Calculate time-series data for both buy and rent scenarios.
+def _net_value_series(
+    config: SimulationConfig,
+    prop_rate_monthly: np.ndarray,
+    eq_rate_monthly: np.ndarray,
+    rent_growth_monthly: np.ndarray,
+) -> dict[str, np.ndarray]:
+    """Compute all Net Value time series from per-month rate arrays.
 
-    This function performs vectorized calculations using NumPy for performance.
-    All calculations are done at monthly granularity for accuracy.
+    Single source of truth for both the deterministic engine and Monte
+    Carlo (ADR-0001). Net Value at month t is the wealth you would walk
+    away with if you exited the strategy at t, minus all cash committed
+    through t (CONTEXT.md: "Net Value"). Both strategies commit the same
+    cash each month; the cheaper side invests the difference in equities
+    (CONTEXT.md: "Cash-flow matching"). Capital-gains and deduction tax
+    primitives are applied inline (ADR-0007).
 
     Parameters
     ----------
     config : SimulationConfig
-        Configuration object with all input parameters for the simulation.
+        Configuration object with all input parameters for the
+        simulation, including the Horizon (``horizon_years``).
+    prop_rate_monthly : np.ndarray
+        Monthly property appreciation rate per month, decimal, shape
+        ``(H,)`` for months 1..H.
+    eq_rate_monthly : np.ndarray
+        Monthly equity portfolio growth rate per month, decimal, shape
+        ``(H,)``.
+    rent_growth_monthly : np.ndarray
+        Monthly rent growth rate per month, decimal, shape ``(H,)``.
 
     Returns
     -------
-    SimulationResults
-        Results object containing DataFrame with time-series data and summary
-        metrics including final net values and breakeven year.
+    dict[str, np.ndarray]
+        Time series keyed by name, each of shape ``(H+1,)`` where
+        ``H = config.horizon_years * 12``: ``home_value``,
+        ``mortgage_balance``, ``rent_portfolio``, ``buy_portfolio``,
+        ``housing_cost_buy``, ``housing_cost_rent``, ``outflow_buy``,
+        ``outflow_rent``, ``cash_committed``, ``cum_tax_savings``,
+        ``net_buy``, ``net_rent``, plus underscore-prefixed internals
+        (``_interest``, ``_levy``, ``_insurance``, ``_maintenance``,
+        ``_basis_rent``, ``_basis_buy``, ``_monthly_payment``) consumed
+        by the tax layer.
 
     Examples
     --------
-    Run a simulation:
+    Run the core with constant (deterministic) monthly rates:
 
     .. code-block:: python
 
+        import numpy as np
         from simulator.models import SimulationConfig
-        from simulator.engine import calculate_scenarios
+        from simulator.engine import _net_value_series
 
         config = SimulationConfig(
-            duration_years=5,
+            horizon_years=10,
             property_price=500000,
             down_payment_pct=20,
             mortgage_rate_annual=4.5,
             property_appreciation_annual=3,
             equity_growth_annual=7,
-            monthly_rent=2000
+            monthly_rent=2000,
         )
-
-        results = calculate_scenarios(config)
-        print(f"Final difference: ${results.final_difference:,.0f}")
+        h = config.horizon_years * 12
+        series = _net_value_series(
+            config,
+            np.full(h, 0.03 / 12),
+            np.full(h, 0.07 / 12),
+            np.full(h, config.rent_inflation_rate / 12),
+        )
+        print(f"Net Value (buy): ${series['net_buy'][-1]:,.0f}")
 
     """
-    # Setup time vector (monthly granularity)
-    n_months = config.duration_years * 12
-    month_arr = np.arange(n_months + 1)
-    year_arr = month_arr / 12
+    h = config.horizon_years * 12
+    t_arr = np.arange(h + 1)
 
-    # ========== SCENARIO A: BUY ==========
-
-    # Calculate initial values
     down_payment = config.property_price * (config.down_payment_pct / 100)
-    # Buyer closing costs are a one-time upfront outflow at purchase
-    buyer_closing_costs = config.property_price * (config.closing_cost_buyer_pct / 100)
-    initial_outflow = down_payment + buyer_closing_costs
-    loan_amount = config.property_price - down_payment
-    monthly_rate = (config.mortgage_rate_annual / 100) / 12
+    buyer_closing = config.property_price * (config.closing_cost_buyer_pct / 100)
+    initial_outlay = down_payment + buyer_closing
+    loan = config.property_price - down_payment
+    r = (config.mortgage_rate_annual / 100) / 12
+    n_term = config.mortgage_term_years * 12
 
-    # Calculate monthly mortgage payment using numpy-financial
-    # Note: npf.pmt returns negative value (outflow), so we negate it
-    # Handle edge case: 100% down payment (no loan)
-    if _is_close_to_zero(loan_amount):
-        # No loan = no monthly payment
-        monthly_payment = 0.0
-    elif _is_close_to_zero(monthly_rate):
-        # 0% interest rate edge case: simple principal division
-        monthly_payment = loan_amount / n_months if n_months > 0 else 0.0
+    # --- Home value: compounds with the (possibly stochastic) monthly rate
+    home_growth = np.concatenate([[1.0], np.cumprod(1 + prop_rate_monthly)])
+    home_value = config.property_price * home_growth
+
+    # --- Fixed-rate mortgage: payment over the term, not the horizon
+    if _is_close_to_zero(loan):
+        pmt = 0.0
+        balance = np.zeros(h + 1)
+    elif _is_close_to_zero(r):
+        pmt = loan / n_term
+        balance = np.maximum(loan - pmt * t_arr, 0.0)
     else:
-        # Normal case: calculate amortized payment
-        monthly_payment = -npf.pmt(monthly_rate, n_months, loan_amount)
+        pmt = -npf.pmt(r, n_term, loan)
+        growth = (1 + r) ** np.minimum(t_arr, n_term)
+        balance = np.maximum(loan * growth - pmt * (growth - 1) / r, 0.0)
 
-    # Property value over time (compound monthly appreciation)
-    # Formula: P * (1 + r/12)^month
-    monthly_appreciation_rate = (config.property_appreciation_annual / 100) / 12
-    home_value = config.property_price * (1 + monthly_appreciation_rate) ** month_arr
+    # Payment made during month m (1..min(term, horizon)); zero after payoff
+    payment = np.where((t_arr >= 1) & (t_arr <= n_term), pmt, 0.0)
+    # Interest accrued during month m on the prior balance
+    interest = np.zeros(h + 1)
+    interest[1:] = balance[:-1] * r
 
-    # Calculate remaining mortgage balance at each time step
-    # This is the present value of remaining payments
-    mortgage_balance = np.zeros(n_months + 1)
+    # --- Ongoing ownership costs paid during month m (prior-month value base)
+    levy = np.zeros(h + 1)
+    levy[1:] = home_value[:-1] * (config.property_tax_rate / 100) / 12
+    insurance = np.zeros(h + 1)
+    insurance[1:] = (config.annual_home_insurance / 12) * (
+        1 + config.cost_inflation_rate / 12
+    ) ** (t_arr[1:] - 1)
+    maintenance = np.zeros(h + 1)
+    maintenance[1:] = home_value[:-1] * (config.annual_maintenance_pct / 100) / 12
 
-    # Handle edge case: 100% down payment (no mortgage)
-    if _is_close_to_zero(loan_amount):
-        # No mortgage, balance is always zero
-        mortgage_balance = np.zeros(n_months + 1)
-    else:
-        for i in range(n_months + 1):
-            remaining_months = n_months - i
-            if remaining_months > 0 and not _is_close_to_zero(monthly_rate):
-                # Calculate remaining balance using present value formula
-                mortgage_balance[i] = -npf.pv(
-                    monthly_rate, remaining_months, monthly_payment
-                )
-            elif remaining_months > 0 and _is_close_to_zero(monthly_rate):
-                # With 0% interest, balance decreases linearly
-                mortgage_balance[i] = loan_amount - (monthly_payment * i)
-            else:
-                mortgage_balance[i] = 0
+    housing_cost_buy = payment + levy + insurance + maintenance
 
-    # Ensure balance doesn't go below zero (handle floating-point errors)
-    mortgage_balance = np.maximum(mortgage_balance, 0)
-
-    # Monthly interest paid at each time step (for tax deduction calculations)
-    monthly_interest = np.zeros(n_months + 1)
-    if not _is_close_to_zero(loan_amount) and not _is_close_to_zero(monthly_rate):
-        for i in range(1, n_months + 1):
-            monthly_interest[i] = mortgage_balance[i - 1] * monthly_rate
-
-    # Ongoing homeownership costs: property tax, insurance, maintenance
-    # Property tax is a % of current home value each month
-    monthly_property_tax_rate = (config.property_tax_rate / 100) / 12
-    monthly_property_tax = home_value * monthly_property_tax_rate
-
-    # Insurance and maintenance inflate with cost_inflation_rate
-    monthly_cost_inflation_rate = config.cost_inflation_rate / 12
-    cost_inflation_factor = (1 + monthly_cost_inflation_rate) ** month_arr
-    monthly_insurance = (config.annual_home_insurance / 12) * cost_inflation_factor
-    monthly_maintenance = (
-        home_value * (config.annual_maintenance_pct / 100) / 12
-    ) * cost_inflation_factor
-
-    # Cumulate ongoing costs using the same convention as cum_rent_outflow:
-    # value at t = total paid through end of month t-1 (so t=0 is zero).
-    cum_property_tax = np.concatenate([[0], np.cumsum(monthly_property_tax[:-1])])
-    cum_insurance = np.concatenate([[0], np.cumsum(monthly_insurance[:-1])])
-    cum_maintenance = np.concatenate([[0], np.cumsum(monthly_maintenance[:-1])])
-
-    # Total buy outflow: initial (down payment + closing) + mortgage + ongoing costs
-    cum_mortgage_outflow = initial_outflow + (monthly_payment * month_arr)
-    total_cum_outflow_buy = (
-        cum_mortgage_outflow + cum_property_tax + cum_insurance + cum_maintenance
+    # --- Rent paid during month m (rent set at end of prior month)
+    rent_level = config.monthly_rent * np.concatenate(
+        [[1.0], np.cumprod(1 + rent_growth_monthly)]
     )
+    housing_cost_rent = np.zeros(h + 1)
+    housing_cost_rent[1:] = rent_level[:-1]
 
-    # Tax deduction savings (mortgage interest + property tax, subject to SALT cap)
-    tax_rate = config.tax_bracket / 100
-    annual_interest = np.zeros(n_months + 1)
-    annual_property_tax = np.zeros(n_months + 1)
-    annual_tax_savings = np.zeros(n_months + 1)
-    cumulative_tax_savings = np.zeros(n_months + 1)
-    for yr in range(1, config.duration_years + 1):
-        yr_end = yr * 12
-        yr_start = yr_end - 11
+    # --- Cash-flow matching: cheaper side invests the difference
+    surplus = housing_cost_buy - housing_cost_rent
+    contrib_rent = np.maximum(surplus, 0.0)
+    contrib_buy = np.maximum(-surplus, 0.0)
 
-        year_interest = float(np.sum(monthly_interest[yr_start : yr_end + 1]))
-        year_property_tax = float(np.sum(monthly_property_tax[yr_start : yr_end + 1]))
+    # Portfolio value with varying growth: V[t] = G[t]*(V0 + sum c[m]/G[m])
+    eq_growth = np.concatenate([[1.0], np.cumprod(1 + eq_rate_monthly)])
+    rent_portfolio = eq_growth * (initial_outlay + np.cumsum(contrib_rent / eq_growth))
+    buy_portfolio = eq_growth * np.cumsum(contrib_buy / eq_growth)
+    basis_rent = initial_outlay + np.cumsum(contrib_rent)
+    basis_buy = np.cumsum(contrib_buy)
 
-        annual_interest[yr_start : yr_end + 1] = year_interest
-        annual_property_tax[yr_start : yr_end + 1] = year_property_tax
-
-        yr_savings = 0.0
-        if config.enable_mortgage_deduction and not _is_close_to_zero(tax_rate):
-            deductible_prop_tax = min(year_property_tax, config.salt_cap)
-            yr_savings = (year_interest + deductible_prop_tax) * tax_rate
-
-        annual_tax_savings[yr_start : yr_end + 1] = yr_savings
-        prior = cumulative_tax_savings[yr_start - 1] if yr_start > 1 else 0.0
-        cumulative_tax_savings[yr_start : yr_end + 1] = prior + yr_savings
-
-    # Capital gains exclusion on sale (primary residence benefit)
-    capital_gains_tax_saved = 0.0
-    if config.enable_capital_gains_exclusion:
-        final_home_val = float(home_value[-1])
-        capital_gain = final_home_val - config.property_price
-        if capital_gain > config.capital_gains_exemption_limit:
-            taxable_gain = capital_gain - config.capital_gains_exemption_limit
-            cg_rate = 0.20 if config.tax_bracket >= 35 else 0.15
-            capital_gains_tax_saved = taxable_gain * cg_rate
-
-    # Seller closing costs reduce final net value at sale
-    seller_closing_costs = float(home_value[-1]) * (
-        config.closing_cost_seller_pct / 100
+    # --- Cash committed: identical for both strategies by construction
+    cash_committed = initial_outlay + np.cumsum(
+        np.maximum(housing_cost_buy, housing_cost_rent)
     )
+    outflow_buy = initial_outlay + np.cumsum(housing_cost_buy)
+    outflow_rent = np.cumsum(housing_cost_rent)
 
-    # Net value for buying scenario (Asset - Cumulative Outflows)
-    # Seller closing costs are only realised at the end, so only applied to final value
-    net_val_buy = home_value - total_cum_outflow_buy
-    net_val_buy_tax_adjusted = net_val_buy + cumulative_tax_savings
+    # --- Deduction savings: (interest + capped levy) * marginal rate,
+    # credited at the end of each completed year
+    cum_tax_savings = np.zeros(h + 1)
+    if (
+        config.interest_deduction_enabled
+        and config.marginal_tax_rate_pct > _FLOAT_TOLERANCE
+    ):
+        yearly_interest = interest[1:].reshape(config.horizon_years, 12).sum(axis=1)
+        yearly_levy = levy[1:].reshape(config.horizon_years, 12).sum(axis=1)
+        if config.levy_deduction_cap is not None:
+            yearly_levy = np.minimum(yearly_levy, config.levy_deduction_cap)
+        yearly_savings = (yearly_interest + yearly_levy) * (
+            config.marginal_tax_rate_pct / 100
+        )
+        cum_by_year = np.concatenate([[0.0], np.cumsum(yearly_savings)])
+        cum_tax_savings = cum_by_year[t_arr // 12]
 
-    # ========== SCENARIO B: RENT & INVEST ==========
+    # --- Sale capital gains: regime-dependent taxable gain (ADR-0007)
+    home_gain = np.maximum(home_value - config.property_price, 0.0)
+    if config.sale_cg_regime == "fully_exempt":
+        taxable_gain = np.zeros(h + 1)
+    elif config.sale_cg_regime == "exempt_amount":
+        taxable_gain = np.maximum(home_gain - config.sale_cg_exempt_amount, 0.0)
+    else:  # exempt_after_years: taxed only if sold before the holding period
+        held_long_enough = t_arr >= config.sale_cg_exempt_after_years * 12
+        taxable_gain = np.where(held_long_enough, 0.0, home_gain)
+    sale_cg_tax = taxable_gain * (config.sale_cg_rate_pct / 100)
 
-    # Investment portfolio value over time
-    # Initial investment equals the down payment from Scenario A
-    # Formula: D * (1 + e/12)^month
-    monthly_equity_rate = (config.equity_growth_annual / 100) / 12
-    equity_value = down_payment * (1 + monthly_equity_rate) ** month_arr
-    monthly_dp_rate = config.down_payment_investment_rate / 12
+    # --- Portfolio capital gains: symmetric on both strategies' exits
+    portfolio_rate = config.portfolio_cg_rate_pct / 100
+    portfolio_tax_rent = np.maximum(rent_portfolio - basis_rent, 0.0) * portfolio_rate
+    portfolio_tax_buy = np.maximum(buy_portfolio - basis_buy, 0.0) * portfolio_rate
 
-    # Calculate cumulative rent outflows
-    # Option 1: Constant rent (simpler)
-    # cum_rent_outflow = config.monthly_rent * month_arr
-
-    # Option 2: Rent with inflation (more realistic)
-    # We need to calculate cumulative sum of inflating rent
-    monthly_rent_inflation = config.rent_inflation_rate / 12
-
-    # Calculate rent at each month
-    rent_at_month = config.monthly_rent * (1 + monthly_rent_inflation) ** month_arr
-
-    # Cumulative rent is the sum of all rents up to each point
-    # We use cumulative sum (trapezoid rule for integration)
-    cum_rent_outflow = np.cumsum(rent_at_month)
-    # Adjust: first month should be 0 (no rent paid yet at t=0)
-    cum_rent_outflow = np.concatenate([[0], cum_rent_outflow[:-1]])
-
-    # Net value for renting scenario (Asset - Cumulative Outflows)
-    net_val_rent = equity_value - cum_rent_outflow
-
-    # ========== SCENARIO C: RENT & INVEST MONTHLY SAVINGS ==========
-    # Only applicable when initial mortgage payment > initial rent
-    # Handle edge case: rent equals mortgage exactly
-    scenario_c_enabled = monthly_payment > config.monthly_rent + _FLOAT_TOLERANCE
-
-    # Calculate monthly savings (mortgage payment - rent), capped at 0 when
-    # rent exceeds mortgage. The savings are invested each month at the same
-    # CAGR as Scenario B
-    monthly_savings = np.maximum(0, monthly_payment - rent_at_month)
-
-    # Down payment grows at the money-market rate in Scenario C
-    down_payment_value = down_payment * (1 + monthly_dp_rate) ** month_arr
-
-    # Calculate compounded value of monthly contributions
-    # Each month's contribution compounds for the remaining months
-    # savings_portfolio[t] = sum over i from 0 to t-1 of: savings[i] * (1 + r)^(t-i)
-    savings_portfolio = np.zeros(n_months + 1)
-    for t in range(1, n_months + 1):
-        # Previous portfolio value grows by one month
-        savings_portfolio[t] = savings_portfolio[t - 1] * (1 + monthly_equity_rate)
-        # Add this month's savings contribution (invested at end of month t-1)
-        if t > 0:
-            savings_portfolio[t] += monthly_savings[t - 1]
-
-    # Scenario C asset value: invested down payment + savings portfolio
-    asset_value_rent_savings = down_payment_value + savings_portfolio
-
-    # Scenario C net value: asset value - cumulative rent outflows
-    net_val_rent_savings = asset_value_rent_savings - cum_rent_outflow
-
-    # Calculate Scenario C final values and breakeven
-    final_net_rent_savings = (
-        float(net_val_rent_savings[-1]) if scenario_c_enabled else None
+    # --- Liquidation-priced Net Value at every t (ADR-0001)
+    seller_cost = home_value * (config.closing_cost_seller_pct / 100)
+    net_buy = (
+        home_value
+        - balance
+        - seller_cost
+        - sale_cg_tax
+        + buy_portfolio
+        - portfolio_tax_buy
+        + cum_tax_savings
+        - cash_committed
     )
-    final_down_payment_value = (
-        float(down_payment_value[-1]) if scenario_c_enabled else None
-    )
-    breakeven_year_vs_rent_savings = (
-        _find_breakeven(year_arr, net_val_buy, net_val_rent_savings)
-        if scenario_c_enabled
-        else None
-    )
+    net_rent = rent_portfolio - portfolio_tax_rent - cash_committed
 
-    # ========== CONSTRUCT OUTPUT ==========
-
-    # Create DataFrame with all time-series data
-    df = pd.DataFrame(
-        {
-            "Month": month_arr,
-            "Year": year_arr,
-            "Home_Value": home_value,
-            "Equity_Value": equity_value,
-            "Mortgage_Balance": mortgage_balance,
-            "Outflow_Buy": total_cum_outflow_buy,
-            "Outflow_Rent": cum_rent_outflow,
-            "Net_Buy": net_val_buy,
-            "Net_Rent": net_val_rent,
-            "Annual_Interest": annual_interest,
-            "Annual_Property_Tax": annual_property_tax,
-            "Annual_Tax_Savings": annual_tax_savings,
-            "Cumulative_Tax_Savings": cumulative_tax_savings,
-            "Net_Buy_Tax_Adjusted": net_val_buy_tax_adjusted,
-            "Savings_Portfolio_Value": savings_portfolio,
-            "Down_Payment_Value": down_payment_value,
-            "Net_Rent_Savings": net_val_rent_savings,
-            "Property_Tax_Paid": cum_property_tax,
-            "Insurance_Paid": cum_insurance,
-            "Maintenance_Paid": cum_maintenance,
-            # Scalar closing costs broadcast to all rows for easy access
-            "Closing_Costs_Buyer": np.full(n_months + 1, buyer_closing_costs),
-            "Closing_Costs_Seller": np.full(n_months + 1, seller_closing_costs),
-        }
-    )
-
-    # Summary metrics: seller closing costs applied at sale only
-    final_net_buy = float(net_val_buy[-1]) - seller_closing_costs
-    final_net_rent = float(net_val_rent[-1])
-    final_difference = final_net_buy - final_net_rent
-
-    # Find breakeven point (where net values cross)
-    breakeven_year = _find_breakeven(year_arr, net_val_buy, net_val_rent)
-
-    # Tax-adjusted final values
-    total_tax_savings = float(cumulative_tax_savings[-1])
-    final_net_buy_tax_adjusted = (
-        float(net_val_buy_tax_adjusted[-1])
-        - seller_closing_costs
-        + capital_gains_tax_saved
-    )
-    tax_adjusted_difference = final_net_buy_tax_adjusted - final_net_rent
-
-    # Totals match the last DataFrame row (consistent with shift convention)
-    total_closing_costs_buyer = buyer_closing_costs
-    total_property_tax_paid = float(cum_property_tax[-1])
-    total_insurance_paid = float(cum_insurance[-1])
-    total_maintenance_paid = float(cum_maintenance[-1])
-
-    return SimulationResults(
-        data=df,
-        final_net_buy=final_net_buy,
-        final_net_rent=final_net_rent,
-        final_difference=final_difference,
-        breakeven_year=breakeven_year,
-        monthly_mortgage_payment=monthly_payment,
-        scenario_c_enabled=scenario_c_enabled,
-        final_net_rent_savings=final_net_rent_savings,
-        final_down_payment_value=final_down_payment_value,
-        breakeven_year_vs_rent_savings=breakeven_year_vs_rent_savings,
-        total_closing_costs_buyer=total_closing_costs_buyer,
-        total_closing_costs_seller=seller_closing_costs,
-        total_property_tax_paid=total_property_tax_paid,
-        total_insurance_paid=total_insurance_paid,
-        total_maintenance_paid=total_maintenance_paid,
-        total_tax_savings=total_tax_savings,
-        capital_gains_tax_saved=capital_gains_tax_saved,
-        final_net_buy_tax_adjusted=final_net_buy_tax_adjusted,
-        tax_adjusted_difference=tax_adjusted_difference,
-    )
+    return {
+        "home_value": home_value,
+        "mortgage_balance": balance,
+        "rent_portfolio": rent_portfolio,
+        "buy_portfolio": buy_portfolio,
+        "housing_cost_buy": housing_cost_buy,
+        "housing_cost_rent": housing_cost_rent,
+        "outflow_buy": outflow_buy,
+        "outflow_rent": outflow_rent,
+        "cash_committed": cash_committed,
+        "cum_tax_savings": cum_tax_savings,
+        "net_buy": net_buy,
+        "net_rent": net_rent,
+        # internal series (underscore keys) consumed by callers; not exported to the df
+        "_interest": interest,
+        "_levy": levy,
+        "_insurance": insurance,
+        "_maintenance": maintenance,
+        "_basis_rent": basis_rent,
+        "_basis_buy": basis_buy,
+        "_monthly_payment": np.array([pmt]),
+    }
 
 
 def _find_breakeven(
@@ -459,3 +349,95 @@ def _find_breakeven(
             return float(years[i])
 
     return None
+
+
+def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
+    """Run the deterministic simulation on the shared Net Value core.
+
+    Feeds constant monthly rates (derived from the config's annual
+    rates) into :func:`_net_value_series` and assembles the results
+    DataFrame and summary fields. The Verdict (``final_difference``),
+    the charted series (``results.data``), and the Breakeven all read
+    the same ``net_buy``/``net_rent`` arrays, so they can never
+    disagree (CONTEXT.md: "Net Value", "Verdict", "Breakeven").
+
+    Parameters
+    ----------
+    config : SimulationConfig
+        Configuration object with all input parameters for the
+        simulation, including the Horizon (``horizon_years``).
+
+    Returns
+    -------
+    SimulationResults
+        Assembled time series and summary statistics for both
+        strategies.
+
+    Examples
+    --------
+    Run the deterministic simulation and read the Verdict:
+
+    .. code-block:: python
+
+        from simulator.models import SimulationConfig
+        from simulator.engine import calculate_scenarios
+
+        config = SimulationConfig(
+            horizon_years=10,
+            property_price=500000,
+            down_payment_pct=20,
+            mortgage_rate_annual=4.5,
+            property_appreciation_annual=3,
+            equity_growth_annual=7,
+            monthly_rent=2000,
+        )
+        results = calculate_scenarios(config)
+        print(f"Final difference: ${results.final_difference:,.0f}")
+
+    """
+    h = config.horizon_years * 12
+    series = _net_value_series(
+        config,
+        np.full(h, (config.property_appreciation_annual / 100) / 12),
+        np.full(h, (config.equity_growth_annual / 100) / 12),
+        np.full(h, config.rent_inflation_rate / 12),
+    )
+
+    t_arr = np.arange(h + 1)
+    year_arr = t_arr / 12
+    df = pd.DataFrame(
+        {
+            "Month": t_arr,
+            "Year": year_arr,
+            "Home_Value": series["home_value"],
+            "Equity_Value": series["rent_portfolio"],
+            "Buy_Portfolio_Value": series["buy_portfolio"],
+            "Mortgage_Balance": series["mortgage_balance"],
+            "Outflow_Buy": series["outflow_buy"],
+            "Outflow_Rent": series["outflow_rent"],
+            "Cash_Committed": series["cash_committed"],
+            "Net_Buy": series["net_buy"],
+            "Net_Rent": series["net_rent"],
+        }
+    )
+
+    net_buy, net_rent = series["net_buy"], series["net_rent"]
+    return SimulationResults(
+        data=df,
+        final_net_buy=float(net_buy[-1]),
+        final_net_rent=float(net_rent[-1]),
+        final_difference=float(net_buy[-1] - net_rent[-1]),
+        breakeven_year=_find_breakeven(year_arr, net_buy, net_rent),
+        monthly_mortgage_payment=float(series["_monthly_payment"][0]),
+        monthly_cost_buy_year1=float(np.mean(series["housing_cost_buy"][1:13])),
+        monthly_cost_rent_year1=float(np.mean(series["housing_cost_rent"][1:13])),
+        total_closing_costs_buyer=config.property_price
+        * (config.closing_cost_buyer_pct / 100),
+        total_closing_costs_seller=float(
+            series["home_value"][-1] * (config.closing_cost_seller_pct / 100)
+        ),
+        total_property_tax_paid=float(np.sum(series["_levy"])),
+        total_insurance_paid=float(np.sum(series["_insurance"])),
+        total_maintenance_paid=float(np.sum(series["_maintenance"])),
+        total_tax_savings=float(series["cum_tax_savings"][-1]),
+    )

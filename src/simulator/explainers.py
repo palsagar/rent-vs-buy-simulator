@@ -1,8 +1,8 @@
 """Educational explainer components for the simulation UI.
 
 Provides a welcome modal and inline guide panel that explain core
-concepts (scenarios, net value, breakeven, Scenario C availability)
-using colorful, scannable cards and accordions.
+concepts (scenarios, net value, breakeven) using colorful, scannable
+cards and accordions.
 """
 
 import streamlit as st
@@ -21,7 +21,6 @@ _EXPLAINER_CSS = """\
 }
 .explainer-card--a { background: #1a2e1a; border-left: 4px solid #4ade80; }
 .explainer-card--b { background: #1a1a2e; border-left: 4px solid #60a5fa; }
-.explainer-card--c { background: #2a1a2e; border-left: 4px solid #c084fc; }
 .explainer-card--mc { background: #1a2a2e; border-left: 4px solid #f59e0b; }
 .explainer-badge--mc { background: #f59e0b; }
 .explainer-badge {
@@ -35,7 +34,6 @@ _EXPLAINER_CSS = """\
 }
 .explainer-badge--a { background: #4ade80; }
 .explainer-badge--b { background: #60a5fa; }
-.explainer-badge--c { background: #c084fc; }
 .explainer-formula {
     background: #1c2128;
     border-radius: 6px;
@@ -98,13 +96,13 @@ _WELCOME_MODAL_HTML = """\
 </div>
 <p style="color: #ccc; font-size: 1rem; line-height: 1.7; margin-bottom: 24px;">
     Should you buy a home or rent and invest the difference? This simulator
-    models <strong style="color: #fff;">three financial strategies</strong>
+    models <strong style="color: #fff;">two financial strategies</strong>
     side-by-side so you can compare outcomes with your own numbers.
 </p>
 
 <h3 style="color: #e2e8f0; font-size: 1rem; margin: 0 0 12px;
     letter-spacing: 0.05em; text-transform: uppercase;">
-    The Three Strategies
+    The Two Strategies
 </h3>
 <div class="explainer-card explainer-card--a">
     <span class="explainer-badge explainer-badge--a">A</span>
@@ -119,18 +117,9 @@ _WELCOME_MODAL_HTML = """\
     <span class="explainer-badge explainer-badge--b">B</span>
     <div>
         <strong style="color: #60a5fa; font-size: 1rem;">Rent + Invest</strong>
-        <p>Rent and invest the full down payment in equities. Your asset is
-        the investment portfolio; outflows are rent payments.</p>
-    </div>
-</div>
-<div class="explainer-card explainer-card--c">
-    <span class="explainer-badge explainer-badge--c">C</span>
-    <div>
-        <strong style="color: #c084fc; font-size: 1rem;">
-            Rent + Invest Savings</strong>
-        <p>Rent, invest the down payment conservatively, and invest monthly
-        savings (mortgage &minus; rent) in equities. Available when
-        mortgage &gt; rent.</p>
+        <p>Rent and invest what buying would have cost: the down payment
+        and closing costs up front, plus the monthly difference whenever
+        renting is cheaper.</p>
     </div>
 </div>
 
@@ -173,7 +162,7 @@ def _welcome_dialog() -> None:
 def show_welcome_modal() -> None:
     """Show the welcome modal on first visit.
 
-    Displays a dialog explaining the three scenarios and how to use
+    Displays a dialog explaining the two scenarios and how to use
     the simulator. Dismissed by clicking "Start Exploring", after
     which it does not reappear for the rest of the session.
 
@@ -206,19 +195,9 @@ _GUIDE_SCENARIOS_HTML = """\
     <span class="explainer-badge explainer-badge--b">B</span>
     <div>
         <strong style="color: #60a5fa;">Rent + Invest</strong>
-        <p>You rent and invest the full down payment into a diversified
-        equity portfolio. Your asset is the investment portfolio. Outflows
-        are rent payments.</p>
-    </div>
-</div>
-<div class="explainer-card explainer-card--c">
-    <span class="explainer-badge explainer-badge--c">C</span>
-    <div>
-        <strong style="color: #c084fc;">Rent + Invest Savings</strong>
-        <p>You rent and invest the down payment at a conservative rate
-        (e.g. money market fund). Monthly savings (mortgage &minus; rent)
-        are invested in equities at the same growth rate as Strategy B.
-        Available when mortgage &gt; rent.</p>
+        <p>Rent and invest what buying would have cost: the down payment
+        and closing costs up front, plus the monthly difference whenever
+        renting is cheaper.</p>
     </div>
 </div>
 """
@@ -255,20 +234,6 @@ _GUIDE_BREAKEVEN_HTML = """\
 </p>
 """
 
-_GUIDE_SCENARIO_C_HTML = """\
-<p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
-    Scenario C only appears when your <strong style="color: #e2e8f0;">
-    monthly mortgage payment is higher than rent</strong>. The difference
-    (mortgage &minus; rent) is the "savings" you invest each month in
-    equities.
-</p>
-<p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
-    If rent &ge; mortgage, there are no monthly savings to invest, so
-    Scenario C is disabled. Try increasing the property price, lowering
-    the down payment, or decreasing rent to unlock it.
-</p>
-"""
-
 _GUIDE_MONTE_CARLO_HTML = """\
 <p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
     The main charts assume growth rates play out exactly as configured.
@@ -282,8 +247,8 @@ _GUIDE_MONTE_CARLO_HTML = """\
 <p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
     Instead of &ldquo;Buy wins by $142K,&rdquo; you see:
     <strong style="color: #e2e8f0;">&ldquo;Buying wins in 68% of
-    simulations.&rdquo;</strong> The spaghetti chart shows every
-    possible path, and the tornado chart reveals which parameters
+    simulations.&rdquo;</strong> The fan chart shows the range of
+    possible outcomes, and the tornado chart reveals which parameters
     matter most.
 </p>
 """
@@ -309,13 +274,11 @@ def render_guide_panel() -> None:
 
     with st.container(border=True):
         st.markdown("#### 📖 How It Works")
-        with st.expander("🏠 The Three Scenarios"):
+        with st.expander("🏠 The Two Scenarios"):
             st.markdown(_GUIDE_SCENARIOS_HTML, unsafe_allow_html=True)
         with st.expander("📊 Net Value — The Key Metric"):
             st.markdown(_GUIDE_NET_VALUE_HTML, unsafe_allow_html=True)
         with st.expander("🎯 Breakeven Point"):
             st.markdown(_GUIDE_BREAKEVEN_HTML, unsafe_allow_html=True)
-        with st.expander("🔒 When is Scenario C Available?"):
-            st.markdown(_GUIDE_SCENARIO_C_HTML, unsafe_allow_html=True)
         with st.expander("🎲 Uncertainty Analysis (Monte Carlo)"):
             st.markdown(_GUIDE_MONTE_CARLO_HTML, unsafe_allow_html=True)

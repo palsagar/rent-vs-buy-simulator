@@ -1,23 +1,20 @@
 """Monte Carlo simulation engine for uncertainty analysis.
 
-Provides a fully independent MC engine that reimplements the
-financial math from ``engine.py`` with year-varying stochastic rates.
-Does NOT call ``calculate_scenarios`` (except for sensitivity analysis).
+Feeds year-varying stochastic rates into the SAME ``_net_value_series``
+core used by the deterministic engine, so MC can never drift from the
+deterministic verdict (ADR-0001, ADR-0003).
 """
 
 from __future__ import annotations
 
 import numpy as np
-import numpy_financial as npf
 
+from .engine import _net_value_series
 from .models import (
     MonteCarloConfig,
     MonteCarloResults,
     SimulationConfig,
 )
-
-# Floating-point tolerance for comparisons
-_FLOAT_TOLERANCE = 1e-9
 
 
 def _generate_annual_draws(
@@ -67,7 +64,7 @@ def _generate_annual_draws(
         from simulator.models import SimulationConfig, MonteCarloConfig
 
         config = SimulationConfig(
-            duration_years=10, property_price=500000,
+            horizon_years=10, property_price=500000,
             down_payment_pct=20, mortgage_rate_annual=4.5,
             property_appreciation_annual=3.0,
             equity_growth_annual=7.0, monthly_rent=2000,
@@ -116,12 +113,6 @@ def _generate_annual_draws(
         prop_draws = np.full((n_sims, n_years), mu_prop)
         eq_draws = np.full((n_sims, n_years), mu_eq)
 
-    # Override with constant if specific param is not randomized
-    if not mc_config.randomize_property_appreciation:
-        prop_draws = np.full((n_sims, n_years), mu_prop)
-    if not mc_config.randomize_equity_growth:
-        eq_draws = np.full((n_sims, n_years), mu_eq)
-
     # --- Rent inflation: independent normal, clamped >= 0 ---
     if mc_config.randomize_rent_inflation:
         rent_draws = rng.normal(
@@ -144,21 +135,9 @@ def _simulate_single_path(
     annual_prop_rates: np.ndarray,
     annual_equity_rates: np.ndarray,
     annual_rent_rates: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, float]:
-    """Simulate one MC path with year-varying rates.
-
-    Reimplements the full financial math from ``engine.py`` using
-    per-year stochastic rates instead of fixed annual rates. The
-    mortgage is still fixed-rate (amortization doesn't change).
-
-    Returns clean time-series arrays (no end-of-period adjustments)
-    plus a scalar ``end_adjustment`` containing the net effect of
-    seller closing costs, cumulative tax savings, and capital gains
-    exclusion. Callers should add ``end_adjustment`` to the final
-    net_buy value for summary statistics only — not for charts.
-    Intermediate values ``net_buy[0..n_months-1]`` do NOT include
-    seller closing costs (same convention as the deterministic engine's
-    ``Net_Buy`` column).
+) -> tuple[np.ndarray, np.ndarray]:
+    """Simulate one MC path by feeding stochastic monthly rates to the
+    shared engine core — no duplicated financial math (ADR-0001).
 
     Parameters
     ----------
@@ -177,11 +156,9 @@ def _simulate_single_path(
 
     Returns
     -------
-    tuple[np.ndarray, np.ndarray, float]
-        ``(net_buy, net_rent, end_adjustment)`` where the arrays are
-        shape ``(n_months + 1,)`` and ``end_adjustment`` is the scalar
-        net effect of seller closing costs, tax savings, and capital
-        gains exclusion (apply to summary stats only, not charts).
+    tuple[np.ndarray, np.ndarray]
+        ``(net_buy, net_rent)`` liquidation-priced Net Value series,
+        each of shape ``(n_months + 1,)``.
 
     Examples
     --------
@@ -194,7 +171,7 @@ def _simulate_single_path(
         from simulator.models import SimulationConfig
 
         config = SimulationConfig(
-            duration_years=10, property_price=500000,
+            horizon_years=10, property_price=500000,
             down_payment_pct=20, mortgage_rate_annual=4.5,
             property_appreciation_annual=3.0,
             equity_growth_annual=7.0, monthly_rent=2000,
@@ -202,142 +179,15 @@ def _simulate_single_path(
         prop = np.full(10, 3.0)
         eq = np.full(10, 7.0)
         rent = np.full(10, 3.0)
-        net_buy, net_rent, end_adj = _simulate_single_path(
-            config, prop, eq, rent
-        )
+        net_buy, net_rent = _simulate_single_path(config, prop, eq, rent)
 
     """
-    n_years = config.duration_years
-    n_months = n_years * 12
-
-    # --- Fixed mortgage parameters (don't vary with stochastic rates) ---
-    down_payment = config.property_price * (config.down_payment_pct / 100)
-    buyer_closing = config.property_price * (config.closing_cost_buyer_pct / 100)
-    initial_outflow = down_payment + buyer_closing
-    loan_amount = config.property_price - down_payment
-    fixed_monthly_rate = (config.mortgage_rate_annual / 100) / 12
-
-    # Monthly mortgage payment (fixed for the life of the loan)
-    if abs(loan_amount) < _FLOAT_TOLERANCE:
-        monthly_payment = 0.0
-    elif abs(fixed_monthly_rate) < _FLOAT_TOLERANCE:
-        monthly_payment = loan_amount / n_months if n_months > 0 else 0.0
-    else:
-        monthly_payment = -npf.pmt(fixed_monthly_rate, n_months, loan_amount)
-
-    # --- Allocate arrays ---
-    home_value = np.zeros(n_months + 1)
-    equity_value = np.zeros(n_months + 1)
-    mortgage_balance = np.zeros(n_months + 1)
-    cum_outflow_buy = np.zeros(n_months + 1)
-    cum_outflow_rent = np.zeros(n_months + 1)
-    monthly_interest = np.zeros(n_months + 1)
-    monthly_property_tax = np.zeros(n_months + 1)
-    rent_at_month = np.zeros(n_months + 1)
-
-    # --- Initial conditions ---
-    home_value[0] = config.property_price
-    equity_value[0] = down_payment
-    mortgage_balance[0] = loan_amount
-    cum_outflow_buy[0] = initial_outflow
-    cum_outflow_rent[0] = 0.0
-    rent_at_month[0] = config.monthly_rent
-
-    # Cost inflation is fixed (not stochastic)
-    monthly_cost_inflation = config.cost_inflation_rate / 12
-
-    # Precompute ongoing cost rates
-    monthly_prop_tax_rate = (config.property_tax_rate / 100) / 12
-    monthly_maint_rate = (config.annual_maintenance_pct / 100) / 12
-
-    # --- Month-by-month simulation ---
-    for m in range(1, n_months + 1):
-        yr = (m - 1) // 12  # Year index (0-based)
-
-        # Monthly rates from annual draws (percentage to decimal, / 12)
-        monthly_prop_rate = annual_prop_rates[yr] / 100 / 12
-        monthly_eq_rate = annual_equity_rates[yr] / 100 / 12
-        monthly_rent_rate = annual_rent_rates[yr] / 100 / 12
-
-        # Property appreciation
-        home_value[m] = home_value[m - 1] * (1 + monthly_prop_rate)
-
-        # Equity portfolio growth
-        equity_value[m] = equity_value[m - 1] * (1 + monthly_eq_rate)
-
-        # Mortgage amortization (fixed rate, not stochastic)
-        if mortgage_balance[m - 1] > _FLOAT_TOLERANCE:
-            interest = mortgage_balance[m - 1] * fixed_monthly_rate
-            principal = monthly_payment - interest
-            mortgage_balance[m] = max(0.0, mortgage_balance[m - 1] - principal)
-            monthly_interest[m] = interest
-        else:
-            mortgage_balance[m] = 0.0
-            monthly_interest[m] = 0.0
-
-        # Rent with year-varying inflation
-        rent_at_month[m] = rent_at_month[m - 1] * (1 + monthly_rent_rate)
-
-        # Ongoing homeownership costs use previous-month values
-        # (shifted convention matching engine.py: outflow at t includes
-        # costs through end of month t-1)
-        cost_factor_prev = (1 + monthly_cost_inflation) ** (m - 1)
-        prop_tax = home_value[m - 1] * monthly_prop_tax_rate
-        insurance = (config.annual_home_insurance / 12) * cost_factor_prev
-        maintenance = (home_value[m - 1] * monthly_maint_rate) * cost_factor_prev
-
-        monthly_property_tax[m - 1] = prop_tax
-
-        # Cumulative outflows
-        cum_outflow_buy[m] = (
-            cum_outflow_buy[m - 1]
-            + monthly_payment
-            + prop_tax
-            + insurance
-            + maintenance
-        )
-        # Rent outflow: pay rent_at_month[m-1] during month m-1
-        cum_outflow_rent[m] = cum_outflow_rent[m - 1] + rent_at_month[m - 1]
-
-    # Record final month's property tax for the tax savings loop
-    monthly_property_tax[n_months] = home_value[n_months] * monthly_prop_tax_rate
-
-    # --- Tax savings (annual computation, same logic as engine.py) ---
-    tax_rate = config.tax_bracket / 100
-    cumulative_tax_savings = 0.0
-    if config.enable_mortgage_deduction and tax_rate > _FLOAT_TOLERANCE:
-        for yr in range(n_years):
-            # engine.py uses 1-based years: yr_start = yr*12 - 11,
-            # yr_end = yr*12.  Translating to 0-based: year k covers
-            # months k*12+1 .. (k+1)*12.
-            yr_start = yr * 12 + 1
-            yr_end = (yr + 1) * 12
-            year_interest = float(np.sum(monthly_interest[yr_start : yr_end + 1]))
-            year_prop_tax = float(np.sum(monthly_property_tax[yr_start : yr_end + 1]))
-            deductible_prop_tax = min(year_prop_tax, config.salt_cap)
-            cumulative_tax_savings += (year_interest + deductible_prop_tax) * tax_rate
-
-    # --- Capital gains exclusion ---
-    capital_gains_tax_saved = 0.0
-    if config.enable_capital_gains_exclusion:
-        capital_gain = home_value[-1] - config.property_price
-        if capital_gain > config.capital_gains_exemption_limit:
-            taxable_gain = capital_gain - config.capital_gains_exemption_limit
-            cg_rate = 0.20 if config.tax_bracket >= 35 else 0.15
-            capital_gains_tax_saved = taxable_gain * cg_rate
-
-    # --- Seller closing costs ---
-    seller_closing = home_value[-1] * (config.closing_cost_seller_pct / 100)
-
-    # --- Net value arrays (clean, no end-of-period adjustments) ---
-    net_buy = home_value - cum_outflow_buy
-    net_rent = equity_value - cum_outflow_rent
-
-    # End-of-period adjustment applied only to summary stats, not charts
-    # (seller closing costs, cumulative tax savings, capital gains exclusion)
-    end_adjustment = -seller_closing + cumulative_tax_savings + capital_gains_tax_saved
-
-    return net_buy, net_rent, end_adjustment
+    # Expand annual percentage draws to per-month decimal rates
+    prop_m = np.repeat(annual_prop_rates / 100 / 12, 12)
+    eq_m = np.repeat(annual_equity_rates / 100 / 12, 12)
+    rent_m = np.repeat(annual_rent_rates / 100 / 12, 12)
+    series = _net_value_series(config, prop_m, eq_m, rent_m)
+    return series["net_buy"], series["net_rent"]
 
 
 def _compute_sensitivity(
@@ -347,8 +197,8 @@ def _compute_sensitivity(
 
     Uses the EXISTING deterministic ``calculate_scenarios`` engine
     (not the MC path simulator). Perturbs 8 key parameters by +/- 1
-    standard deviation and measures the effect on the tax-adjusted
-    difference (net_buy_tax_adjusted - net_rent).
+    standard deviation and measures the effect on the Verdict
+    (``final_difference``, i.e. net_buy - net_rent).
 
     Parameters
     ----------
@@ -371,7 +221,7 @@ def _compute_sensitivity(
         from simulator.models import SimulationConfig
 
         config = SimulationConfig(
-            duration_years=10, property_price=500000,
+            horizon_years=10, property_price=500000,
             down_payment_pct=20, mortgage_rate_annual=4.5,
             property_appreciation_annual=3.0,
             equity_growth_annual=7.0, monthly_rent=2000,
@@ -393,21 +243,25 @@ def _compute_sensitivity(
         base_dict.update(overrides)
         cfg = SimulationConfig(**base_dict)
         res = calculate_scenarios(cfg)
-        return res.final_net_buy_tax_adjusted - res.final_net_rent
+        return res.final_difference
 
     # Base case
     base_value = _run_with_override()
 
     # Parameters to perturb: (display_name, config_field, delta)
-    # Delta is +-1 "standard deviation" in the same units as the field
+    # Delta is +-1 "standard deviation" in the same units as the field.
+    # The first three deltas mirror the fixed MC calibration so there is a
+    # single source of truth (stds are in percentage points; rent_inflation_rate
+    # is a decimal, hence /100).
+    mc_defaults = MonteCarloConfig()
     perturbations = [
         (
             "Property Appreciation",
             "property_appreciation_annual",
-            5.0,
+            mc_defaults.property_appreciation_std,
         ),
-        ("Equity Growth", "equity_growth_annual", 5.0),
-        ("Rent Inflation", "rent_inflation_rate", 0.015),
+        ("Equity Growth", "equity_growth_annual", mc_defaults.equity_growth_std),
+        ("Rent Inflation", "rent_inflation_rate", mc_defaults.rent_inflation_std / 100),
         ("Property Price", "property_price", 100000),
         ("Down Payment %", "down_payment_pct", 5.0),
         ("Monthly Rent", "monthly_rent", 500),
@@ -422,8 +276,13 @@ def _compute_sensitivity(
     for display_name, field, delta in perturbations:
         base_val = getattr(base_config, field)
 
-        # Low perturbation (subtract delta)
-        low_override = max(base_val - delta, 0.001)
+        # Low perturbation (subtract delta). Growth rates may legitimately
+        # go negative; floor them just above -100% so the monthly compounding
+        # factor stays positive. Positive-only fields keep the 0.001 floor.
+        if field in ("property_appreciation_annual", "equity_growth_annual"):
+            low_override = max(base_val - delta, -99.0)
+        else:
+            low_override = max(base_val - delta, 0.001)
         # Clamp down_payment_pct to [5, 100]
         if field == "down_payment_pct":
             low_override = max(low_override, 5.0)
@@ -494,7 +353,7 @@ def run_monte_carlo(
         from simulator.models import SimulationConfig, MonteCarloConfig
 
         config = SimulationConfig(
-            duration_years=10, property_price=500000,
+            horizon_years=10, property_price=500000,
             down_payment_pct=20, mortgage_rate_annual=4.5,
             property_appreciation_annual=3.0,
             equity_growth_annual=7.0, monthly_rent=2000,
@@ -506,7 +365,7 @@ def run_monte_carlo(
 
     """
     n_sims = mc_config.n_simulations
-    n_years = base_config.duration_years
+    n_years = base_config.horizon_years
     n_months = n_years * 12
     n_points = n_months + 1
 
@@ -519,11 +378,10 @@ def run_monte_carlo(
     # Allocate result arrays
     all_net_buy = np.zeros((n_sims, n_points))
     all_net_rent = np.zeros((n_sims, n_points))
-    end_adjustments = np.zeros(n_sims)
 
     # Simulate each path
     for i in range(n_sims):
-        net_buy, net_rent, end_adj = _simulate_single_path(
+        net_buy, net_rent = _simulate_single_path(
             config=base_config,
             annual_prop_rates=draws["property_appreciation"][i],
             annual_equity_rates=draws["equity_growth"][i],
@@ -531,14 +389,10 @@ def run_monte_carlo(
         )
         all_net_buy[i] = net_buy
         all_net_rent[i] = net_rent
-        end_adjustments[i] = end_adj
 
-    # Chart data uses clean time series (no end-of-period kink)
+    # Chart data uses the same liquidation-priced series as summary stats
     all_diffs = all_net_buy - all_net_rent
-
-    # Summary stats include end-of-period adjustments (seller closing,
-    # tax savings, capital gains) for accurate final comparison
-    final_diffs = all_diffs[:, -1] + end_adjustments
+    final_diffs = all_diffs[:, -1]
 
     # Time axis
     year_arr = np.arange(n_points) / 12
