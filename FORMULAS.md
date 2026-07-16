@@ -1,586 +1,331 @@
 # Mathematical Formulas Reference
 
-This document provides detailed mathematical formulas and methodology used in the rent vs. buy simulation engine.
+This document is the mathematical reference for the engine's single source of
+truth, `_net_value_series()` in `src/simulator/engine.py`. Both the
+deterministic engine (`calculate_scenarios`) and Monte Carlo
+(`monte_carlo.py`) call this one function — every formula below is exactly
+what it computes, not an approximation of it. Terms in **bold** are used as
+defined in `CONTEXT.md`.
 
-## Time Vector
+## 1. Time Vector
 
-All calculations use monthly granularity for accuracy:
+All calculations use monthly granularity, indexed from purchase/move-in (0)
+to the **Horizon**:
 
 ```
-t ∈ {0, 1, 2, ..., n_months} where n_months = duration_years × 12
-
-year = t / 12
+t ∈ {0, 1, 2, ..., H}   where H = horizon_years × 12
 ```
-
-## Scenario A: Buy Property with Mortgage
-
-### 1. Initial Values
 
-**Down Payment:**
+The Horizon is the number of years the person expects to stay before
+exiting — it is **not** the mortgage term (ADR-0004). The two are separate
+inputs: a 10-year Horizon with a 30-year mortgage term is the common case,
+and the mortgage may be paid off before or still outstanding at the Horizon.
 
-```
-D = P_property × (down_payment_% / 100)
-```
+## 2. Mortgage
 
-**Loan Amount:**
+### Initial values
 
 ```
-L = P_property - D
-```
-
-**Monthly Interest Rate:**
+down_payment   = property_price × (down_payment_pct / 100)
+buyer_closing  = property_price × (closing_cost_buyer_pct / 100)
+initial_outlay = down_payment + buyer_closing
 
+L = property_price - down_payment         # loan amount
+r = (mortgage_rate_annual / 100) / 12     # monthly rate
+n_term = mortgage_term_years × 12         # amortization term, in months
 ```
-r = rate_annual / (100 × 12)
-```
 
-### 2. Monthly Mortgage Payment
+### Monthly payment (PMT)
 
-Using the standard amortization formula:
+The payment amortizes the loan over `n_term`, independent of the Horizon:
 
 ```
-PMT = L × [r(1 + r)^n] / [(1 + r)^n - 1]
+if L ≈ 0:            PMT = 0
+elif r ≈ 0:           PMT = L / n_term
+else:                 PMT = -npf.pmt(r, n_term, L)
 ```
-
-Where:
-- `PMT` = Monthly payment (principal + interest)
-- `L` = Loan amount
-- `r` = Monthly interest rate
-- `n` = Total number of months
 
-**Special Cases:**
-- If `r = 0`: `PMT = L / n` (no interest, just principal)
-- If `L = 0`: `PMT = 0` (100% down payment)
+(`npf.pmt` is `numpy_financial.pmt`; the engine negates its sign convention.)
 
-### 3. Property Value Over Time
+### Remaining balance B(t)
 
-Property appreciates with monthly compounding:
+Closed form, capped at zero and evaluated at `min(t, n_term)` so the balance
+freezes at payoff even if the Horizon extends past the mortgage term:
 
 ```
-V_p(t) = P_property × (1 + a/12)^t
+if L ≈ 0:     B(t) = 0
+elif r ≈ 0:   B(t) = max(L - PMT × t, 0)
+else:
+    growth(t) = (1 + r)^min(t, n_term)
+    B(t) = max(L × growth(t) - PMT × (growth(t) - 1) / r, 0)
 ```
 
-Where:
-- `V_p(t)` = Property value at month t
-- `P_property` = Initial property price
-- `a` = Annual appreciation rate (as decimal)
-- `t` = Month number
+### Payment and interest paid during month t
 
-### 4. Remaining Mortgage Balance
+The payment made *during* month t (t = 1..n_term) is `PMT`; it is zero once
+the loan is paid off or once t exceeds the Horizon-truncated series has no
+more months to charge:
 
-The outstanding principal at any time t is the present value of remaining payments:
-
 ```
-B(t) = PMT × [(1 + r)^(n-t) - 1] / [r(1 + r)^(n-t)]
+payment(t) = PMT   if 1 ≤ t ≤ n_term, else 0
+interest(t) = B(t-1) × r    for t ≥ 1;  interest(0) = 0
 ```
-
-Where:
-- `B(t)` = Remaining balance at month t
-- `n - t` = Remaining months
-- At `t = n` (end): `B(n) = 0` (mortgage paid off)
 
-This can also be expressed using the present value formula:
+Interest accrues on the *prior* month's balance — `B(t-1)`, not `B(t)`.
 
-```
-B(t) = -PV(r, n-t, PMT)
-```
+## 3. Housing Costs
 
-### 5. Cumulative Outflows
+### Home value
 
-Total cash spent by month t:
+Compounds with the (possibly month-varying, e.g. stochastic) monthly
+appreciation rate `prop_rate_monthly[m]`:
 
 ```
-O_buy(t) = D + (PMT × t)
+home_growth(0) = 1
+home_growth(t) = ∏_{m=1}^{t} (1 + prop_rate_monthly[m])
+home_value(t)  = property_price × home_growth(t)
 ```
 
-**Components:**
-- `D`: One-time down payment at t = 0
-- `PMT × t`: Cumulative mortgage payments
+### Ownership costs (buyer)
 
-### 6. Net Value for Buying
+Levy, insurance, and maintenance are all costs *paid during* month t
+(t ≥ 1; zero at t = 0). Levy and maintenance are priced off the **prior**
+month's home value — the value base a bill for month t would actually be
+computed against:
 
 ```
-N_buy(t) = V_p(t) - O_buy(t)
+levy(t)        = home_value(t-1) × (property_tax_rate / 100) / 12
+insurance(t)   = (annual_home_insurance / 12) × (1 + cost_inflation_rate / 12)^(t-1)
+maintenance(t) = home_value(t-1) × (annual_maintenance_pct / 100) / 12
 
-         = P_property × (1 + a/12)^t - [D + (PMT × t)]
+housing_cost_buy(t) = payment(t) + levy(t) + insurance(t) + maintenance(t)
 ```
-
-This represents: **Asset Value - Money Spent**
-
-## Scenario B: Rent and Invest
 
-### 1. Initial Investment
+**Deliberate modeling change:** maintenance tracks the home's appreciation
+only, through `home_value(t-1)`. It is *not* separately compounded by
+`cost_inflation_rate` on top of that. The previous engine applied both
+appreciation (via the home-value base) and `cost_inflation_rate` to
+maintenance, effectively double-inflating it. This is intentional, not a
+bug — maintenance cost is modeled as a fixed percentage of the (appreciating)
+home value, matching how the "1% of home value per year" rule of thumb is
+usually meant. Insurance, by contrast, has no home-value base and is
+inflated by `cost_inflation_rate` directly, as before.
 
-The same down payment is invested in equities:
+### Rent (renter)
 
-```
-I_0 = D  (from Scenario A)
-```
-
-### 2. Investment Portfolio Value
-
-Portfolio grows with monthly compounding:
+Rent is set at the end of the prior month and paid during the current one;
+`rent_growth_monthly` may itself vary month to month:
 
 ```
-V_e(t) = I_0 × (1 + e/12)^t
-```
-
-Where:
-- `V_e(t)` = Portfolio value at month t
-- `I_0` = Initial investment
-- `e` = Annual equity growth rate (as decimal)
-- `t` = Month number
-
-### 3. Rent Payments with Inflation
-
-Rent increases with monthly compounding inflation:
+rent_level(0) = monthly_rent
+rent_level(t) = monthly_rent × ∏_{m=1}^{t} (1 + rent_growth_monthly[m])
 
+housing_cost_rent(t) = rent_level(t-1)   for t ≥ 1;  housing_cost_rent(0) = 0
 ```
-Rent(t) = Rent_0 × (1 + i/12)^t
-```
-
-Where:
-- `Rent(t)` = Rent at month t
-- `Rent_0` = Initial monthly rent
-- `i` = Annual rent inflation rate (as decimal)
-
-### 4. Cumulative Rent Outflows
-
-Total rent paid by month t is calculated as the cumulative sum:
 
-```
-O_rent(t) = Σ(k=0 to t-1) Rent(k) = Σ(k=0 to t-1) [Rent_0 × (1 + i/12)^k]
-```
+Note the shift: the cost paid *during* month t uses `rent_level(t-1)`, the
+level fixed at the *end* of month t-1 — mirroring the buyer's cost base.
 
-This is a geometric series. The closed-form solution is:
+## 4. Cash-Flow Matching
 
-**If** `i = 0` (no inflation):
+Both strategies spend the same total cash every month; whichever side is
+cheaper in a given month invests the difference in equities within its own
+strategy (**Cash-flow matching**, CONTEXT.md):
 
 ```
-O_rent(t) = Rent_0 × t
-```
-
-**If** `i > 0`:
+surplus(t) = housing_cost_buy(t) - housing_cost_rent(t)
 
+contrib_rent(t) = max(surplus(t), 0)    # renting is cheaper -> renter invests the gap
+contrib_buy(t)  = max(-surplus(t), 0)   # buying is cheaper -> buyer invests the gap
 ```
-O_rent(t) = Rent_0 × [(1 + i/12)^t - 1] / (i/12)
-```
 
-**Implementation Note:** The engine uses cumulative sum (`np.cumsum`) for numerical accuracy rather than the closed-form geometric series formula.
+The renter also invests the capital not spent on buying — `initial_outlay`
+(down payment + buyer closing costs) — as a lump sum at t = 0; this seeds
+the rent portfolio's `V0` (Section 5).
 
-### 5. Net Value for Renting
+Cash committed is, by construction, identical for both strategies at every
+t (only its split between "spent" and "invested" differs):
 
 ```
-N_rent(t) = V_e(t) - O_rent(t)
-
-          = I_0 × (1 + e/12)^t - Σ(k=0 to t-1) Rent(k)
+cash_committed(t) = initial_outlay + Σ_{m=1}^{t} max(housing_cost_buy(m), housing_cost_rent(m))
 ```
-
-This represents: **Portfolio Value - Money Spent on Rent**
-
-## Scenario C: Rent & Invest Monthly Savings
-
-### Overview
-
-Scenario C is a hybrid strategy that combines elements of both renting and investing. It's only applicable when the mortgage payment exceeds the initial rent payment.
-
-**Key Characteristics:**
-- Down payment is kept as cash (0% return) for liquidity
-- Monthly savings (mortgage payment - rent) are invested at equity CAGR
-- Provides a middle ground between Scenarios A and B
-
-### 1. Applicability Condition
 
-Scenario C is only enabled when:
+The charted cumulative outflows (money actually spent on housing, excluding
+what gets invested) are:
 
 ```
-PMT > Rent_0
+outflow_buy(t)  = initial_outlay + Σ_{m=1}^{t} housing_cost_buy(m)
+outflow_rent(t) = Σ_{m=1}^{t} housing_cost_rent(m)
 ```
 
-Where:
-- `PMT` = Monthly mortgage payment (from Scenario A)
-- `Rent_0` = Initial monthly rent
+## 5. Portfolios with Varying Rates
 
-### 2. Monthly Savings
+Both the rent portfolio and the buy-side surplus portfolio use the same
+closed-form update for a portfolio earning a possibly time-varying monthly
+rate `rate_m` and receiving contribution `c[m]` during month m:
 
-The amount saved each month (when rent is less than mortgage):
-
-```
-S(t) = max(0, PMT - Rent(t))
 ```
-
-Where:
-- `S(t)` = Savings at month t
-- `Rent(t)` = Rent at month t (with inflation)
-
-As rent increases due to inflation, the monthly savings may decrease over time.
+G(0) = 1
+G(t) = ∏_{m=1}^{t} (1 + rate_m)                 # cumulative growth factor
 
-### 3. Savings Portfolio Value
-
-The savings are invested each month and compound at the equity growth rate:
-
+V(t) = G(t) × ( V0 + Σ_{m=1}^{t} c[m] / G(m) )
 ```
-P_s(t) = Σ(k=0 to t-1) [S(k) × (1 + e/12)^(t-k)]
-```
-
-**Recursive formulation:**
 
-```
-P_s(0) = 0
+Applied with `eq_rate_monthly` as the rate and `c = contrib_rent` /
+`contrib_buy`:
 
-P_s(t) = P_s(t-1) × (1 + e/12) + S(t-1)  for t > 0
 ```
-
-Where:
-- `P_s(t)` = Savings portfolio value at month t
-- `e` = Annual equity growth rate (as decimal)
-- Each month's contribution compounds for the remaining time
-
-### 4. Total Asset Value
-
-The total assets in Scenario C consist of:
+eq_growth(t)     = G(t) using eq_rate_monthly
 
+rent_portfolio(t) = eq_growth(t) × ( initial_outlay + Σ_{m=1}^{t} contrib_rent(m) / eq_growth(m) )
+buy_portfolio(t)  = eq_growth(t) × Σ_{m=1}^{t} contrib_buy(m) / eq_growth(m)
 ```
-A_c(t) = D + P_s(t)
-```
-
-Where:
-- `A_c(t)` = Total asset value at month t
-- `D` = Down payment (held as cash, no growth)
-- `P_s(t)` = Savings portfolio value
 
-**Note:** Unlike Scenario B, the down payment does NOT earn returns in Scenario C. This represents a more conservative approach that maintains liquidity.
+(`rent_portfolio` starts with `V0 = initial_outlay`; `buy_portfolio` starts
+with `V0 = 0` — the buyer has no lump sum to invest at t = 0.)
 
-### 5. Net Value for Scenario C
+Cost basis (principal contributed, used for capital-gains tax in Section 6)
+is the un-discounted running total of contributions:
 
 ```
-N_c(t) = A_c(t) - O_rent(t)
-
-       = D + P_s(t) - O_rent(t)
+basis_rent(t) = initial_outlay + Σ_{m=1}^{t} contrib_rent(m)
+basis_buy(t)  = Σ_{m=1}^{t} contrib_buy(m)
 ```
 
-This represents: **Cash + Savings Portfolio - Money Spent on Rent**
+## 6. Taxes
 
-### 6. Breakeven vs Buying
+### Deduction savings (buyer)
 
-The breakeven between Scenario C and buying occurs when:
+Mortgage interest and (capped) property levy paid are deductible at the
+marginal rate. Savings are credited once per completed year — not smoothed
+across the months of that year — using the year the month falls in,
+`t // 12` (only enabled when `interest_deduction_enabled` and
+`marginal_tax_rate_pct > 0`):
 
-```
-N_buy(t*) = N_c(t*)
 ```
+yearly_interest(y) = Σ_{month in year y} interest(month)     # y = 0..horizon_years-1
+yearly_levy(y)      = Σ_{month in year y} levy(month)
+yearly_levy(y)      = min(yearly_levy(y), levy_deduction_cap)   # if levy_deduction_cap is set
 
-This is calculated using the same linear interpolation method as the Buy vs Rent breakeven.
+yearly_savings(y) = (yearly_interest(y) + yearly_levy(y)) × (marginal_tax_rate_pct / 100)
 
-## Decision Metric: Net Value Comparison
+cum_by_year(0) = 0
+cum_by_year(y) = cum_by_year(y-1) + yearly_savings(y-1)   for y ≥ 1
 
-### The Bottom Line
-
-The fundamental comparison metrics:
-
-**Buy vs Rent (Scenario A vs B):**
-
-```
-Δ_AB(t) = N_buy(t) - N_rent(t)
-```
-
-**Buy vs Rent+Savings (Scenario A vs C):**
-
-```
-Δ_AC(t) = N_buy(t) - N_c(t)
+cum_tax_savings(t) = cum_by_year(t // 12)
 ```
 
-**Decision Rules:**
-- If `Δ(t) > 0`: Buying is better at time t
-- If `Δ(t) < 0`: The alternative scenario is better at time t
-- If `Δ(t) = 0`: Break-even point
+`cum_tax_savings(t)` is therefore a step function: it holds flat through
+the 12 months of a year and jumps once, at the year boundary, by that
+year's full savings.
 
-**Three-Way Comparison:**
+### Sale capital gains (buyer, at exit)
 
-The optimal strategy at time t is:
+Taxable gain depends on the region's `sale_cg_regime` (ADR-0007):
 
 ```
-Optimal(t) = argmax(N_buy(t), N_rent(t), N_c(t))
-```
-
-Where `N_c(t)` is only considered if Scenario C is enabled (PMT > Rent_0).
-
-### Breakeven Point
+home_gain(t) = max(home_value(t) - property_price, 0)
 
-The breakeven time t* is when net values are equal:
+fully_exempt:        taxable_gain(t) = 0
+exempt_amount:       taxable_gain(t) = max(home_gain(t) - sale_cg_exempt_amount, 0)
+exempt_after_years:   taxable_gain(t) = 0            if t ≥ sale_cg_exempt_after_years × 12
+                      taxable_gain(t) = home_gain(t)  otherwise
 
+sale_cg_tax(t) = taxable_gain(t) × (sale_cg_rate_pct / 100)
 ```
-N_buy(t*) = N_rent(t*)  ⟺  Δ(t*) = 0
-```
 
-Since we calculate discrete monthly values, we find the breakeven using **linear interpolation**:
+### Portfolio capital gains (both strategies, at exit)
 
-Given indices i and i+1 where Δ changes sign:
+Applied symmetrically to whichever portfolio the strategy is holding, on
+gains over its own cost basis:
 
 ```
-t* = t_i - Δ_i × [(t_(i+1) - t_i) / (Δ_(i+1) - Δ_i)]
+portfolio_tax_rent(t) = max(rent_portfolio(t) - basis_rent(t), 0) × (portfolio_cg_rate_pct / 100)
+portfolio_tax_buy(t)  = max(buy_portfolio(t) - basis_buy(t), 0)  × (portfolio_cg_rate_pct / 100)
 ```
-
-Where:
-- `t_i`, `t_(i+1)` = Time values at indices i and i+1
-- `Δ_i`, `Δ_(i+1)` = Difference values at those indices
-- This gives the approximate zero-crossing point
-
-## Key Relationships
-
-### Leverage Effect (Buying)
 
-With a mortgage, you control an asset worth more than your initial investment:
+## 7. Net Value, Verdict, and Breakeven
 
-```
-Leverage Ratio = P_property / D
-```
+**Net Value** at t is the wealth you would walk away with if you exited at
+t, minus all cash committed through t. Exit is priced fully at every t —
+this is what makes it liquidation-based (ADR-0001):
 
-**Example:** $500k property with 20% down
-
-```
-Leverage = $500,000 / $100,000 = 5×
 ```
+seller_cost(t) = home_value(t) × (closing_cost_seller_pct / 100)
 
-This amplifies both:
-- **Gains:** If property appreciates, you gain on the full value
-- **Costs:** Interest payments on leveraged amount
+Net_Buy(t) = home_value(t) - B(t) - seller_cost(t) - sale_cg_tax(t)
+             + buy_portfolio(t) - portfolio_tax_buy(t)
+             + cum_tax_savings(t)
+             - cash_committed(t)
 
-### Opportunity Cost (Renting)
-
-By not buying, you keep capital liquid and invest it. The trade-off:
-
-**Opportunity Benefit:**
-
-```
-Benefit = (e - a) × I_0  (when equity growth exceeds property appreciation)
+Net_Rent(t) = rent_portfolio(t) - portfolio_tax_rent(t) - cash_committed(t)
 ```
 
-**Opportunity Cost:**
+The **Verdict** is simply this same series read at the Horizon:
 
 ```
-Cost = O_rent(t)  (money gone forever, no asset accumulation)
+Verdict = Net_Buy(H) - Net_Rent(H)
 ```
 
-## Example Calculation
+`Verdict > 0` means Buy wins; `Verdict < 0` means Rent wins.
 
-Let's work through a concrete example:
+The **Breakeven** is the year where the two series cross — computed from
+the identical `Net_Buy`/`Net_Rent` arrays used for the Verdict and the
+charts, so it can never disagree with either. `diff(t) = Net_Buy(t) -
+Net_Rent(t)`; the engine scans for a sign change between consecutive months
+i, i+1 and linearly interpolates in *years* (`year = t / 12`):
 
-**Given:**
-- Property Price: $500,000
-- Down Payment: 20% = $100,000
-- Mortgage Rate: 4.5% annual
-- Property Appreciation: 3% annual
-- Duration: 30 years
-- Monthly Rent: $2,000
-- Equity Growth: 7% annual
-- Rent Inflation: 3% annual
-
-**Step 1: Calculate Monthly Values**
-
-```
-L = $500,000 - $100,000 = $400,000
-
-r = 4.5% / 12 = 0.375% = 0.00375
-
-n = 30 × 12 = 360 months
-```
-
-**Step 2: Monthly Mortgage Payment**
-
 ```
-PMT = $400,000 × [0.00375(1.00375)^360] / [(1.00375)^360 - 1] ≈ $2,027
+t* = year_i - diff_i × (year_{i+1} - year_i) / (diff_{i+1} - diff_i)
 ```
 
-**Step 3: After 30 Years**
+(If `diff` lands exactly on zero at some month i > 0 rather than crossing
+between two months, the Breakeven is that month's year directly, no
+interpolation needed.) If no sign change occurs across the whole Horizon,
+there is no Breakeven (one strategy dominates throughout).
 
-**Scenario A (Buy):**
+## 8. Monte Carlo
 
-```
-V_p(360) = $500,000 × (1.0025)^360 ≈ $1,214,000
-
-O_buy(360) = $100,000 + ($2,027 × 360) ≈ $829,720
+Monte Carlo (`monte_carlo.py`) draws year-varying rates and feeds them
+through the *exact same* `_net_value_series()` core used above — it cannot
+compute a different Net Value than the deterministic engine (ADR-0001,
+ADR-0003).
 
-N_buy(360) = $1,214,000 - $829,720 = $384,280
-```
+### Annual draws
 
-**Scenario B (Rent):**
+Property appreciation and equity growth are drawn jointly from a bivariate
+normal (annual, percentage-point units), correlated because both track the
+same broad economy:
 
 ```
-V_e(360) = $100,000 × (1.00583)^360 ≈ $761,226
-
-O_rent(360) ≈ $972,000  (geometric series sum)
+mean = (property_appreciation_annual, equity_growth_annual)
+cov  = [[σ_prop², ρ·σ_prop·σ_eq],
+        [ρ·σ_prop·σ_eq, σ_eq²]]
 
-N_rent(360) = $761,226 - $972,000 = -$210,774
+(prop_annual(y), eq_annual(y)) ~ MultivariateNormal(mean, cov)   for each simulation, each year y
 ```
 
-**Scenario C (Rent + Invest Savings):**
+with the app's fixed calibration: `σ_prop = 8`, `σ_eq = 15`, `ρ = 0.3`
+(ADR-0003 — not user-configurable). Rent inflation is drawn independently
+and clamped non-negative:
 
-Since PMT ($2,027) > Rent_0 ($2,000), Scenario C is applicable.
-
 ```
-Initial monthly savings: S(0) = $2,027 - $2,000 = $27
-
-Savings portfolio after compounding: P_s(360) ≈ $25,235
-
-Total assets: A_c(360) = $100,000 + $25,235 = $125,235
-
-N_c(360) = $125,235 - $972,000 = -$846,765
+rent_annual(y) ~ Normal(rent_inflation_rate × 100, σ_rent),  σ_rent = 1.5
+rent_annual(y) = max(rent_annual(y), 0)
 ```
 
-**Result:**
+### Expansion to monthly rates
 
-```
-Δ_AB(360) = $384,280 - (-$210,774) = $595,054  (Buy vs Rent)
+Each annual percentage draw is held constant across its 12 months and
+converted to a monthly decimal rate before being handed to
+`_net_value_series`:
 
-Δ_AC(360) = $384,280 - (-$846,765) = $1,231,045  (Buy vs Rent+Savings)
 ```
-
-**In this scenario:**
-- **Buying wins overall** with the highest net value
-- **Scenario B (Rent & Invest)** is second best
-- **Scenario C (Rent + Invest Savings)** performs worst due to down payment earning 0% return
-
-## Assumptions & Limitations
-
-### 1. Constant Rates
-All growth rates are assumed constant over time. In reality:
-- Property appreciation varies with market cycles
-- Equity returns fluctuate with market conditions
-- Interest rates may change (for adjustable-rate mortgages)
-
-### 2. No Transaction Costs
-The model excludes:
-- Closing costs on purchase (typically 2-5% of property price)
-- Realtor fees on sale (typically 5-6%)
-- Home inspection, appraisal, title insurance fees
-- Moving costs
-
-### 3. No Property Ownership Costs
-Not included in the model:
-- Property taxes (typically 0.5-2% annually)
-- Homeowners insurance
-- HOA fees
-- Maintenance and repairs (rule of thumb: 1% of home value annually)
-- Utilities (may differ between renting and owning)
-
-### 4. No Tax Effects
-Tax implications ignored:
-- Mortgage interest deduction (can reduce effective cost of buying)
-- Property tax deduction
-- Capital gains tax on investment returns (Scenario B)
-- Capital gains exclusion on primary residence sale (up to $250k/$500k)
-
-### 5. No Down Payment Assistance
-Both scenarios start with identical capital (D). In reality:
-- Some buyers receive gift funds
-- FHA/VA loans allow lower down payments
-- Some may have more/less liquid capital available
-
-### 6. Perfect Markets
-The model assumes:
-- No market crashes or bubbles
-- Property can be sold instantly at market value
-- Investments can be liquidated without penalty
-- No forced sales during downturns
-
-### 7. Investment Strategy Assumptions
-
-**Scenario B:**
-- The down payment is invested as a lump sum at t=0
-- Earns equity returns throughout the simulation period
-
-**Scenario C:**
-- The down payment is kept as cash (0% return) for liquidity
-- Only monthly savings (mortgage - rent) are invested
-- Provides a more conservative approach with maintained liquidity
-- Only applicable when mortgage payment > initial rent
-
-### 8. Monthly Compounding
-Both property appreciation and investment growth compound monthly rather than annually or continuously. This is a standard approximation that:
-- Provides more granular tracking
-- Is computationally efficient
-- Slightly overestimates compound growth vs. annual compounding
-
-## How to Interpret Results
-
-### If Buying Wins (Δ > 0)
-Factors contributing to this outcome:
-- Property appreciation is strong relative to equity returns
-- Mortgage rates are favorable (low interest)
-- Leverage is working in your favor
-- Long time horizon allows appreciation to compound
-- Rent is high relative to mortgage payment
-
-### If Renting Wins (Δ < 0)
-Factors contributing to this outcome:
-- Equity returns significantly exceed property appreciation
-- Rent is low relative to property price (high price-to-rent ratio)
-- Flexibility value is high (ability to relocate, no maintenance burden)
-- Avoiding leverage risk and transaction costs pays off
-- Short to medium time horizon
-
-### If Scenario C Wins
-Factors contributing to this outcome:
-- Mortgage payment significantly exceeds rent (large monthly savings)
-- Equity returns are strong, allowing savings to compound effectively
-- Liquidity is valued (down payment kept as cash)
-- Rent inflation is moderate (savings remain positive over time)
-- Middle ground between full investment (Scenario B) and property ownership (Scenario A)
-
-### The Breakeven Point (t*)
-
-The breakeven year provides critical insights:
-
-| Breakeven Time | Interpretation |
-|----------------|----------------|
-| t* < 10 years | Buying is clearly advantageous for long-term holders |
-| 10 ≤ t* ≤ 20 years | Strategies are competitive; personal factors matter |
-| t* > 20 years | Renting may be preferable unless very long holding period |
-| No breakeven | One strategy dominates entirely across all time horizons |
-
-### Sensitivity Analysis
-
-Key variables to test:
-1. **Property Appreciation Rate (a):** Most uncertain input
-2. **Equity Growth Rate (e):** Historical average is ~7-10% for stocks
-3. **Rent Inflation (i):** Varies greatly by market
-4. **Down Payment (D):** Affects leverage ratio
-5. **Duration (n):** Longer periods favor appreciation/compounding
-
-## Implementation Notes
-
-All formulas are implemented using vectorized NumPy operations for performance:
-
-```python
-# Property value calculation (vectorized)
-home_value = property_price * (1 + monthly_appreciation_rate) ** month_arr
-
-# Equity value calculation (vectorized)
-equity_value = down_payment * (1 + monthly_equity_rate) ** month_arr
-
-# Rent with inflation (vectorized)
-rent_at_month = monthly_rent * (1 + monthly_rent_inflation) ** month_arr
-
-# No Python loops needed - NumPy broadcasts over the entire time series
+rate_monthly[m] = annual_draw(y) / 100 / 12    for every month m in year y
 ```
-
-**Benefits of vectorization:**
-- 10-100× faster than Python loops
-- More numerically accurate (no accumulation errors from iterative updates)
-- More readable and concise
-- Industry standard in quantitative finance
-
-### Numerical Precision
-
-The engine uses:
-- `numpy_financial.pmt()` for mortgage payment calculation
-- `numpy_financial.pv()` for remaining mortgage balance
-- Double-precision floating point (64-bit) throughout
-- Cumulative sum rather than closed-form geometric series for rent (better numerical stability)
-
-## Related Documentation
 
-- See `engine.py` for the complete implementation
-- See `models.py` for data structures (`SimulationConfig`, `SimulationResults`)
-- See `visualization.py` for chart generation
-- See `README.md` for usage instructions and examples
+`net_buy`/`net_rent` for that simulation path are exactly the Section 7
+series computed with these month-varying rates in place of the
+deterministic engine's constant ones. Percentiles, the buy-win share, and
+the tornado-chart sensitivity all derive from these same per-path Net Value
+series — never a separately defined metric.
