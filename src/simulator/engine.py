@@ -85,9 +85,8 @@ def _net_value_series(
     away with if you exited the strategy at t, minus all cash committed
     through t (CONTEXT.md: "Net Value"). Both strategies commit the same
     cash each month; the cheaper side invests the difference in equities
-    (CONTEXT.md: "Cash-flow matching"). This variant returns zeroed tax
-    placeholders (no capital-gains or deduction math); the tax-aware
-    core is layered on in a later task.
+    (CONTEXT.md: "Cash-flow matching"). Capital-gains and deduction tax
+    primitives are applied inline (ADR-0007).
 
     Parameters
     ----------
