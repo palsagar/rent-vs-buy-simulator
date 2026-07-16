@@ -12,22 +12,16 @@ import plotly.graph_objects as go
 from simulator.models import SimulationResults
 
 
-def create_asset_growth_chart(
-    df: pd.DataFrame, show_scenario_c: bool = False
-) -> go.Figure:
+def create_asset_growth_chart(df: pd.DataFrame) -> go.Figure:
     """Create a line chart showing asset values over time.
 
     Shows the growth trajectories of both the property and equity portfolio,
     along with the remaining mortgage balance as a contextual reference.
-    Optionally shows Scenario C assets (down payment cash + savings portfolio).
 
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame with columns: Year, Home_Value, Equity_Value, Mortgage_Balance,
-        and optionally Savings_Portfolio_Value for Scenario C.
-    show_scenario_c : bool, optional
-        Whether to show Scenario C trace. Default is False.
+        DataFrame with columns: Year, Home_Value, Equity_Value, Mortgage_Balance.
 
     Returns
     -------
@@ -79,20 +73,6 @@ def create_asset_growth_chart(
             hovertemplate="$%{y:,.0f}<extra></extra>",
         )
     )
-
-    # Scenario C: Invested Down Payment + Savings Portfolio (purple solid line)
-    if show_scenario_c and "Down_Payment_Value" in df.columns:
-        scenario_c_asset = df["Down_Payment_Value"] + df["Savings_Portfolio_Value"]
-        fig.add_trace(
-            go.Scatter(
-                x=df["Year"],
-                y=scenario_c_asset,
-                name="Invested Down Pmt + Savings Portfolio (Scenario C)",
-                line=dict(color="#9b59b6", width=3),
-                mode="lines",
-                hovertemplate="$%{y:,.0f}<extra></extra>",
-            )
-        )
 
     # Mortgage Balance trace (red dashed line - contextual)
     fig.add_trace(
@@ -205,10 +185,6 @@ def create_outflow_chart(df: pd.DataFrame) -> go.Figure:
 def create_net_value_chart(
     df: pd.DataFrame,
     breakeven_year: float | None = None,
-    show_scenario_c: bool = False,
-    breakeven_year_vs_rent_savings: float | None = None,
-    show_tax_adjusted: bool = False,
-    breakeven_tax_adjusted: float | None = None,
 ) -> go.Figure:
     """Create a chart showing net value comparison.
 
@@ -218,18 +194,9 @@ def create_net_value_chart(
     Parameters
     ----------
     df : pd.DataFrame
-        DataFrame with columns: Year, Net_Buy, Net_Rent, and optionally
-        Net_Rent_Savings and Net_Buy_Tax_Adjusted for Scenario C and tax-adjusted.
+        DataFrame with columns: Year, Net_Buy, Net_Rent.
     breakeven_year : float | None, optional
         Year where Buy and Rent scenarios cross. Default is None.
-    show_scenario_c : bool, optional
-        Whether to show Scenario C trace. Default is False.
-    breakeven_year_vs_rent_savings : float | None, optional
-        Year where Buy and Rent+Savings scenarios cross. Default is None.
-    show_tax_adjusted : bool, optional
-        Whether to show tax-adjusted net value for buying. Default is False.
-    breakeven_tax_adjusted : float | None, optional
-        Year where tax-adjusted Buy crosses Rent. Default is None.
 
     Returns
     -------
@@ -269,19 +236,6 @@ def create_net_value_chart(
         )
     )
 
-    # Tax-adjusted Net Buy trace (dark green solid line)
-    if show_tax_adjusted and "Net_Buy_Tax_Adjusted" in df.columns:
-        fig.add_trace(
-            go.Scatter(
-                x=df["Year"],
-                y=df["Net_Buy_Tax_Adjusted"],
-                name="Net Value: Buy (Tax-Adjusted)",
-                line=dict(color="#27ae60", width=3),
-                mode="lines",
-                hovertemplate="$%{y:,.0f}<extra></extra>",
-            )
-        )
-
     # Net Rent trace (blue line)
     fig.add_trace(
         go.Scatter(
@@ -293,19 +247,6 @@ def create_net_value_chart(
             hovertemplate="$%{y:,.0f}<extra></extra>",
         )
     )
-
-    # Scenario C: Net Rent + Invest Savings (purple line)
-    if show_scenario_c and "Net_Rent_Savings" in df.columns:
-        fig.add_trace(
-            go.Scatter(
-                x=df["Year"],
-                y=df["Net_Rent_Savings"],
-                name="Net Value: Rent + Invest Savings (Scenario C)",
-                line=dict(color="#9b59b6", width=3, dash="dot"),
-                mode="lines",
-                hovertemplate="$%{y:,.0f}<extra></extra>",
-            )
-        )
 
     # Add breakeven annotation for Buy vs Rent (Scenario A vs B)
     if breakeven_year is not None and 0 < breakeven_year < df["Year"].max():
@@ -332,72 +273,6 @@ def create_net_value_chart(
                 hovertemplate=(
                     f"Year: {breakeven_year:.1f}<br>"
                     f"Value: ${net_at_breakeven:,.0f}<extra></extra>"
-                ),
-            )
-        )
-
-    # Add breakeven annotation for tax-adjusted Buy vs Rent
-    if (
-        show_tax_adjusted
-        and breakeven_tax_adjusted is not None
-        and 0 < breakeven_tax_adjusted < df["Year"].max()
-    ):
-        net_at_breakeven_tax = df[df["Year"] <= breakeven_tax_adjusted][
-            "Net_Buy_Tax_Adjusted"
-        ].iloc[-1]  # pyright: ignore[reportAttributeAccessIssue]
-
-        fig.add_vline(
-            x=breakeven_tax_adjusted,
-            line_dash="dash",
-            line_color="#27ae60",
-            annotation_text=f"Tax-Adj A vs B: {breakeven_tax_adjusted:.1f}y",
-            annotation_position="bottom",
-        )
-
-        fig.add_trace(
-            go.Scatter(
-                x=[breakeven_tax_adjusted],
-                y=[net_at_breakeven_tax],
-                mode="markers",
-                marker=dict(size=10, color="#27ae60", symbol="star"),
-                name="Breakeven (Tax-Adj A vs B)",
-                hovertemplate=(
-                    f"Year: {breakeven_tax_adjusted:.1f}<br>"
-                    f"Value: ${net_at_breakeven_tax:,.0f}<extra></extra>"
-                ),
-            )
-        )
-
-    # Add breakeven annotation for Buy vs Rent+Savings (Scenario A vs C)
-    if (
-        show_scenario_c
-        and breakeven_year_vs_rent_savings is not None
-        and 0 < breakeven_year_vs_rent_savings < df["Year"].max()
-    ):
-        net_at_breakeven_c = df[df["Year"] <= breakeven_year_vs_rent_savings][
-            "Net_Buy"
-        ].iloc[-1]  # pyright: ignore[reportAttributeAccessIssue]
-
-        # Add vertical line at breakeven (different style to distinguish)
-        fig.add_vline(
-            x=breakeven_year_vs_rent_savings,
-            line_dash="dot",
-            line_color="#9b59b6",
-            annotation_text=f"A vs C: {breakeven_year_vs_rent_savings:.1f}y",
-            annotation_position="bottom",
-        )
-
-        # Add marker at breakeven point
-        fig.add_trace(
-            go.Scatter(
-                x=[breakeven_year_vs_rent_savings],
-                y=[net_at_breakeven_c],
-                mode="markers",
-                marker=dict(size=10, color="#9b59b6", symbol="diamond"),
-                name="Breakeven (A vs C)",
-                hovertemplate=(
-                    f"Year: {breakeven_year_vs_rent_savings:.1f}<br>"
-                    f"Value: ${net_at_breakeven_c:,.0f}<extra></extra>"
                 ),
             )
         )
@@ -482,20 +357,11 @@ def create_cost_breakdown_chart(results: SimulationResults) -> go.Figure:
         mortgage_total,
     ]
 
-    colors = [
-        "#e74c3c",
-        "#c0392b",
-        "#f39c12",
-        "#3498db",
-        "#2ecc71",
-        "#9b59b6",
-    ]
-
     fig = go.Figure(
         go.Bar(
             x=categories,
             y=values,
-            marker_color=colors,
+            marker_color="#8a8f98",
             text=[f"${v:,.0f}" for v in values],
             textposition="outside",
         )
