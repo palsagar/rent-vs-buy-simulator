@@ -29,7 +29,7 @@ FastAPI server.py ── api.py (Pydantic schemas ↔ dataclasses)
 engine.py · monte_carlo.py · models.py   (untouched, as tested)
 ```
 
-- **`server.py`** (repo root) — same shape as the reference apps: `NoCacheMiddleware` (no-store for `.js/.css/.html` and `/`), `GET /api/health`, `StaticFiles` mount. Adds the three compute endpoints, delegating schema work to `api.py`.
+- **`src/simulator/server.py`** — same shape as the reference apps' `server.py`: `NoCacheMiddleware` (no-store for `.js/.css/.html` and `/`), `GET /api/health`, `StaticFiles` mount. Adds the three compute endpoints, delegating schema work to `api.py`. It lives inside the package (unlike the reference apps' root-level file) because this project ships to PyPI: the `rent-vs-buy` CLI and the Docker image both run `uvicorn simulator.server:app`, which requires the app module to be installed with the package.
 - **`src/simulator/static/`** — `index.html`, `css/style.css`, `js/*.js`. Lives inside the Python package (hatch package-data) so the PyPI wheel ships it; the server resolves it via `Path(__file__).parent / "static"`. No framework, no build step; Plotly.js basic bundle from CDN.
 - **`src/simulator/api.py`** (new) — request/response models, JSON↔`SimulationConfig` conversion (camelCase wire format), orchestration of engine/MC calls.
 - **`src/simulator/regions.py`** (new) — region preset bundles as data. US ships verified (values from current defaults); FR/DE/NL/UK declared with `available: false`.
@@ -89,7 +89,7 @@ Following the reference apps' file layout (`main.js` bootstrap + focused modules
 
 ## 7. Cutover & docs
 
-Same-change cutover: delete `app.py`, `explainers.py`, `visualization.py`, `mc_visualization.py`; drop `streamlit`/`kaleido`/`plotly` deps; rewrite `cli.py` as the uvicorn launcher. Both Dockerfiles switch to the reference pattern (`uvicorn server:app --host 0.0.0.0 --port ${PORT}`, `ENV PORT=8000`, `/api/health` healthcheck); `docker-compose.yml` updated to 8000. Docs: new **ADR-0008** records this migration and marks ADR-0006 superseded; `redesign-spec.md` §4/§5 amended (dark GitHub-dark system replaces the light editorial theme; "ships on Streamlit" removed); README, CLAUDE.md, CONTEXT.md updated. Deployment (Coolify) only needs the port change 8501 → 8000.
+Same-change cutover: delete `app.py`, `explainers.py`, `visualization.py`, `mc_visualization.py`; drop `streamlit`/`kaleido`/`plotly` deps; rewrite `cli.py` as the uvicorn launcher. Both Dockerfiles switch to the reference pattern (`uvicorn simulator.server:app --host 0.0.0.0 --port ${PORT}`, `ENV PORT=8000`, `/api/health` healthcheck); `docker-compose.yml` updated to 8000. Docs: new **ADR-0008** records this migration and marks ADR-0006 superseded; `redesign-spec.md` §4/§5 amended (dark GitHub-dark system replaces the light editorial theme; "ships on Streamlit" removed); README, CLAUDE.md, CONTEXT.md updated. Deployment (Coolify) only needs the port change 8501 → 8000.
 
 ## 8. Non-goals
 
@@ -97,7 +97,7 @@ No JS/TS engine port · no accounts or server-side storage · no light theme var
 
 ## 9. Implementation phasing (preview for the plan)
 
-1. **Server + API**: `server.py`, `api.py`, `regions.py` (US), `tests/test_api.py` — engine untouched, Streamlit still runnable meanwhile.
+1. **Server + API**: `src/simulator/server.py`, `api.py`, `regions.py` (US), `tests/test_api.py` — engine untouched, Streamlit still runnable meanwhile.
 2. **Static shell + visual system**: `index.html`, `style.css`, title/preset bars, left panel, drawer, welcome/guide (content port).
 3. **Results + charts**: `state.js`/`api.js` wiring, verdict hero, all five Plotly charts, MC flow, share URLs, CSV.
 4. **Cutover**: deletions, deps, CLI, Dockerfiles, docs/ADR updates, smoke checklist.
