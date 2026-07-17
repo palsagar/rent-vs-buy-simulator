@@ -80,7 +80,10 @@ function buildSegmented(def, container) {
     const btn = document.createElement("button");
     btn.className = "seg-btn";
     btn.textContent = option;
-    btn.addEventListener("click", () => setParam(def.key, option));
+    btn.addEventListener("click", () => {
+      setParam(def.key, option);
+      refresh();
+    });
     picker.appendChild(btn);
     return btn;
   });
