@@ -2,6 +2,7 @@ import itertools
 import json
 
 import pytest
+from fastapi.testclient import TestClient
 
 from simulator.api import (
     config_from_dict,
@@ -12,7 +13,53 @@ from simulator.api import (
 from simulator.engine import calculate_scenarios
 from simulator.models import MonteCarloConfig
 from simulator.regions import get_region, list_regions
+from simulator.server import app
 from tests.test_models import make_config
+
+client = TestClient(app)
+
+
+def test_health() -> None:
+    response = client.get("/api/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_regions_endpoint() -> None:
+    response = client.get("/api/regions")
+    assert response.status_code == 200
+    regions = response.json()
+    assert len(regions) == 5
+    assert regions[0]["id"] == "us"
+
+
+def test_simulate_endpoint_happy_path() -> None:
+    response = client.post("/api/simulate", json=config_to_dict(make_config()))
+    assert response.status_code == 200
+    body = response.json()
+    assert body["verdict"]["winner"] in ("buy", "rent")
+    assert len(body["series"]["netBuy"]) == 121
+
+
+def test_simulate_endpoint_validation_error_is_422() -> None:
+    payload = {**config_to_dict(make_config()), "downPaymentPct": 3}
+    response = client.post("/api/simulate", json=payload)
+    assert response.status_code == 422
+    assert "down_payment_pct" in response.json()["detail"]
+
+
+def test_simulate_endpoint_unknown_field_is_422() -> None:
+    response = client.post("/api/simulate", json={"bogusField": 1})
+    assert response.status_code == 422
+    assert "Unknown config field" in response.json()["detail"]
+
+
+def test_monte_carlo_endpoint_happy_path() -> None:
+    response = client.post("/api/monte-carlo", json=config_to_dict(make_config()))
+    assert response.status_code == 200
+    body = response.json()
+    assert 0.0 <= body["buyWinsPct"] <= 100.0
+    assert body["nSimulations"] == 500
 
 
 def test_config_roundtrips_through_camel_case() -> None:
