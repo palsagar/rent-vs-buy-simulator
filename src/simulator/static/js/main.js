@@ -77,20 +77,20 @@ async function runMonteCarlo() {
   try {
     if (cached) {
       await simRun;
-      if (mcAbort === controller && lastWinnerHash === hash) {
-        renderMonteCarlo(cached, lastWinner);
+      if (mcAbort === controller) {
         errors.monteCarlo = null;
         syncBanner();
+        if (lastWinnerHash === hash) renderMonteCarlo(cached, lastWinner);
       }
       return;
     }
     const data = await postMonteCarlo(cfg, controller.signal);
     setCached("monteCarlo", hash, data);
     await simRun;
-    if (mcAbort === controller && lastWinnerHash === hash) {
-      renderMonteCarlo(data, lastWinner);
+    if (mcAbort === controller) {
       errors.monteCarlo = null;
       syncBanner();
+      if (lastWinnerHash === hash) renderMonteCarlo(data, lastWinner);
     }
   } catch (err) {
     if (err.name !== "AbortError" && mcAbort === controller) {
