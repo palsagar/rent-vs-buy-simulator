@@ -11,7 +11,8 @@ from dataclasses import fields
 from typing import Any
 
 from .engine import calculate_scenarios
-from .models import SimulationConfig
+from .models import MonteCarloConfig, SimulationConfig
+from .monte_carlo import run_monte_carlo
 
 
 def _camel(name: str) -> str:
@@ -150,4 +151,58 @@ def simulate_payload(config: SimulationConfig) -> dict[str, Any]:
             "netBuy": df["Net_Buy"].tolist(),
             "netRent": df["Net_Rent"].tolist(),
         },
+    }
+
+
+def monte_carlo_payload(
+    config: SimulationConfig, mc_config: MonteCarloConfig | None = None
+) -> dict[str, Any]:
+    """Run Monte Carlo analysis and serialize results for the wire.
+
+    Parameters
+    ----------
+    config : SimulationConfig
+        Validated base configuration.
+    mc_config : MonteCarloConfig | None, optional
+        MC settings; defaults to ``MonteCarloConfig()`` (500 sims, fixed
+        seed 42, auto-calibrated stds per ADR-0003). Exposed for tests —
+        HTTP endpoints never pass this argument (knobless by design).
+
+    Returns
+    -------
+    dict[str, Any]
+        JSON-ready dict with summary stats, yearly fan percentiles of
+        the Buy-Rent difference, tornado sensitivity data, and
+        ``nSimulations``.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from simulator.api import monte_carlo_payload
+        from simulator.models import MonteCarloConfig
+        from tests.test_models import make_config
+
+        payload = monte_carlo_payload(
+            make_config(), MonteCarloConfig(n_simulations=30, seed=7)
+        )
+        0.0 <= payload["buyWinsPct"] <= 100.0  # True
+
+    """
+    results = run_monte_carlo(config, mc_config or MonteCarloConfig())
+    return {
+        "buyWinsPct": float(results.buy_wins_pct),
+        "medianDifference": float(results.median_difference),
+        "p5Difference": float(results.p5_difference),
+        "p95Difference": float(results.p95_difference),
+        "yearAxis": results.year_arr.tolist(),
+        "percentileLevels": results.percentile_levels,
+        "differencePercentiles": results.difference_percentiles.tolist(),
+        "tornado": {
+            "params": results.sensitivity_params,
+            "low": results.sensitivity_low.tolist(),
+            "high": results.sensitivity_high.tolist(),
+            "base": float(results.sensitivity_base),
+        },
+        "nSimulations": results.n_simulations,
     }

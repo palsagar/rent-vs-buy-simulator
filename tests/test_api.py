@@ -3,8 +3,14 @@ import json
 
 import pytest
 
-from simulator.api import config_from_dict, config_to_dict, simulate_payload
+from simulator.api import (
+    config_from_dict,
+    config_to_dict,
+    monte_carlo_payload,
+    simulate_payload,
+)
 from simulator.engine import calculate_scenarios
+from simulator.models import MonteCarloConfig
 from tests.test_models import make_config
 
 
@@ -69,3 +75,24 @@ def test_simulate_payload_outflows_monotonic() -> None:
 def test_simulate_payload_is_json_serializable() -> None:
     payload = simulate_payload(make_config())
     assert json.loads(json.dumps(payload)) == payload
+
+
+def test_monte_carlo_payload_shape_and_determinism() -> None:
+    config = make_config()
+    mc = MonteCarloConfig(n_simulations=30, seed=7)
+    first = monte_carlo_payload(config, mc)
+    second = monte_carlo_payload(config, mc)
+
+    assert first == second  # fixed seed → identical payloads
+    assert 0.0 <= first["buyWinsPct"] <= 100.0
+    assert first["nSimulations"] == 30
+
+    fan = first["differencePercentiles"]
+    assert len(fan) == len(first["percentileLevels"])
+    assert len(fan[0]) == len(first["yearAxis"]) == config.horizon_years * 12 + 1
+
+    tornado = first["tornado"]
+    assert len(tornado["params"]) == len(tornado["low"]) == len(tornado["high"])
+    assert isinstance(tornado["base"], float)
+
+    assert json.loads(json.dumps(first)) == first
