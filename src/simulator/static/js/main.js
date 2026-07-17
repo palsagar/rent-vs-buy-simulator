@@ -21,6 +21,13 @@ let mcAbort = null;
 let lastWinner = "rent";
 let lastWinnerHash = null;
 let simRun = null;
+const errors = { simulate: null, monteCarlo: null };
+
+function syncBanner() {
+  const message = errors.simulate ?? errors.monteCarlo;
+  if (message) showError(message);
+  else hideError();
+}
 
 async function runSimulate() {
   simAbort?.abort();
@@ -31,6 +38,8 @@ async function runSimulate() {
     lastWinner = cached.verdict.winner;
     lastWinnerHash = hash;
     renderSimulate(cached, cfg);
+    errors.simulate = null;
+    syncBanner();
     return;
   }
   const controller = new AbortController();
@@ -44,9 +53,13 @@ async function runSimulate() {
       lastWinner = data.verdict.winner;
       lastWinnerHash = hash;
       renderSimulate(data, cfg);
-      hideError();
+      errors.simulate = null;
+      syncBanner();
     } catch (err) {
-      if (err.name !== "AbortError") showError(`Simulation failed: ${err.message}`);
+      if (err.name !== "AbortError" && simAbort === controller) {
+        errors.simulate = `Simulation failed: ${err.message}`;
+        syncBanner();
+      }
     } finally {
       if (simAbort === controller) setLoading(false);
     }
@@ -64,15 +77,26 @@ async function runMonteCarlo() {
   try {
     if (cached) {
       await simRun;
-      if (mcAbort === controller && lastWinnerHash === hash) renderMonteCarlo(cached, lastWinner);
+      if (mcAbort === controller && lastWinnerHash === hash) {
+        renderMonteCarlo(cached, lastWinner);
+        errors.monteCarlo = null;
+        syncBanner();
+      }
       return;
     }
     const data = await postMonteCarlo(cfg, controller.signal);
     setCached("monteCarlo", hash, data);
     await simRun;
-    if (mcAbort === controller && lastWinnerHash === hash) renderMonteCarlo(data, lastWinner);
+    if (mcAbort === controller && lastWinnerHash === hash) {
+      renderMonteCarlo(data, lastWinner);
+      errors.monteCarlo = null;
+      syncBanner();
+    }
   } catch (err) {
-    if (err.name !== "AbortError") showError(`Monte Carlo failed: ${err.message}`);
+    if (err.name !== "AbortError" && mcAbort === controller) {
+      errors.monteCarlo = `Monte Carlo failed: ${err.message}`;
+      syncBanner();
+    }
   }
 }
 
