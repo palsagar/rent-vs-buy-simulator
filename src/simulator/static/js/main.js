@@ -38,6 +38,7 @@ async function runSimulate() {
     try {
       const data = await postSimulate(cfg, controller.signal);
       setCached("simulate", hash, data);
+      if (simAbort !== controller) return;
       lastWinner = data.verdict.winner;
       renderSimulate(data, cfg);
       hideError();
@@ -51,20 +52,22 @@ async function runSimulate() {
 }
 
 async function runMonteCarlo() {
-  mcAbort?.abort();
   const cfg = getConfig();
   const hash = configHash(cfg);
+  mcAbort?.abort();
+  const controller = new AbortController();
+  mcAbort = controller;
   const cached = getCached("monteCarlo", hash);
-  if (cached) {
-    renderMonteCarlo(cached, lastWinner);
-    return;
-  }
-  mcAbort = new AbortController();
   try {
-    const data = await postMonteCarlo(cfg, mcAbort.signal);
+    if (cached) {
+      await simRun;
+      if (mcAbort === controller) renderMonteCarlo(cached, lastWinner);
+      return;
+    }
+    const data = await postMonteCarlo(cfg, controller.signal);
     setCached("monteCarlo", hash, data);
     await simRun;
-    renderMonteCarlo(data, lastWinner);
+    if (mcAbort === controller) renderMonteCarlo(data, lastWinner);
   } catch (err) {
     if (err.name !== "AbortError") showError(`Monte Carlo failed: ${err.message}`);
   }
