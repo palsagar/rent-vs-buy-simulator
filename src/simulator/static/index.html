@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rent or buy?</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏠</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.plot.ly/plotly-basic-2.35.2.min.js"></script>
+</head>
+<body>
+
+<div id="error-banner"><span></span> <button onclick="location.reload()">Reload</button></div>
+
+<div id="app">
+
+  <div id="welcome-overlay" class="overlay">
+    <div class="modal">
+      <button class="modal-close" id="welcome-close" aria-label="Close">✕</button>
+      <div style="text-align: center; margin-bottom: 20px;">
+    <div style="font-size: 3rem; margin-bottom: 8px;">🏠</div>
+    <h2 style="color: #fafafa; margin: 0 0 6px; font-size: 1.5rem;">
+        Buy vs. Rent Financial Simulator
+    </h2>
+    <p style="color: #888; font-size: 1rem; margin: 0;">
+        Compare capital allocation strategies over time
+    </p>
+</div>
+<p style="color: #ccc; font-size: 1rem; line-height: 1.7; margin-bottom: 24px;">
+    Should you buy a home or rent and invest the difference? This simulator
+    models <strong style="color: #fff;">two financial strategies</strong>
+    side-by-side so you can compare outcomes with your own numbers.
+</p>
+
+<h3 style="color: #e2e8f0; font-size: 1rem; margin: 0 0 12px;
+    letter-spacing: 0.05em; text-transform: uppercase;">
+    The Two Strategies
+</h3>
+<div class="explainer-card explainer-card--a">
+    <span class="explainer-badge explainer-badge--a">A</span>
+    <div>
+        <strong style="color: #4ade80; font-size: 1rem;">Buy</strong>
+        <p>Purchase property with a mortgage. Your asset is the home value;
+        outflows include mortgage payments, taxes, insurance, and
+        maintenance.</p>
+    </div>
+</div>
+<div class="explainer-card explainer-card--b">
+    <span class="explainer-badge explainer-badge--b">B</span>
+    <div>
+        <strong style="color: #60a5fa; font-size: 1rem;">Rent + Invest</strong>
+        <p>Rent and invest what buying would have cost: the down payment
+        and closing costs up front, plus the monthly difference whenever
+        renting is cheaper.</p>
+    </div>
+</div>
+
+<h3 style="color: #e2e8f0; font-size: 1rem; margin: 24px 0 12px;
+    letter-spacing: 0.05em; text-transform: uppercase;">
+    Uncertainty Analysis
+</h3>
+<div class="explainer-card explainer-card--mc">
+    <span class="explainer-badge explainer-badge--mc">🎲</span>
+    <div>
+        <strong style="color: #f59e0b; font-size: 1rem;">
+            Monte Carlo Simulation</strong>
+        <p>Nobody can predict 30 years of returns. The
+        <em>Uncertainty Analysis</em> tab runs hundreds of simulations
+        with randomized year-by-year returns to show how often buying
+        wins and the range of possible outcomes.</p>
+    </div>
+</div>
+
+<div class="explainer-tip">
+    <p><strong style="color: #e2e8f0;">Tip:</strong> Adjust parameters in
+    the sidebar and watch the charts update. The <strong
+    style="color: #e2e8f0;">Net Value</strong> chart is the key decision
+    metric. For a probabilistic view, try the
+    <strong style="color: #e2e8f0;">Uncertainty Analysis</strong> tab.</p>
+</div>
+      <button id="welcome-start" class="btn-primary">Start exploring</button>
+    </div>
+  </div>
+
+  <div id="guide-overlay" class="overlay hidden">
+    <div class="modal">
+      <button class="modal-close" aria-label="Close">✕</button>
+      <h1>How this works</h1>
+      <div class="guide-section">
+        <div class="guide-section-header"><span class="guide-chevron">▸</span><span class="guide-section-title">The two strategies</span></div>
+        <div class="guide-section-body"><div class="explainer-card explainer-card--a">
+    <span class="explainer-badge explainer-badge--a">A</span>
+    <div>
+        <strong style="color: #4ade80;">Buy</strong>
+        <p>You purchase property with a mortgage. Your asset is the home
+        value. Outflows include the down payment, closing costs, monthly
+        mortgage payments, property tax, insurance, and maintenance.</p>
+    </div>
+</div>
+<div class="explainer-card explainer-card--b">
+    <span class="explainer-badge explainer-badge--b">B</span>
+    <div>
+        <strong style="color: #60a5fa;">Rent + Invest</strong>
+        <p>Rent and invest what buying would have cost: the down payment
+        and closing costs up front, plus the monthly difference whenever
+        renting is cheaper.</p>
+    </div>
+</div></div>
+      </div>
+      <div class="guide-section">
+        <div class="guide-section-header"><span class="guide-chevron">▸</span><span class="guide-section-title">Net Value</span></div>
+        <div class="guide-section-body"><p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+    A home appreciating in value looks great — but you're also paying
+    mortgage interest, property tax, insurance, and maintenance.
+    <strong style="color: #e2e8f0;">Net Value</strong> captures the full
+    picture:
+</p>
+<div class="explainer-formula">
+    <code>Net Value = Asset Value − Total Outflows</code>
+</div>
+<p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+    This tells you which strategy actually leaves you wealthier. A scenario
+    can have higher asset growth but <em>lower</em> net value if the costs
+    are steep enough.
+</p></div>
+      </div>
+      <div class="guide-section">
+        <div class="guide-section-header"><span class="guide-chevron">▸</span><span class="guide-section-title">Breakeven</span></div>
+        <div class="guide-section-body"><p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+    The breakeven point is the year when
+    <strong style="color: #4ade80;">buying</strong> overtakes
+    <strong style="color: #60a5fa;">renting + investing</strong> in net
+    value. Before this point, the renter is wealthier. After it, the buyer
+    pulls ahead.
+</p>
+<p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+    <strong style="color: #e2e8f0;">No breakeven?</strong> That means one
+    strategy dominates for the entire simulation period. If you're planning
+    to sell before the breakeven year, the dominant strategy may flip.
+</p></div>
+      </div>
+      <div class="guide-section">
+        <div class="guide-section-header"><span class="guide-chevron">▸</span><span class="guide-section-title">Monte Carlo confidence</span></div>
+        <div class="guide-section-body"><p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+    The main charts assume growth rates play out exactly as configured.
+    But nobody can predict 30 years of returns. The
+    <strong style="color: #e2e8f0;">Uncertainty Analysis</strong> tab
+    runs hundreds of simulations where property appreciation, equity
+    growth, and rent inflation <strong style="color: #e2e8f0;">vary
+    randomly each year</strong> using bell-curve distributions
+    centered on your inputs.
+</p>
+<p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+    Instead of &ldquo;Buy wins by $142K,&rdquo; you see:
+    <strong style="color: #e2e8f0;">&ldquo;Buying wins in 68% of
+    simulations.&rdquo;</strong> The fan chart shows the range of
+    possible outcomes, and the tornado chart reveals which parameters
+    matter most.
+</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="title-bar">
+    <span id="app-name">🏠 Rent or buy?</span>
+    <span class="badge">decision tool</span>
+    <span class="title-spacer"></span>
+    <a class="author-link" href="https://github.com/palsagar" target="_blank" rel="noopener">by palsagar</a>
+    <a class="gh-pill" href="https://github.com/palsagar/rent-vs-buy-simulator" target="_blank" rel="noopener">★ GitHub</a>
+  </div>
+
+  <div id="preset-bar">
+    <button id="inputs-btn" class="btn">Inputs</button>
+    <span class="preset-label">Region</span>
+    <span id="region-pills"></span>
+    <span class="preset-label" style="margin-left:14px">Outlook</span>
+    <span id="outlook-pills"></span>
+    <span class="title-spacer"></span>
+    <button id="advanced-btn" class="btn btn-advanced">⚙ Advanced</button>
+    <button id="guide-btn" class="btn">? Guide</button>
+  </div>
+
+  <div id="main">
+    <aside id="input-panel">
+      <div class="section-title">Your situation</div>
+      <div id="core-inputs"></div>
+      <div class="section-title">Outlook assumptions</div>
+      <div id="assumption-inputs"></div>
+    </aside>
+
+    <div id="results">
+      <div id="results-spinner">updating…</div>
+
+      <section id="verdict-hero">
+        <p id="verdict-line"></p>
+        <div id="verdict-subline"><span id="verdict-breakeven"></span><span id="verdict-confidence"></span></div>
+        <div id="stat-row">
+          <div class="stat-card buy"><div class="stat-label">Buy net value</div><div class="stat-value buy" id="stat-buy"></div></div>
+          <div class="stat-card rent"><div class="stat-label">Rent net value</div><div class="stat-value rent" id="stat-rent"></div></div>
+          <div class="stat-card"><div class="stat-label">Buy cost · yr 1</div><div class="stat-value" id="stat-cost-buy"></div></div>
+          <div class="stat-card"><div class="stat-label">Rent cost · yr 1</div><div class="stat-value" id="stat-cost-rent"></div></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Net value over time</h2>
+        <div class="card-sub">What you'd walk away with, minus everything you put in — at every year.</div>
+        <div id="decision-chart" class="chart"></div>
+      </section>
+
+      <section class="card">
+        <h2>How sure is this?</h2>
+        <div class="card-sub">500 simulated futures of the Buy − Rent difference. Bands: 50% and 90% of outcomes.</div>
+        <div id="fan-chart" class="chart"></div>
+        <h2 style="margin-top:18px">Which assumption to stress-test hardest</h2>
+        <div class="card-sub">Wider bar = bigger swing in the outcome. Blue = assumption goes up, grey = goes down.</div>
+        <div id="tornado-chart" class="chart"></div>
+      </section>
+
+      <section class="card">
+        <h2>Where the money goes</h2>
+        <div class="card-sub">Cumulative cash out of pocket on each side.</div>
+        <div id="outflow-chart" class="chart"></div>
+        <h2 style="margin-top:18px">Cost of ownership breakdown</h2>
+        <div id="breakdown-chart" class="chart"></div>
+      </section>
+
+      <details id="numbers">
+        <summary>The numbers</summary>
+        <div id="data-table"></div>
+        <button id="csv-btn" class="btn">Download CSV</button>
+      </details>
+
+      <footer>
+        🔒 <strong>Privacy:</strong> This app does not track any user data, use cookies, or perform any analytics. Self-hosted on a tiny VPS via <a href="https://coolify.io/" target="_blank" rel="noopener">Coolify</a>.<br>
+        Calculations use monthly granularity; Net Value prices a full exit at every year (selling costs and capital-gains tax on both sides). US tax defaults; more regions coming. Source: <a href="https://github.com/palsagar/rent-vs-buy-simulator" target="_blank" rel="noopener">GitHub</a>.
+      </footer>
+    </div>
+
+    <aside id="advanced-panel">
+      <div class="panel-header">Advanced <button id="advanced-close" aria-label="Close">✕</button></div>
+      <div class="slider-hint" style="margin-bottom:12px">Defaults follow the selected region.</div>
+      <div id="advanced-inputs"></div>
+    </aside>
+  </div>
+
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
