@@ -71,9 +71,9 @@ export function renderFanChart(el, mc) {
 
 export function renderTornadoChart(el, tornado) {
   const params = [...tornado.params].reverse();
-  const low = [...tornado.low].reverse();
-  const high = [...tornado.high].reverse();
   const base = tornado.base;
+  const low = [...tornado.low].reverse().map((v) => v - base);
+  const high = [...tornado.high].reverse().map((v) => v - base);
   const traces = [
     { type: "bar", orientation: "h", y: params, x: low, base, marker: { color: MUTED }, hovertemplate: "%{y} lower: %{x:$,.0f}<extra></extra>" },
     { type: "bar", orientation: "h", y: params, x: high, base, marker: { color: RENT }, hovertemplate: "%{y} higher: %{x:$,.0f}<extra></extra>" },
@@ -94,7 +94,7 @@ export function renderOutflowChart(el, series) {
 }
 
 export function renderBreakdownChart(el, payload, cfg) {
-  const nMonths = cfg.horizonYears * 12;
+  const nMonths = Math.min(cfg.horizonYears, cfg.mortgageTermYears) * 12;
   const loan = cfg.propertyPrice * (1 - cfg.downPaymentPct / 100);
   const finalBalance = payload.series.mortgageBalance.at(-1);
   const interestPaid = payload.monthlyMortgagePayment * nMonths - (loan - finalBalance);
