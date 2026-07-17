@@ -1,0 +1,90 @@
+// Bootstrap and orchestration: config changes schedule a fast
+// deterministic run and a slower Monte Carlo run, each debounced,
+// aborted when superseded, and cached by config hash.
+
+import { getRegions, postMonteCarlo, postSimulate } from "./api.js";
+import { initInputs, syncInputs } from "./inputs.js";
+import { renderMonteCarlo, renderSimulate } from "./results.js";
+import {
+  configHash,
+  debounce,
+  getCached,
+  getConfig,
+  onConfigChange,
+  readUrl,
+  setCached,
+} from "./state.js";
+import { hideError, initUi, setLoading, showError } from "./ui.js";
+
+let simAbort = null;
+let mcAbort = null;
+let lastWinner = "rent";
+
+async function runSimulate() {
+  const cfg = getConfig();
+  const hash = configHash(cfg);
+  const cached = getCached("simulate", hash);
+  if (cached) {
+    lastWinner = cached.verdict.winner;
+    renderSimulate(cached, cfg);
+    return;
+  }
+  simAbort?.abort();
+  simAbort = new AbortController();
+  setLoading(true);
+  try {
+    const data = await postSimulate(cfg, simAbort.signal);
+    setCached("simulate", hash, data);
+    lastWinner = data.verdict.winner;
+    renderSimulate(data, cfg);
+    hideError();
+  } catch (err) {
+    if (err.name !== "AbortError") showError(`Simulation failed: ${err.message}`);
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function runMonteCarlo() {
+  const cfg = getConfig();
+  const hash = configHash(cfg);
+  const cached = getCached("monteCarlo", hash);
+  if (cached) {
+    renderMonteCarlo(cached, lastWinner);
+    return;
+  }
+  mcAbort?.abort();
+  mcAbort = new AbortController();
+  try {
+    const data = await postMonteCarlo(cfg, mcAbort.signal);
+    setCached("monteCarlo", hash, data);
+    renderMonteCarlo(data, lastWinner);
+  } catch (err) {
+    if (err.name !== "AbortError") showError(`Monte Carlo failed: ${err.message}`);
+  }
+}
+
+const scheduleSimulate = debounce(runSimulate, 300);
+const scheduleMonteCarlo = debounce(runMonteCarlo, 600);
+
+async function init() {
+  readUrl();
+  initUi();
+  let regions;
+  try {
+    regions = await getRegions();
+  } catch (err) {
+    showError(`Could not load regions: ${err.message}`);
+    regions = [{ id: "us", label: "United States", available: true, typical: {}, taxPrimitives: {} }];
+  }
+  initInputs(regions);
+  syncInputs();
+  onConfigChange(() => {
+    scheduleSimulate();
+    scheduleMonteCarlo();
+  });
+  await runSimulate();
+  runMonteCarlo();
+}
+
+init();
