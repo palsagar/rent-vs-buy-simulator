@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import fields
 from typing import Any
 
+from .engine import calculate_scenarios
 from .models import SimulationConfig
 
 
@@ -87,3 +88,66 @@ def config_to_dict(config: SimulationConfig) -> dict[str, Any]:
 
     """
     return {_camel(f.name): getattr(config, f.name) for f in fields(config)}
+
+
+def simulate_payload(config: SimulationConfig) -> dict[str, Any]:
+    """Run the deterministic engine and serialize results for the wire.
+
+    Parameters
+    ----------
+    config : SimulationConfig
+        Validated simulation configuration.
+
+    Returns
+    -------
+    dict[str, Any]
+        JSON-ready dict with ``verdict`` (winner, difference,
+        horizonYears), ``breakevenYear``, year-1 monthly costs,
+        ``totals`` (ownership-cost components), and ``series`` (the
+        monthly time series, each ``horizon_years * 12 + 1`` long).
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from simulator.api import simulate_payload
+        from tests.test_models import make_config
+
+        payload = simulate_payload(make_config())
+        payload["verdict"]["winner"] in ("buy", "rent")  # True
+
+    """
+    results = calculate_scenarios(config)
+    df = results.data
+    breakeven = results.breakeven_year
+    return {
+        "verdict": {
+            "winner": "buy" if results.final_difference > 0 else "rent",
+            "difference": results.final_difference,
+            "horizonYears": config.horizon_years,
+        },
+        "breakevenYear": float(breakeven) if breakeven is not None else None,
+        "monthlyMortgagePayment": results.monthly_mortgage_payment,
+        "monthlyCostBuyYear1": results.monthly_cost_buy_year1,
+        "monthlyCostRentYear1": results.monthly_cost_rent_year1,
+        "totals": {
+            "closingCostsBuyer": results.total_closing_costs_buyer,
+            "closingCostsSeller": results.total_closing_costs_seller,
+            "propertyTaxPaid": results.total_property_tax_paid,
+            "insurancePaid": results.total_insurance_paid,
+            "maintenancePaid": results.total_maintenance_paid,
+            "taxSavings": results.total_tax_savings,
+        },
+        "series": {
+            "year": df["Year"].tolist(),
+            "homeValue": df["Home_Value"].tolist(),
+            "equityValue": df["Equity_Value"].tolist(),
+            "buyPortfolioValue": df["Buy_Portfolio_Value"].tolist(),
+            "mortgageBalance": df["Mortgage_Balance"].tolist(),
+            "outflowBuy": df["Outflow_Buy"].tolist(),
+            "outflowRent": df["Outflow_Rent"].tolist(),
+            "cashCommitted": df["Cash_Committed"].tolist(),
+            "netBuy": df["Net_Buy"].tolist(),
+            "netRent": df["Net_Rent"].tolist(),
+        },
+    }

@@ -1,8 +1,10 @@
-"""Tests for the HTTP API layer and FastAPI server."""
+import itertools
+import json
 
 import pytest
 
-from simulator.api import config_from_dict, config_to_dict
+from simulator.api import config_from_dict, config_to_dict, simulate_payload
+from simulator.engine import calculate_scenarios
 from tests.test_models import make_config
 
 
@@ -35,3 +37,35 @@ def test_config_from_dict_rejects_unknown_field() -> None:
 def test_config_from_dict_propagates_validation() -> None:
     with pytest.raises(ValueError, match="down_payment_pct"):
         config_from_dict({**config_to_dict(make_config()), "downPaymentPct": 3})
+
+
+def test_simulate_payload_matches_engine_truth() -> None:
+    config = make_config()
+    payload = simulate_payload(config)
+    results = calculate_scenarios(config)
+
+    assert payload["verdict"]["difference"] == results.final_difference
+    expected_winner = "buy" if results.final_difference > 0 else "rent"
+    assert payload["verdict"]["winner"] == expected_winner
+    assert payload["verdict"]["horizonYears"] == config.horizon_years
+    assert payload["breakevenYear"] == results.breakeven_year
+    assert payload["monthlyMortgagePayment"] == results.monthly_mortgage_payment
+    assert payload["monthlyCostBuyYear1"] == results.monthly_cost_buy_year1
+    assert payload["monthlyCostRentYear1"] == results.monthly_cost_rent_year1
+
+    series = payload["series"]
+    assert len(series["year"]) == config.horizon_years * 12 + 1
+    assert series["netBuy"][-1] == results.final_net_buy
+    assert series["netRent"][-1] == results.final_net_rent
+
+
+def test_simulate_payload_outflows_monotonic() -> None:
+    series = simulate_payload(make_config())["series"]
+    for key in ("outflowBuy", "outflowRent"):
+        values = series[key]
+        assert all(b >= a for a, b in itertools.pairwise(values))
+
+
+def test_simulate_payload_is_json_serializable() -> None:
+    payload = simulate_payload(make_config())
+    assert json.loads(json.dumps(payload)) == payload
