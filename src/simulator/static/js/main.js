@@ -19,6 +19,7 @@ import { hideError, initUi, setLoading, showError } from "./ui.js";
 let simAbort = null;
 let mcAbort = null;
 let lastWinner = "rent";
+let lastWinnerHash = null;
 let simRun = null;
 
 async function runSimulate() {
@@ -28,6 +29,7 @@ async function runSimulate() {
   const cached = getCached("simulate", hash);
   if (cached) {
     lastWinner = cached.verdict.winner;
+    lastWinnerHash = hash;
     renderSimulate(cached, cfg);
     return;
   }
@@ -40,6 +42,7 @@ async function runSimulate() {
       setCached("simulate", hash, data);
       if (simAbort !== controller) return;
       lastWinner = data.verdict.winner;
+      lastWinnerHash = hash;
       renderSimulate(data, cfg);
       hideError();
     } catch (err) {
@@ -61,13 +64,13 @@ async function runMonteCarlo() {
   try {
     if (cached) {
       await simRun;
-      if (mcAbort === controller) renderMonteCarlo(cached, lastWinner);
+      if (mcAbort === controller && lastWinnerHash === hash) renderMonteCarlo(cached, lastWinner);
       return;
     }
     const data = await postMonteCarlo(cfg, controller.signal);
     setCached("monteCarlo", hash, data);
     await simRun;
-    if (mcAbort === controller) renderMonteCarlo(data, lastWinner);
+    if (mcAbort === controller && lastWinnerHash === hash) renderMonteCarlo(data, lastWinner);
   } catch (err) {
     if (err.name !== "AbortError") showError(`Monte Carlo failed: ${err.message}`);
   }
