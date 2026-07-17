@@ -11,6 +11,7 @@ from simulator.api import (
 )
 from simulator.engine import calculate_scenarios
 from simulator.models import MonteCarloConfig
+from simulator.regions import get_region, list_regions
 from tests.test_models import make_config
 
 
@@ -96,3 +97,26 @@ def test_monte_carlo_payload_shape_and_determinism() -> None:
     assert isinstance(tornado["base"], float)
 
     assert json.loads(json.dumps(first)) == first
+
+
+def test_regions_us_available_others_disabled() -> None:
+    regions = {r["id"]: r for r in list_regions()}
+    assert set(regions) == {"us", "fr", "de", "nl", "uk"}
+
+    us = regions["us"]
+    assert us["available"] is True
+    assert us["currencySymbol"] == "$"
+    assert us["typical"]["propertyPrice"] == 500000
+    assert us["typical"]["monthlyRent"] == 2400
+    assert us["taxPrimitives"]["marginalTaxRatePct"] == 24.0
+    assert us["taxPrimitives"]["saleCgRegime"] == "exempt_amount"
+
+    for rid in ("fr", "de", "nl", "uk"):
+        assert regions[rid]["available"] is False
+        assert regions[rid]["typical"] is None
+        assert regions[rid]["taxPrimitives"] is None
+
+
+def test_get_region_unknown_raises_key_error() -> None:
+    with pytest.raises(KeyError):
+        get_region("xx")
