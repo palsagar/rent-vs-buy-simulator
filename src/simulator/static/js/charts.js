@@ -1,8 +1,6 @@
 // Plotly.js builders — one shared GitHub-dark theme. Buy #f0883e,
 // Rent #58a6ff; bands/neutrals muted; direct line labels, no legends.
 
-import { fmtCompact } from "./format.js";
-
 const BUY = "#f0883e";
 const RENT = "#58a6ff";
 const MUTED = "#8b949e";
@@ -64,10 +62,22 @@ function outcomesDisparate(buyY, rentY) {
   return Math.max(a, b) / Math.max(Math.min(a, b), 1) >= SCALE_DISPARITY;
 }
 
+// Compact tick label ($1k / $30k / $1.0M). Like fmtCompact but compacts down
+// to $1k so a symlog axis never mixes "$1,000" with "$10k".
+function fmtTick(v) {
+  const sign = v < 0 ? "-" : "";
+  const a = Math.abs(v);
+  if (a >= 1e6) return `${sign}$${(a / 1e6).toFixed(1)}M`;
+  if (a >= 1e3) return `${sign}$${Math.round(a / 1e3)}k`;
+  return `${sign}$${Math.round(a)}`;
+}
+
 // Nice dollar tick values (…, -1M, -300k, 0, 300k, 1M, …) at 1x/3x per decade
 // across the top ~3 decades of the range, clipped to the data's [min, max].
 // Limiting to the top decades keeps labels from crowding near zero, where
 // symlog compresses every decade into a shrinking band.
+// Precondition: peak > 0 (guaranteed by maybeSymlog's guard) — a zero peak
+// makes topExp -Infinity and the loop below never terminates.
 function symlogTicks(min, max) {
   const peak = Math.max(Math.abs(min), Math.abs(max));
   const topExp = Math.floor(Math.log10(peak));
@@ -86,15 +96,24 @@ function symlogTicks(min, max) {
 // caller to plot data and annotations through. Returns null to keep linear.
 function maybeSymlog(layout, buyY, rentY) {
   if (!outcomesDisparate(buyY, rentY)) return null;
-  const all = [...buyY, ...rentY];
-  const peak = Math.max(...all.map((v) => Math.abs(v)));
+  // One pass for the data range — no spreading the full monthly series into
+  // Math.min/max(...), which would cap out on the argument count as it grows.
+  let min = Infinity;
+  let max = -Infinity;
+  for (const arr of [buyY, rentY]) {
+    for (const v of arr) {
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+  }
+  const peak = Math.max(Math.abs(min), Math.abs(max));
   if (!(peak > 0)) return null;
   const t = peak / 1e4; // linear knee at 0.01% of peak; everything else compresses
   const fwd = (y) => symlogFwd(y, t);
-  const ticks = symlogTicks(Math.min(...all), Math.max(...all));
+  const ticks = symlogTicks(min, max);
   layout.yaxis.tickmode = "array";
   layout.yaxis.tickvals = ticks.map(fwd);
-  layout.yaxis.ticktext = ticks.map((v) => fmtCompact(v));
+  layout.yaxis.ticktext = ticks.map(fmtTick);
   delete layout.yaxis.tickformat;
   return fwd;
 }
