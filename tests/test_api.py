@@ -167,3 +167,50 @@ def test_regions_us_available_others_disabled() -> None:
 def test_get_region_unknown_raises_key_error() -> None:
     with pytest.raises(KeyError):
         get_region("xx")
+
+
+def test_config_from_dict_rejects_fractional_int() -> None:
+    payload = {**config_to_dict(make_config()), "horizonYears": 10.5}
+    with pytest.raises(ValueError, match="horizon_years"):
+        config_from_dict(payload)
+
+
+def test_config_from_dict_rejects_string_bool() -> None:
+    payload = {**config_to_dict(make_config()), "interestDeductionEnabled": "false"}
+    with pytest.raises(ValueError, match="interest_deduction_enabled"):
+        config_from_dict(payload)
+
+
+def test_config_from_dict_rejects_bool_for_float() -> None:
+    payload = {**config_to_dict(make_config()), "propertyAppreciationAnnual": True}
+    with pytest.raises(ValueError, match="property_appreciation_annual"):
+        config_from_dict(payload)
+
+
+def test_config_from_dict_rejects_non_string_enum() -> None:
+    payload = {**config_to_dict(make_config()), "saleCgRegime": 5}
+    with pytest.raises(ValueError, match="sale_cg_regime"):
+        config_from_dict(payload)
+
+
+def test_config_from_dict_rejects_string_for_numeric() -> None:
+    payload = {**config_to_dict(make_config()), "monthlyRent": "2400"}
+    with pytest.raises(ValueError, match="monthly_rent"):
+        config_from_dict(payload)
+
+
+def test_config_from_dict_accepts_integral_float_for_int() -> None:
+    payload = {**config_to_dict(make_config()), "horizonYears": 10.0}
+    config = config_from_dict(payload)
+    assert config.horizon_years == 10
+
+
+def test_config_from_dict_accepts_null_for_optional_float() -> None:
+    payload = {**config_to_dict(make_config()), "levyDeductionCap": None}
+    config = config_from_dict(payload)
+    assert config.levy_deduction_cap is None
+
+
+def test_config_from_dict_valid_payload_round_trips() -> None:
+    payload = config_to_dict(make_config())
+    assert config_from_dict(payload) == make_config()

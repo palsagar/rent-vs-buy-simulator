@@ -8,11 +8,14 @@ this module; the engine is never aware of the HTTP layer.
 from __future__ import annotations
 
 from dataclasses import fields
-from typing import Any
+from types import UnionType
+from typing import Any, Literal, Union, get_args, get_origin, get_type_hints
 
 from .engine import calculate_scenarios
 from .models import MonteCarloConfig, SimulationConfig
 from .monte_carlo import run_monte_carlo
+
+_UNION_ORIGINS = frozenset({Union, UnionType})
 
 
 def _camel(name: str) -> str:
@@ -24,6 +27,71 @@ def _camel(name: str) -> str:
 _CAMEL_TO_SNAKE: dict[str, str] = {
     _camel(f.name): f.name for f in fields(SimulationConfig)
 }
+
+_TYPE_HINTS: dict[str, Any] = get_type_hints(SimulationConfig)
+
+
+def _validate_value(name: str, value: Any, annotation: Any) -> Any:
+    """Validate and coerce a JSON value against a field annotation.
+
+    Parameters
+    ----------
+    name : str
+        snake_case field name used in error messages.
+    value : Any
+        JSON-decoded value from the request payload.
+    annotation : Any
+        Type annotation from ``SimulationConfig``.
+
+    Returns
+    -------
+    Any
+        The coerced value (e.g. ``10.0`` becomes ``10`` for ``int``).
+
+    Raises
+    ------
+    ValueError
+        If the value does not match the annotated type.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from simulator.api import _validate_value
+
+        assert _validate_value("horizon_years", 10.0, int) == 10
+        _validate_value("horizon_years", 10.5, int)  # raises ValueError
+
+    """
+    origin = get_origin(annotation)
+    args = get_args(annotation)
+
+    # ``float | None`` is the only nullable field.
+    if origin in _UNION_ORIGINS and type(None) in args:
+        if value is None:
+            return None
+        non_none = [a for a in args if a is not type(None)]
+        return _validate_value(name, value, non_none[0])
+
+    if annotation is bool:
+        if not isinstance(value, bool):
+            raise ValueError(f"{name} must be a boolean")
+        return value
+
+    if annotation in (int, float):
+        label = "an integer" if annotation is int else "a number"
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"{name} must be {label}")
+        if annotation is int and value != int(value):
+            raise ValueError(f"{name} must be an integer")
+        return annotation(value)
+
+    if annotation is str or origin is Literal:
+        if not isinstance(value, str):
+            raise ValueError(f"{name} must be a string")
+        return value
+
+    return value
 
 
 def config_from_dict(payload: dict[str, Any]) -> SimulationConfig:
@@ -43,7 +111,8 @@ def config_from_dict(payload: dict[str, Any]) -> SimulationConfig:
     Raises
     ------
     ValueError
-        If an unknown field is present or a value fails dataclass
+        If an unknown field is present, a value has the wrong JSON
+        type for its field annotation, or a value fails dataclass
         validation.
     TypeError
         If a required field is missing.
@@ -70,7 +139,10 @@ def config_from_dict(payload: dict[str, Any]) -> SimulationConfig:
     unknown = sorted(set(payload) - set(_CAMEL_TO_SNAKE))
     if unknown:
         raise ValueError(f"Unknown config field(s): {', '.join(unknown)}")
-    kwargs = {_CAMEL_TO_SNAKE[key]: value for key, value in payload.items()}
+    kwargs: dict[str, Any] = {}
+    for key, value in payload.items():
+        snake = _CAMEL_TO_SNAKE[key]
+        kwargs[snake] = _validate_value(snake, value, _TYPE_HINTS[snake])
     return SimulationConfig(**kwargs)
 
 
