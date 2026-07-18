@@ -1,6 +1,6 @@
 """CLI entry point for the rent-vs-buy simulator.
 
-Launches the Streamlit app in the user's default browser.
+Serves the web app locally via uvicorn.
 
 Examples
 --------
@@ -8,15 +8,19 @@ After installing the package:
 
 .. code-block:: bash
 
-    rent-vs-buy
+    rent-vs-buy          # http://localhost:8000
+    PORT=9000 rent-vs-buy
 """
 
-from pathlib import Path
+import os
 
 
 def main() -> None:
-    """Launch the Streamlit simulator app."""
-    from streamlit.web.cli import main_run
+    """Launch the web app on ``$PORT`` (default 8000)."""
+    import uvicorn
 
-    app_path = str(Path(__file__).parent / "app.py")
-    main_run(args=[app_path])
+    uvicorn.run(
+        "simulator.server:app",
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", "8000")),
+    )

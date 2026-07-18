@@ -2,7 +2,7 @@
 
 This package provides tools for comparing two financial strategies:
 buying property vs. renting and investing in equities. It includes
-data models, calculation engine, and visualization tools.
+data models, calculation engine, and a FastAPI web server.
 
 Examples
 --------
