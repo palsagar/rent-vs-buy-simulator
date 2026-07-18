@@ -11,6 +11,6 @@ The Streamlit UI was the last pre-redesign surface: clunky rerun-everything inte
 ## Consequences
 
 - ADR-0006 is superseded; the redesign spec §4 light-editorial theme is replaced by the dark token system, and §5's "recorded future path" is closed in a shape it did not predict (Python stays server-side).
-- The `rent-vs-buy` CLI serves uvicorn on port 8000; the Docker images keep port 8501 (the prior Streamlit port) so the existing Coolify pipeline serves the new container without reconfiguration.
+- The `rent-vs-buy` CLI and Docker images serve uvicorn on port 8501 (kept from the prior Streamlit deployment) so the existing Coolify pipeline serves the new container without reconfiguration.
 - The verdict, breakeven, and confidence are computed only server-side from the same Net Value series — the ADR-0001 invariant now extends across the wire by construction.
 - Share URLs replace save/compare; the no-storage privacy stance is preserved.

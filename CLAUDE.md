@@ -10,8 +10,8 @@ A FastAPI + static JavaScript web app that compares buying property vs. renting 
 
 ```bash
 # Run the app
-uv run uvicorn simulator.server:app --reload
-# Open http://localhost:8000
+uv run uvicorn simulator.server:app --reload --port 8501
+# Open http://localhost:8501
 
 # Type check
 uv run ty check src/

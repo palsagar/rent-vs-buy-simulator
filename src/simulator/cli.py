@@ -8,7 +8,7 @@ After installing the package:
 
 .. code-block:: bash
 
-    rent-vs-buy          # http://localhost:8000
+    rent-vs-buy          # http://localhost:8501
     PORT=9000 rent-vs-buy
 """
 
@@ -16,11 +16,11 @@ import os
 
 
 def main() -> None:
-    """Launch the web app on ``$PORT`` (default 8000)."""
+    """Launch the web app on ``$PORT`` (default 8501)."""
     import uvicorn
 
     uvicorn.run(
         "simulator.server:app",
         host="0.0.0.0",
-        port=int(os.environ.get("PORT", "8000")),
+        port=int(os.environ.get("PORT", "8501")),
     )

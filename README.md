@@ -33,7 +33,7 @@ A financial simulation tool that compares two capital allocation strategies over
 # As a CLI tool (recommended)
 uv tool install rent-vs-buy-simulator
 rent-vs-buy
-# Open http://localhost:8000
+# Open http://localhost:8501
 
 # Or as a library
 uv pip install rent-vs-buy-simulator
@@ -45,8 +45,8 @@ uv pip install rent-vs-buy-simulator
 git clone https://github.com/palsagar/rent-vs-buy-simulator.git
 cd rent-vs-buy-simulator
 uv sync
-uv run uvicorn simulator.server:app --reload
-# Open http://localhost:8000
+uv run uvicorn simulator.server:app --reload --port 8501
+# Open http://localhost:8501
 ```
 
 ### Docker
@@ -61,7 +61,7 @@ docker build -t rent-vs-buy-simulator .
 docker run -p 8501:8501 rent-vs-buy-simulator
 ```
 
-The container listens on port **8501** (matching the prior deployment, so an existing Coolify/Traefik route serves the new image without reconfiguration); local `uvicorn` development uses port 8000.
+The app listens on port **8501** everywhere — matching the prior Streamlit deployment, so an existing Coolify/Traefik route serves the new image without reconfiguration.
 
 In production, run the app behind a reverse proxy (e.g. Coolify/Traefik) that enforces per-IP rate limiting; the app's built-in limits (request body-size cap, bounded Monte Carlo concurrency) are only a dependency-free backstop.
 
