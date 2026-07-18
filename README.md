@@ -17,8 +17,8 @@ A financial simulation tool that compares two capital allocation strategies over
 
 - Mortgage amortization, property appreciation, equity growth, closing costs, property tax, insurance, and maintenance
 - Tax primitives: mortgage-interest and property-levy deductibility (with a configurable levy cap), plus a selectable home-sale capital-gains regime (US defaults provided)
-- Four interactive Plotly charts with breakeven analysis
-- Quick presets for common scenarios (High Interest, Bull Market, Conservative, First-Time Buyer)
+- Interactive Plotly.js charts in a dark GitHub-style UI — Net Value decision chart, uncertainty fan, sensitivity tornado, and cash-flow views
+- Market-outlook presets and region-based tax defaults (US; more regions coming)
 - Liquidation-based Net Value — a single wealth series, at every year, that drives every chart, the verdict, and Monte Carlo alike (see [FORMULAS.md](FORMULAS.md))
 - Cash-flow matching — whichever side is cheaper each month invests the difference in equities
 - Independent horizon (when you'd sell) and mortgage term, instead of one combined duration
@@ -33,6 +33,7 @@ A financial simulation tool that compares two capital allocation strategies over
 # As a CLI tool (recommended)
 uv tool install rent-vs-buy-simulator
 rent-vs-buy
+# Open http://localhost:8000
 
 # Or as a library
 uv pip install rent-vs-buy-simulator
@@ -44,7 +45,8 @@ uv pip install rent-vs-buy-simulator
 git clone https://github.com/palsagar/rent-vs-buy-simulator.git
 cd rent-vs-buy-simulator
 uv sync
-streamlit run src/simulator/app.py
+uv run uvicorn simulator.server:app --reload
+# Open http://localhost:8000
 ```
 
 ### Docker
@@ -52,11 +54,11 @@ streamlit run src/simulator/app.py
 ```bash
 # Local development
 docker compose up --build
-# Open http://localhost:8501
+# Open http://localhost:8000
 
 # Production
 docker build -t rent-vs-buy-simulator .
-docker run -p 8501:8501 rent-vs-buy-simulator
+docker run -p 8000:8000 rent-vs-buy-simulator
 ```
 
 ## Library Usage

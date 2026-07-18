@@ -16,8 +16,7 @@ RUN uv sync --frozen --no-install-project --no-dev
 COPY src/ ./src/
 RUN uv sync --frozen --no-dev
 
-# Expose Streamlit port
-EXPOSE 8501
+ENV PORT=8000
+EXPOSE 8000
 
-# Run Streamlit (local development settings)
-CMD ["/app/.venv/bin/streamlit", "run", "src/simulator/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+CMD /app/.venv/bin/uvicorn simulator.server:app --host 0.0.0.0 --port ${PORT}

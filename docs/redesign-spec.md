@@ -57,6 +57,8 @@ Single scrolling narrative, no tabs:
 
 ## 4. Visual system (light theme)
 
+> **Superseded 2026-07-17** by [frontend-migration-design.md](frontend-migration-design.md) §4: the visual system ships as the GitHub-dark token set of the author's other apps (single dark theme, not light editorial), with Buy `#f0883e` / Rent `#58a6ff`.
+
 - **Two strategy hues everywhere**: Buy = warm terracotta/amber, Rent = cool teal/blue — every line, badge, and accent; neutrals for reference elements; no red/green = bad/good; colorblind-safe.
 - **Light editorial theme** (single theme; no dark variant maintained): Streamlit `config.toml` palette/fonts/radii + the existing CSS-injection path for the hero.
 - **Typography**: display face for the verdict headline, clean sans for UI, tabular numerals for all figures.
@@ -66,7 +68,7 @@ Single scrolling narrative, no tabs:
 
 ## 5. Stack (ADR-0006)
 
-Ships on Streamlit (theming + CSS injection). Client-side rewrite (TS or Pyodide) is the recorded future path once the engine model stabilizes — its wins are instant slider feedback and mobile polish.
+Ships as FastAPI + static ES-module frontend with Plotly.js (ADR-0008, which supersedes ADR-0006). The engine remains Python server-side; a TS/Pyodide client port is no longer the recorded path.
 
 ## 6. Code impact
 
