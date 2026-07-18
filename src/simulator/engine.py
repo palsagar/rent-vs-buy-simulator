@@ -439,5 +439,6 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
         total_property_tax_paid=float(np.sum(series["_levy"])),
         total_insurance_paid=float(np.sum(series["_insurance"])),
         total_maintenance_paid=float(np.sum(series["_maintenance"])),
+        total_mortgage_interest_paid=float(np.sum(series["_interest"])),
         total_tax_savings=float(series["cum_tax_savings"][-1]),
     )

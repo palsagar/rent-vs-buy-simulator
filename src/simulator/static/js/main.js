@@ -74,6 +74,11 @@ async function runMonteCarlo() {
   const controller = new AbortController();
   mcAbort = controller;
   const cached = getCached("monteCarlo", hash);
+  // Ordering contract: Monte Carlo only renders when its config hash matches
+  // the last simulate winner (lastWinnerHash === hash). lastWinnerHash and
+  // lastWinner are set as a side effect of the simulate path, and simRun is
+  // awaited to ensure that path has settled first. Changing the hashing or
+  // the simulate cache logic can therefore silently suppress MC rendering.
   try {
     if (cached) {
       await simRun;

@@ -214,3 +214,21 @@ def test_config_from_dict_accepts_null_for_optional_float() -> None:
 def test_config_from_dict_valid_payload_round_trips() -> None:
     payload = config_to_dict(make_config())
     assert config_from_dict(payload) == make_config()
+
+
+def test_config_from_dict_rejects_nan() -> None:
+    payload = {**config_to_dict(make_config()), "propertyPrice": float("nan")}
+    with pytest.raises(ValueError, match="finite"):
+        config_from_dict(payload)
+
+
+def test_config_from_dict_rejects_infinity() -> None:
+    payload = {**config_to_dict(make_config()), "equityGrowthAnnual": float("inf")}
+    with pytest.raises(ValueError, match="finite"):
+        config_from_dict(payload)
+
+
+def test_config_from_dict_rejects_out_of_range_growth_rate() -> None:
+    payload = {**config_to_dict(make_config()), "equityGrowthAnnual": 1e6}
+    with pytest.raises(ValueError, match="equity_growth_annual"):
+        config_from_dict(payload)

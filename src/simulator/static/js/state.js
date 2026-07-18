@@ -1,5 +1,7 @@
 // Central config state, share-URL codec, debounce, and result cache.
 
+import { INPUT_DEFS } from "./fields.js";
+
 export const DEFAULT_CONFIG = {
   horizonYears: 10,
   propertyPrice: 500000,
@@ -63,19 +65,45 @@ function writeUrl() {
   history.replaceState(null, "", qs ? `?${qs}` : location.pathname);
 }
 
+// Per-field validation metadata derived from INPUT_DEFS (the single source
+// of truth). Numeric ranges are expressed in stored units: INPUT_DEFS
+// min/max are in displayed units, so divide by any `scale`.
+const NUMERIC_RANGES = new Map();
+const ALLOWED_VALUES = new Map();
+for (const def of INPUT_DEFS) {
+  if (def.type === "segmented") {
+    ALLOWED_VALUES.set(def.key, new Set(def.options));
+  } else if (def.type === "select") {
+    ALLOWED_VALUES.set(def.key, new Set(def.options.map((opt) => opt[0])));
+  } else if (def.min !== undefined) {
+    const scale = def.scale ?? 1;
+    NUMERIC_RANGES.set(def.key, { min: def.min / scale, max: def.max / scale });
+  }
+}
+
+function isValidNumber(key, n) {
+  const allowed = ALLOWED_VALUES.get(key);
+  if (allowed) return allowed.has(n);
+  const range = NUMERIC_RANGES.get(key);
+  return !range || (n >= range.min && n <= range.max);
+}
+
 export function readUrl() {
   const params = new URLSearchParams(location.search);
   const restored = {};
   for (const [key, def] of Object.entries(DEFAULT_CONFIG)) {
     if (!params.has(key)) continue;
     const raw = params.get(key);
+    // Drop values outside the field's known range or allowed set so a
+    // hand-edited share URL can't push an invalid config into the API.
     if (typeof def === "boolean") {
       restored[key] = raw === "true";
     } else if (typeof def === "number") {
       const n = Number(raw);
-      if (!Number.isNaN(n)) restored[key] = n;
+      if (!Number.isNaN(n) && isValidNumber(key, n)) restored[key] = n;
     } else {
-      restored[key] = raw;
+      const allowed = ALLOWED_VALUES.get(key);
+      if (!allowed || allowed.has(raw)) restored[key] = raw;
     }
   }
   if (Object.keys(restored).length > 0) {

@@ -16,6 +16,10 @@ RUN uv sync --frozen --no-install-project --no-dev
 COPY src/ ./src/
 RUN uv sync --frozen --no-dev
 
+# Run as a non-root user (least privilege)
+RUN useradd --create-home --uid 10001 app && chown -R app:app /app
+USER app
+
 ENV PORT=8000
 EXPOSE 8000
 

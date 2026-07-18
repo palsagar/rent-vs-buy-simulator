@@ -61,6 +61,8 @@ docker build -t rent-vs-buy-simulator .
 docker run -p 8000:8000 rent-vs-buy-simulator
 ```
 
+In production, run the app behind a reverse proxy (e.g. Coolify/Traefik) that enforces per-IP rate limiting; the app's built-in limits (request body-size cap, bounded Monte Carlo concurrency) are only a dependency-free backstop.
+
 ## Library Usage
 
 ```python

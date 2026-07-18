@@ -94,13 +94,9 @@ export function renderOutflowChart(el, series) {
 }
 
 export function renderBreakdownChart(el, payload, cfg) {
-  const nMonths = Math.min(cfg.horizonYears, cfg.mortgageTermYears) * 12;
-  const loan = cfg.propertyPrice * (1 - cfg.downPaymentPct / 100);
-  const finalBalance = payload.series.mortgageBalance.at(-1);
-  const interestPaid = payload.monthlyMortgagePayment * nMonths - (loan - finalBalance);
   const t = payload.totals;
   const items = [
-    ["Mortgage interest", interestPaid],
+    ["Mortgage interest", t.interestPaid],
     ["Property tax", t.propertyTaxPaid],
     ["Maintenance", t.maintenancePaid],
     ["Insurance", t.insurancePaid],
@@ -109,11 +105,15 @@ export function renderBreakdownChart(el, payload, cfg) {
   ].sort((a, b) => b[1] - a[1]);
   const labels = [...items.map((i) => i[0]), "Tax savings (offset)"];
   const values = [...items.map((i) => i[1]), -t.taxSavings];
+  // Reverse once into locals so the negative "Tax savings" bar keeps its
+  // green highlight (in-place .reverse() would desync colors from bars).
+  const revLabels = [...labels].reverse();
+  const revValues = [...values].reverse();
   const traces = [
     {
       type: "bar", orientation: "h",
-      y: labels.reverse(), x: values.reverse(),
-      marker: { color: values.map((v) => (v < 0 ? "#7ee787" : MUTED)).reverse() },
+      y: revLabels, x: revValues,
+      marker: { color: revValues.map((v) => (v < 0 ? "#7ee787" : MUTED)) },
       hovertemplate: "%{y}: %{x:$,.0f}<extra></extra>",
     },
   ];

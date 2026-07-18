@@ -7,6 +7,7 @@ this module; the engine is never aware of the HTTP layer.
 
 from __future__ import annotations
 
+import math
 from dataclasses import fields
 from types import UnionType
 from typing import Any, Literal, Union, get_args, get_origin, get_type_hints
@@ -31,7 +32,7 @@ _CAMEL_TO_SNAKE: dict[str, str] = {
 _TYPE_HINTS: dict[str, Any] = get_type_hints(SimulationConfig)
 
 
-def _validate_value(name: str, value: Any, annotation: Any) -> Any:
+def _validate_value(name: str, value: Any, annotation: Any) -> Any:  # noqa: C901
     """Validate and coerce a JSON value against a field annotation.
 
     Parameters
@@ -82,6 +83,10 @@ def _validate_value(name: str, value: Any, annotation: Any) -> Any:
         label = "an integer" if annotation is int else "a number"
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ValueError(f"{name} must be {label}")
+        # Reject NaN/±Infinity: json.loads accepts these bareword tokens and
+        # they would silently poison the engine's arithmetic.
+        if not math.isfinite(value):
+            raise ValueError(f"{name} must be a finite number")
         if annotation is int and value != int(value):
             raise ValueError(f"{name} must be an integer")
         return annotation(value)
@@ -209,6 +214,7 @@ def simulate_payload(config: SimulationConfig) -> dict[str, Any]:
             "propertyTaxPaid": results.total_property_tax_paid,
             "insurancePaid": results.total_insurance_paid,
             "maintenancePaid": results.total_maintenance_paid,
+            "interestPaid": results.total_mortgage_interest_paid,
             "taxSavings": results.total_tax_savings,
         },
         "series": {

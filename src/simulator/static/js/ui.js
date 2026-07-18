@@ -27,6 +27,9 @@ export function initUi() {
   document.getElementById("inputs-btn").addEventListener("click", () => {
     document.getElementById("input-panel").classList.toggle("visible");
   });
+
+  // Wired here (not inline onclick) so the CSP script-src can omit 'unsafe-inline'.
+  document.getElementById("error-reload").addEventListener("click", () => location.reload());
 }
 
 export function showError(message) {
