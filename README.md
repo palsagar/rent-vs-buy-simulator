@@ -54,12 +54,14 @@ uv run uvicorn simulator.server:app --reload
 ```bash
 # Local development
 docker compose up --build
-# Open http://localhost:8000
+# Open http://localhost:8501
 
 # Production
 docker build -t rent-vs-buy-simulator .
-docker run -p 8000:8000 rent-vs-buy-simulator
+docker run -p 8501:8501 rent-vs-buy-simulator
 ```
+
+The container listens on port **8501** (matching the prior deployment, so an existing Coolify/Traefik route serves the new image without reconfiguration); local `uvicorn` development uses port 8000.
 
 In production, run the app behind a reverse proxy (e.g. Coolify/Traefik) that enforces per-IP rate limiting; the app's built-in limits (request body-size cap, bounded Monte Carlo concurrency) are only a dependency-free backstop.
 

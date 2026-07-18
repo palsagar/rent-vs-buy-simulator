@@ -20,8 +20,8 @@ RUN uv sync --frozen --no-dev
 RUN useradd --create-home --uid 10001 app && chown -R app:app /app
 USER app
 
-ENV PORT=8000
-EXPOSE 8000
+ENV PORT=8501
+EXPOSE 8501
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:${PORT}/api/health')" || exit 1

@@ -4,5 +4,5 @@ services:
       context: .
       dockerfile: Dockerfile.local
     ports:
-      - "8000:8000"
+      - "8501:8501"
     container_name: rent-vs-buy-simulator
