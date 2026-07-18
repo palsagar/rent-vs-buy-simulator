@@ -155,17 +155,18 @@ class SimulationConfig:
             # Validation passed successfully
 
         """
-        # Validate horizon_years
-        if self.horizon_years <= 0:
+        # Validate horizon_years (upper cap guards against OOM: every array
+        # is sized horizon_years * 12 + 1, and Monte Carlo allocates
+        # ~500 of them, so an unbounded client value can exhaust memory)
+        if not (1 <= self.horizon_years <= 100):
             raise ValueError(
-                f"horizon_years must be positive (got {self.horizon_years}). "
-                "Please specify a horizon greater than 0 years."
+                f"horizon_years must be between 1 and 100 (got {self.horizon_years})."
             )
 
-        # Validate mortgage_term_years
-        if self.mortgage_term_years <= 0:
+        # Validate mortgage_term_years (same OOM guard as horizon_years)
+        if not (1 <= self.mortgage_term_years <= 100):
             raise ValueError(
-                "mortgage_term_years must be positive "
+                f"mortgage_term_years must be between 1 and 100 "
                 f"(got {self.mortgage_term_years})."
             )
 
@@ -190,6 +191,29 @@ class SimulationConfig:
                 f"mortgage_rate_annual must be > 0 (got {self.mortgage_rate_annual}). "
                 "Please specify a rate greater than 0%. "
                 "For very low rates, use a small positive value like 0.01%."
+            )
+
+        # Cap mortgage_rate_annual so it is not the one unbounded compounding
+        # rate; no realistic rate exceeds 100%.
+        if self.mortgage_rate_annual > 100:
+            raise ValueError(
+                "mortgage_rate_annual must be <= 100 "
+                f"(got {self.mortgage_rate_annual})."
+            )
+
+        # Bound the annual growth rates (percentages). The upper cap of 100 keeps
+        # the 1200-month cumprod far below float overflow (which needs a
+        # several-hundred-percent rate); the -50 floor still permits a severe
+        # single-year market crash.
+        if not (-50 <= self.property_appreciation_annual <= 100):
+            raise ValueError(
+                "property_appreciation_annual must be between -50 and 100 "
+                f"(got {self.property_appreciation_annual})."
+            )
+        if not (-50 <= self.equity_growth_annual <= 100):
+            raise ValueError(
+                "equity_growth_annual must be between -50 and 100 "
+                f"(got {self.equity_growth_annual})."
             )
 
         # Validate monthly_rent
@@ -297,6 +321,8 @@ class SimulationResults:
         Total home insurance paid over the horizon.
     total_maintenance_paid : float
         Total maintenance cost paid over the horizon.
+    total_mortgage_interest_paid : float
+        Total mortgage interest accrued over the horizon.
     total_tax_savings : float
         Total tax savings from mortgage interest / levy deductions.
 
@@ -331,6 +357,7 @@ class SimulationResults:
             total_property_tax_paid=6000,
             total_insurance_paid=1200,
             total_maintenance_paid=5000,
+            total_mortgage_interest_paid=140000,
             total_tax_savings=8000,
         )
 
@@ -349,6 +376,7 @@ class SimulationResults:
     total_property_tax_paid: float
     total_insurance_paid: float
     total_maintenance_paid: float
+    total_mortgage_interest_paid: float
     total_tax_savings: float
 
 

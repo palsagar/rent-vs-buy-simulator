@@ -1,6 +1,8 @@
 # Redesign Spec — Rent or Buy? as a Decision Tool
 
-Product identity: a public web app that answers one question for one person — "should I buy this home or keep renting?" Every surface serves the Verdict. Terminology in [CONTEXT.md](../CONTEXT.md); decisions recorded in [docs/adr/](./adr/) (0001–0007).
+Product identity: a public web app that answers one question for one person — "should I buy this home or keep renting?" Every surface serves the Verdict. Terminology in [CONTEXT.md](../CONTEXT.md); decisions recorded in [docs/adr/](./adr/) (0001–0008).
+
+> **Status (2026-07-18): Implemented.** The engine-truth model (§1) and the output-page narrative (§3) ship in the current app. The visual system (§4) and stack (§5) were delivered by the Streamlit → FastAPI migration ([ADR-0008](adr/0008-fastapi-static-frontend.md) / [frontend-migration-design.md](frontend-migration-design.md)), which replaced §4's light editorial theme with the GitHub-dark system. §6 (code impact) and §9 (phasing) describe the original Streamlit-era plan and are retained as a historical record — the code is the source of truth.
 
 ## Why (audit summary, July 2026)
 
@@ -53,9 +55,11 @@ Single scrolling narrative, no tabs:
 
 **Deleted:** Asset Growth chart (gross value contradicts Net Value semantics — do not reintroduce), welcome modal (content folds into hero copy + "?" guide), PDF report, scenario save/compare + comparison expander, matplotlib spaghetti chart, probability-over-time chart, "This chart shows…" bullet blocks.
 
-**New: shareable URLs** — full config encoded in query params via `st.query_params`, restored on load. Replaces save/compare (two tabs = comparison; bookmark = save) and enables sharing. No storage, preserves the privacy stance.
+**New: shareable URLs** — full config encoded in URL query params, restored on load. Replaces save/compare (two tabs = comparison; bookmark = save) and enables sharing. No storage, preserves the privacy stance.
 
 ## 4. Visual system (light theme)
+
+> **Superseded 2026-07-17** by [frontend-migration-design.md](frontend-migration-design.md) §4: the visual system ships as the GitHub-dark token set of the author's other apps (single dark theme, not light editorial), with Buy `#f0883e` / Rent `#58a6ff`.
 
 - **Two strategy hues everywhere**: Buy = warm terracotta/amber, Rent = cool teal/blue — every line, badge, and accent; neutrals for reference elements; no red/green = bad/good; colorblind-safe.
 - **Light editorial theme** (single theme; no dark variant maintained): Streamlit `config.toml` palette/fonts/radii + the existing CSS-injection path for the hero.
@@ -66,7 +70,7 @@ Single scrolling narrative, no tabs:
 
 ## 5. Stack (ADR-0006)
 
-Ships on Streamlit (theming + CSS injection). Client-side rewrite (TS or Pyodide) is the recorded future path once the engine model stabilizes — its wins are instant slider feedback and mobile polish.
+Ships as FastAPI + static ES-module frontend with Plotly.js (ADR-0008, which supersedes ADR-0006). The engine remains Python server-side; a TS/Pyodide client port is no longer the recorded path.
 
 ## 6. Code impact
 
