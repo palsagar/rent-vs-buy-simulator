@@ -9,7 +9,7 @@ export const INPUT_DEFS = [
   { key: "propertyPrice", label: "Home price", min: 50000, max: 2000000, step: 5000, fmt: fmtCompact, section: "core", hint: "Purchase price of the property" },
   { key: "downPaymentPct", label: "Down payment", min: 5, max: 50, step: 1, fmt: (v) => fmtPct(v, 0), section: "core" },
   { key: "mortgageRateAnnual", label: "Mortgage rate", min: 1, max: 10, step: 0.05, fmt: (v) => fmtPct(v, 2), section: "core" },
-  { key: "mortgageTermYears", label: "Mortgage term", type: "segmented", options: [15, 20, 30], section: "core", hint: "Amortization period — independent of the horizon" },
+  { key: "mortgageTermYears", label: "Mortgage term", type: "segmented", options: [15, 20, 25, 30], section: "core", hint: "Amortization period — independent of the horizon" },
   { key: "monthlyRent", label: "Monthly rent", min: 500, max: 10000, step: 50, fmt: fmtMoney, section: "core" },
   { key: "horizonYears", label: "Horizon", min: 2, max: 40, step: 1, fmt: (v) => `${v} yrs`, section: "core", hint: "Years until you'd sell — the chart x-axis ends here" },
   { key: "propertyAppreciationAnnual", label: "Property appreciation", min: 0, max: 10, step: 0.1, fmt: (v) => fmtPct(v), section: "assumptions" },
