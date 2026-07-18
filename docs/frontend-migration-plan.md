@@ -1,5 +1,7 @@
 # Frontend Migration Implementation Plan
 
+> **Status (2026-07-18): Completed.** This plan has been fully executed — the app now ships the FastAPI + static-JavaScript frontend. Retained as an implementation record; the code (not this checklist) is the source of truth.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the Streamlit UI with a FastAPI + static JavaScript frontend matching the author's WebGPU apps (GitHub-dark aesthetic), implementing the redesign spec's narrative page.

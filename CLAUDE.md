@@ -18,8 +18,8 @@ uv run ty check src/
 
 # Tests
 uv run pytest tests/                        # all tests
-uv run pytest tests/test_engine.py           # single file
-uv run pytest tests/test_engine.py::TestClassName::test_name  # single test
+uv run pytest tests/test_engine_core.py      # single file
+uv run pytest tests/test_engine_core.py::TestClassName::test_name  # single test
 uv run pytest --cov --cov-report=term        # with coverage (80% min enforced)
 
 # Lint & format

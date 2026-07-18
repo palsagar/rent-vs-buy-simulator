@@ -1,6 +1,6 @@
 # Frontend Migration Design — Streamlit → FastAPI + Static Frontend
 
-Date: 2026-07-17 · Status: approved (brainstorming complete) · Supersedes: ADR-0006 (recorded as superseded by new ADR-0008 in this change)
+Date: 2026-07-17 · Status: **Implemented** (2026-07-18) — this design ships in the current app · Supersedes: ADR-0006 (superseded by ADR-0008)
 
 ## Context
 
