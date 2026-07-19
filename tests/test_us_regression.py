@@ -46,13 +46,22 @@ GOLDENS = {
     "total_tax_savings": 74968.2878800427,
 }
 
-# The 8 tornado bars, in rank order, captured at the same commit. T9
-# changes how the levy delta is computed; these pin that the US chart
-# does not move. _compute_sensitivity orders by descending impact
-# range, so a reordering is itself a regression.
+# The 8 tornado bars, in rank order. _compute_sensitivity orders by
+# descending impact range, so a reordering is itself a regression.
+#
+# REGENERATED once, deliberately, when high perturbations were capped at
+# the UI's slider maximum (_PERTURBATION_CEILING). Only two values moved
+# and both were provably out of the app's own configurable range before:
+# Equity Growth high 22% -> 15% and Property Appreciation high 11% -> 10%.
+# EVERY low value is bit-identical, and six of the eight bars are
+# untouched on both sides. The rank flip is the point: bounded to what a
+# user can actually set, property prices drive the US verdict harder than
+# the equity tail does. Do not regenerate these to make a failure pass --
+# diff them by NAME (the order moves) and justify every value that
+# changes.
 TORNADO_NAMES = [
-    "Equity Growth",
     "Property Appreciation",
+    "Equity Growth",
     "Monthly Rent",
     "Property Price",
     "Mortgage Rate",
@@ -61,8 +70,8 @@ TORNADO_NAMES = [
     "Down Payment %",
 ]
 TORNADO_LOW = [
-    245518.11238156457,
     -302415.7909909935,
+    245518.11238156457,
     -93421.86072197475,
     88181.87658442234,
     43093.40687027981,
@@ -71,8 +80,8 @@ TORNADO_LOW = [
     4054.6262869769125,
 ]
 TORNADO_HIGH = [
-    -890777.8509134441,
-    579807.9025580233,
+    481401.7741232437,
+    -325181.2971145665,
     95917.84863319725,
     -85685.88867319992,
     -41503.53846349695,

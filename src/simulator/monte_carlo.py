@@ -31,6 +31,33 @@ _LEVY_RELATIVE_DELTA = 0.5 / 1.2
 # relative) and far below any swing a user could read off the chart.
 _NEGLIGIBLE_SWING_RATIO = 1e-6
 
+# Highest value the UI lets a user set for each perturbed field, in
+# STORED units. A high perturbation is capped here so the tornado never
+# measures a scenario the app cannot be configured to produce: equity
+# growth was swinging to +1 sigma = 24% against a slider that stops at
+# 15%, and over a long horizon that compounds into a bar an order of
+# magnitude wider than every other one put together, collapsing the rest
+# of the chart into slivers.
+#
+# The LOW side is deliberately NOT capped at the slider minimum. A crash
+# is a real outcome the model must be able to represent even though the
+# UI will not let you type a negative growth rate -- see
+# test_tornado_low_uses_negative_growth_rate, which pins that.
+#
+# Mirrors fields.js. Kept honest by tests/test_tornado_bounds.py, which
+# parses the slider maxima out of it rather than trusting this copy.
+_PERTURBATION_CEILING = {
+    "property_appreciation_annual": 10.0,
+    "equity_growth_annual": 15.0,
+    "rent_inflation_rate": 0.1,
+    "property_price": 2_000_000.0,
+    "down_payment_pct": 50.0,
+    "monthly_rent": 10_000.0,
+    "mortgage_rate_annual": 10.0,
+    "property_tax_rate": 5.0,
+    "annual_property_levy": 10_000.0,
+}
+
 
 def _is_negligible_against(swing: float, reference: float) -> bool:
     """Whether ``swing`` is rounding noise at the scale of ``reference``.
@@ -368,12 +395,11 @@ def _compute_sensitivity(  # noqa: C901
         if field == "rent_inflation_rate":
             low_override = max(low_override, 0.0)
 
-        # High perturbation (add delta)
+        # High perturbation (add delta), never past what the UI can set.
         high_override = base_val + delta
-        if field == "down_payment_pct":
-            high_override = min(high_override, 100.0)
-        if field == "rent_inflation_rate":
-            high_override = min(high_override, 1.0)
+        ceiling = _PERTURBATION_CEILING.get(field)
+        if ceiling is not None:
+            high_override = min(high_override, ceiling)
 
         try:
             val_low = _run_with_override(**{field: low_override})
