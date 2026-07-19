@@ -68,3 +68,58 @@ class TestMonteCarloDefaults:
         assert mc.rent_inflation_std == 1.5
         assert mc.appreciation_equity_correlation == 0.3
         assert mc.n_simulations == 500
+
+
+class TestMultiRegionPrimitiveValidation:
+    def test_new_fields_default_to_inert_values(self):
+        config = make_config()
+        assert config.annual_property_levy == 0.0
+        assert config.levy_paid_by_occupier is False
+        assert config.annual_maintenance_amount == 0.0
+        assert config.closing_cost_buyer_amount == 0.0
+        assert config.portfolio_deemed_return_pct == 0.0
+        assert config.portfolio_drag_rate_pct == 0.0
+
+    def test_negative_annual_property_levy_rejected(self):
+        with pytest.raises(ValueError, match="annual_property_levy"):
+            make_config(annual_property_levy=-1.0)
+
+    def test_annual_property_levy_upper_bound(self):
+        with pytest.raises(ValueError, match="annual_property_levy"):
+            make_config(annual_property_levy=100_001.0)
+
+    def test_negative_annual_maintenance_amount_rejected(self):
+        with pytest.raises(ValueError, match="annual_maintenance_amount"):
+            make_config(annual_maintenance_amount=-1.0)
+
+    def test_closing_cost_buyer_amount_permits_negative(self):
+        # The UK SDLT nil-rate band gives the buyer cost line a negative
+        # intercept (-6,900). A >= 0 check would make the UK bundle
+        # unconstructible -- see docs/multi-region-spec.md P4.
+        config = make_config(closing_cost_buyer_amount=-6900.0)
+        assert config.closing_cost_buyer_amount == -6900.0
+
+    def test_closing_cost_buyer_amount_bounded_both_sides(self):
+        with pytest.raises(ValueError, match="closing_cost_buyer_amount"):
+            make_config(closing_cost_buyer_amount=-100_001.0)
+        with pytest.raises(ValueError, match="closing_cost_buyer_amount"):
+            make_config(closing_cost_buyer_amount=100_001.0)
+
+    def test_portfolio_deemed_return_pct_bounded(self):
+        with pytest.raises(ValueError, match="portfolio_deemed_return_pct"):
+            make_config(portfolio_deemed_return_pct=-0.1)
+        with pytest.raises(ValueError, match="portfolio_deemed_return_pct"):
+            make_config(portfolio_deemed_return_pct=100.1)
+
+    def test_portfolio_drag_rate_pct_bounded(self):
+        with pytest.raises(ValueError, match="portfolio_drag_rate_pct"):
+            make_config(portfolio_drag_rate_pct=-0.1)
+        with pytest.raises(ValueError, match="portfolio_drag_rate_pct"):
+            make_config(portfolio_drag_rate_pct=100.1)
+
+    def test_netherlands_operands_are_constructible(self):
+        config = make_config(
+            portfolio_deemed_return_pct=6.0, portfolio_drag_rate_pct=36.0
+        )
+        assert config.portfolio_deemed_return_pct == 6.0
+        assert config.portfolio_drag_rate_pct == 36.0

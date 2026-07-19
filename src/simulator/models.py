@@ -52,6 +52,31 @@ class SimulationConfig:
     cost_inflation_rate : float, optional
         Annual inflation rate for ongoing costs (insurance only), as a
         decimal. Default is 0.025 (2.5%).
+    annual_property_levy : float, optional
+        Flat annual property levy in the region's currency, paid
+        monthly and indexed by ``cost_inflation_rate``. Additive to the
+        ad-valorem ``property_tax_rate``. Default is 0.0.
+    levy_paid_by_occupier : bool, optional
+        Whether the levy is charged to the renter as well as the buyer
+        (UK council tax; DE umlagefaehige Grundsteuer). Default is
+        False.
+    annual_maintenance_amount : float, optional
+        Flat annual maintenance cost in the region's currency,
+        cost-indexed. Additive to ``annual_maintenance_pct``. Default
+        is 0.0.
+    closing_cost_buyer_amount : float, optional
+        Fixed buyer transaction cost added to the percentage-of-price
+        term. May be negative: a transfer tax with a zero-rate band has
+        a negative intercept (UK SDLT). Default is 0.0.
+    portfolio_deemed_return_pct : float, optional
+        Assumed annual return an annual wealth tax is charged on, as a
+        percentage. The tax is assessed on the lesser of this and the
+        actual return, floored at nil (NL box 3, Wet IB 2001 art.
+        5.25). Default is 0.0.
+    portfolio_drag_rate_pct : float, optional
+        Rate applied to that deemed return each year, on portfolio
+        value rather than on realised gains, symmetrically to both
+        strategies' portfolios, as a percentage. Default is 0.0.
     interest_deduction_enabled : bool, optional
         Whether mortgage interest is tax-deductible. Default is True.
     marginal_tax_rate_pct : float, optional
@@ -117,6 +142,14 @@ class SimulationConfig:
     annual_home_insurance: float = 1200.0
     annual_maintenance_pct: float = 1.0
     cost_inflation_rate: float = 0.025
+    # Multi-region primitives (ADR-0007). All default to a value that
+    # leaves the US preset bit-identical.
+    annual_property_levy: float = 0.0
+    levy_paid_by_occupier: bool = False
+    annual_maintenance_amount: float = 0.0
+    closing_cost_buyer_amount: float = 0.0
+    portfolio_deemed_return_pct: float = 0.0
+    portfolio_drag_rate_pct: float = 0.0
     # Tax benefit parameters
     interest_deduction_enabled: bool = True
     marginal_tax_rate_pct: float = 24.0
@@ -237,6 +270,44 @@ class SimulationConfig:
                 "For 2.5% annual inflation, use 0.025. For no inflation, use 0."
             )
 
+        # Multi-region primitives. Upper bounds are generous sanity caps,
+        # not statutory limits.
+        if not (0 <= self.annual_property_levy <= 100_000):
+            raise ValueError(
+                "annual_property_levy must be between 0 and 100000 "
+                f"(got {self.annual_property_levy})."
+            )
+
+        if not (0 <= self.annual_maintenance_amount <= 100_000):
+            raise ValueError(
+                "annual_maintenance_amount must be between 0 and 100000 "
+                f"(got {self.annual_maintenance_amount})."
+            )
+
+        # Negatives are legitimate: a transfer tax with a zero-rate band
+        # has a negative intercept (UK SDLT ships -6,900). The engine
+        # clamps the aggregate buyer cost at zero instead.
+        if not (-100_000 <= self.closing_cost_buyer_amount <= 100_000):
+            raise ValueError(
+                "closing_cost_buyer_amount must be between -100000 and "
+                f"100000 (got {self.closing_cost_buyer_amount})."
+            )
+
+        # Together the two 100 ceilings keep the monthly drag at or below
+        # 1.0 * 1.0 / 12 = 0.0833, so (1 + monthly growth - monthly drag)
+        # stays above -1 for every reachable growth rate.
+        if not (0 <= self.portfolio_deemed_return_pct <= 100):
+            raise ValueError(
+                "portfolio_deemed_return_pct must be between 0 and 100 "
+                f"(got {self.portfolio_deemed_return_pct})."
+            )
+
+        if not (0 <= self.portfolio_drag_rate_pct <= 100):
+            raise ValueError(
+                "portfolio_drag_rate_pct must be between 0 and 100 "
+                f"(got {self.portfolio_drag_rate_pct})."
+            )
+
         # Validate marginal_tax_rate_pct (must be between 0 and 100)
         if not (0 <= self.marginal_tax_rate_pct <= 100):
             raise ValueError(
@@ -253,6 +324,9 @@ class SimulationConfig:
             )
 
         # Validate sale_cg_regime
+        # NOTE: this tuple hand-duplicates the SaleCgRegime Literal declared
+        # at the top of this module. Adding a fourth regime requires editing
+        # both or the new value is silently rejected here.
         valid_regimes = ("exempt_amount", "exempt_after_years", "fully_exempt")
         if self.sale_cg_regime not in valid_regimes:
             raise ValueError(
