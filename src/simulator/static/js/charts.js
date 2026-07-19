@@ -29,11 +29,21 @@ function baseLayout(xTitle) {
 }
 
 // Horizontal-bar charts put money on X and categories on Y, so the base
-// layout's currency prefix has to come off the Y axis. It matters because
-// Plotly ignores a tickformat on a category axis but honours a tickprefix
-// -- so the prefix would label every parameter name "<symbol>Rent
-// Inflation".
-function clearCurrencyFromYAxis(layout) {
+// layout's money formatting has to MOVE axes, not just come off Y.
+// Deleting it alone left the money axis with no currency and no SI
+// compaction at all -- the tornado read "-0.5M" where every other chart
+// reads "-EUR500k".
+//
+// It cannot simply be set on both: Plotly ignores a tickformat on a
+// category axis but honours a tickprefix, so a prefix left on Y labels
+// every category "<symbol>Rent Inflation".
+// Not idempotent by construction, so it refuses to run twice: a second
+// call would read the already-deleted y-axis keys and assign undefined,
+// silently wiping the currency it just installed.
+function moveCurrencyToXAxis(layout) {
+  if (layout.yaxis.tickprefix === undefined) return;
+  layout.xaxis.tickprefix = layout.yaxis.tickprefix;
+  layout.xaxis.tickformat = layout.yaxis.tickformat;
   delete layout.yaxis.tickprefix;
   delete layout.yaxis.tickformat;
 }
@@ -182,7 +192,7 @@ export function renderTornadoChart(el, tornado) {
     { type: "bar", orientation: "h", y: params, x: high, base, marker: { color: RENT }, hovertemplate: `%{y} higher: ${getCurrencySymbol()}%{x:,.0f}<extra></extra>` },
   ];
   const layout = baseLayout("Impact on Buy − Rent difference");
-  clearCurrencyFromYAxis(layout);
+  moveCurrencyToXAxis(layout);
   layout.barmode = "overlay";
   layout.yaxis.automargin = true; // grow the left margin to fit parameter labels
   layout.shapes = [
@@ -224,7 +234,7 @@ export function renderBreakdownChart(el, payload, cfg) {
     },
   ];
   const layout = baseLayout(`Total over ${cfg.horizonYears} years`);
-  clearCurrencyFromYAxis(layout);
+  moveCurrencyToXAxis(layout);
   layout.yaxis.automargin = true; // grow the left margin to fit category labels
   Plotly.react(el, traces, layout, PLOT_CONFIG);
 }

@@ -5,6 +5,11 @@ US region bundle's defaults at commit f585e98, BEFORE any multi-region
 engine primitive existed (docs/multi-region-spec.md 7.2). A failure here
 means a "default-inert" primitive is not inert. Never regenerate these
 numbers to make a test pass -- find the primitive that leaked instead.
+
+The GOLDENS block below is engine output and has never been regenerated.
+The TORNADO_* constants are perturbation output, and have been
+regenerated twice, deliberately, when the perturbation rule itself was
+redefined; see the note above them for the standard that applies.
 """
 
 import sys
@@ -46,10 +51,28 @@ GOLDENS = {
     "total_tax_savings": 74968.2878800427,
 }
 
-# The 8 tornado bars, in rank order, captured at the same commit. T9
-# changes how the levy delta is computed; these pin that the US chart
-# does not move. _compute_sensitivity orders by descending impact
-# range, so a reordering is itself a regression.
+# The 8 tornado bars, in rank order. _compute_sensitivity orders by
+# descending impact range, so a reordering is itself a regression.
+#
+# REGENERATED deliberately, when the tornado's delta for the three
+# stochastic drivers became the standard error of the long-run average
+# (std / sqrt(horizon)) instead of the raw annual std. The annual figure
+# is what run_monte_carlo needs for year-to-year draws; the tornado holds
+# its shift for the whole horizon, so it needs the uncertainty of the
+# AVERAGE. Diffed by NAME, since the rank order moves:
+#
+#   - the three stochastic bars move on BOTH sides, because the delta
+#     itself shrank: Equity Growth, Property Appreciation, Rent Inflation
+#   - the five fixed-step bars are bit-identical on both sides: Monthly
+#     Rent, Property Price, Mortgage Rate, Property Tax Rate, Down
+#     Payment % -- their deltas are absolute steps, not standard
+#     deviations, so sqrt(horizon) does not apply
+#   - the summary GOLDENS block above is untouched
+#
+# Do not regenerate these to make a failure pass. Diff by NAME and
+# justify every value that moves: an engine change should move nothing
+# here, and a deliberate perturbation change should move exactly the
+# fields it redefines.
 TORNADO_NAMES = [
     "Equity Growth",
     "Property Appreciation",
@@ -61,23 +84,23 @@ TORNADO_NAMES = [
     "Down Payment %",
 ]
 TORNADO_LOW = [
-    245518.11238156457,
-    -302415.7909909935,
+    108315.2700715856,
+    -123364.65793813154,
     -93421.86072197475,
     88181.87658442234,
     43093.40687027981,
     33706.69579412212,
-    -29181.80117805692,
+    -8688.793081999,
     4054.6262869769125,
 ]
 TORNADO_HIGH = [
-    -890777.8509134441,
-    579807.9025580233,
+    -163200.45114455867,
+    145428.83590766793,
     95917.84863319725,
     -85685.88867319992,
     -41503.53846349695,
     -31976.807946117828,
-    34725.09155147744,
+    11489.229746876867,
     -1558.6383757545846,
 ]
 TORNADO_BASE = 1247.9939556111349
