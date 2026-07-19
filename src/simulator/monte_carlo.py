@@ -190,7 +190,7 @@ def _simulate_single_path(
     return series["net_buy"], series["net_rent"]
 
 
-def _compute_sensitivity(
+def _compute_sensitivity(  # noqa: C901
     base_config: SimulationConfig,
 ) -> tuple[list[str], np.ndarray, np.ndarray, float]:
     """Compute one-at-a-time sensitivity for tornado chart.
@@ -275,6 +275,18 @@ def _compute_sensitivity(
 
     for display_name, field, delta in perturbations:
         base_val = getattr(base_config, field)
+
+        # The levy delta must scale with its own base. Regions whose levy
+        # is a flat amount ship property_tax_rate == 0 (UK council tax, DE
+        # Grundsteuer, FR taxe fonciere) and get no bar at all; NL's
+        # folded-EWF 0.2815 would otherwise take an absolute +-0.5pp, a
+        # +-178% swing implying WOZ regimes it does not have. The 0.5/1.2
+        # factor is calibrated so the US base of 1.2 keeps its current
+        # delta of exactly 0.5.
+        if field == "property_tax_rate":
+            if base_val == 0:
+                continue
+            delta = base_val * (0.5 / 1.2)
 
         # Low perturbation (subtract delta). Growth rates may legitimately
         # go negative; floor them just above -100% so the monthly compounding

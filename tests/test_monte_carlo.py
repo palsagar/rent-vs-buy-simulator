@@ -5,12 +5,21 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+import math
+
 import numpy as np
 
 from simulator.engine import calculate_scenarios
-from simulator.models import MonteCarloConfig
+from simulator.models import MonteCarloConfig, SimulationConfig
 from simulator.monte_carlo import _compute_sensitivity, run_monte_carlo
 from tests.test_models import make_config
+from tests.test_us_regression import (
+    TORNADO_BASE,
+    TORNADO_HIGH,
+    TORNADO_LOW,
+    TORNADO_NAMES,
+    US_PRESET,
+)
 
 
 class TestSharedCore:
@@ -110,3 +119,91 @@ class TestPortfolioDragIsPathDependent:
         mc = MonteCarloConfig(n_simulations=200, seed=42)
         results = run_monte_carlo(config, mc)
         assert np.std(results.final_differences) > 0.0
+
+
+class TestTornadoLevyDelta:
+    def test_us_tornado_names_and_order_are_preserved(self):
+        names, _, _, _ = _compute_sensitivity(SimulationConfig(**US_PRESET))
+        assert names == TORNADO_NAMES
+
+    def test_us_tornado_values_match_within_tolerance(self):
+        _, low, high, base = _compute_sensitivity(SimulationConfig(**US_PRESET))
+        for actual, golden in zip(low, TORNADO_LOW, strict=True):
+            assert math.isclose(actual, golden, rel_tol=1e-12)
+        for actual, golden in zip(high, TORNADO_HIGH, strict=True):
+            assert math.isclose(actual, golden, rel_tol=1e-12)
+        assert math.isclose(base, TORNADO_BASE, rel_tol=1e-12)
+
+    def test_us_tornado_is_bit_identical(self):
+        # 1.2 * (0.5/1.2) is EXACTLY 0.5 in IEEE-754, so low/high are
+        # unchanged bit for bit and no ulp allowance is warranted.
+        # Asserted so that if a future change does introduce drift,
+        # someone decides deliberately rather than inheriting a silent
+        # allowance. See the plan's ambiguity A7.
+        _, low, high, _ = _compute_sensitivity(SimulationConfig(**US_PRESET))
+        assert list(low) == TORNADO_LOW
+        assert list(high) == TORNADO_HIGH
+
+    def test_zero_levy_region_drops_the_bar(self):
+        # UK/DE/FR ship propertyTaxRate 0.0. A proportional delta at a
+        # zero base is itself zero, and monte_carlo.py:285 would then
+        # floor the low side at 0.001 while the high side stayed 0 --
+        # producing a tiny INVERTED bar rather than no bar. Hence the
+        # skip is kept alongside the proportional delta.
+        names, _, _, _ = _compute_sensitivity(make_config(property_tax_rate=0.0))
+        assert "Property Tax Rate" not in names
+        assert len(names) == 7
+
+    def test_nonzero_levy_is_perturbed_proportionally_not_absolutely(self):
+        # NL's base is 0.2815. An absolute +-0.5 would swing it -178%..
+        # +178%; the proportional delta is 0.2815 * (0.5/1.2) = 0.1173,
+        # i.e. +-41.7%, the same relative swing the US gets.
+        base_rate = 0.2815
+        names, low, high, _ = _compute_sensitivity(
+            make_config(property_tax_rate=base_rate)
+        )
+        assert "Property Tax Rate" in names
+        idx = names.index("Property Tax Rate")
+        expected_delta = base_rate * (0.5 / 1.2)
+        lo = _rerun(base_rate - expected_delta)
+        hi = _rerun(base_rate + expected_delta)
+        assert math.isclose(low[idx], lo, rel_tol=1e-12)
+        assert math.isclose(high[idx], hi, rel_tol=1e-12)
+
+    def test_flat_levy_region_still_reports_the_other_seven(self):
+        names, _, _, _ = _compute_sensitivity(
+            make_config(property_tax_rate=0.0, annual_property_levy=2392.0)
+        )
+        assert set(names) == {
+            "Property Appreciation",
+            "Equity Growth",
+            "Rent Inflation",
+            "Property Price",
+            "Down Payment %",
+            "Monthly Rent",
+            "Mortgage Rate",
+        }
+
+    def test_static_primitives_flow_through_monte_carlo_unchanged(self):
+        config = make_config(
+            annual_property_levy=2392.0,
+            levy_paid_by_occupier=True,
+            annual_maintenance_amount=900.0,
+            closing_cost_buyer_amount=-6900.0,
+        )
+        # With every std zeroed, every MC path must reproduce the
+        # deterministic engine exactly.
+        mc = MonteCarloConfig(
+            n_simulations=3,
+            property_appreciation_std=0.0,
+            equity_growth_std=0.0,
+            rent_inflation_std=0.0,
+        )
+        results = run_monte_carlo(config, mc)
+        expected = calculate_scenarios(config).final_difference
+        assert np.allclose(results.final_differences, expected, rtol=1e-9)
+
+
+def _rerun(rate: float) -> float:
+    """Deterministic final difference at one property_tax_rate."""
+    return calculate_scenarios(make_config(property_tax_rate=rate)).final_difference
