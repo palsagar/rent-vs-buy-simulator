@@ -6,6 +6,7 @@ docs/multi-region-spec.md 7.1 for why: during research a summarizer
 fabricated a plausible but entirely fictitious statute article.
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -13,6 +14,63 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from simulator.api import config_from_dict
 from simulator.regions import list_regions
+
+_FIELDS_JS = Path(__file__).parent.parent / "src/simulator/static/js/fields.js"
+
+# Every INPUT_DEFS entry that declares min/max. Update deliberately when
+# a slider is added or removed -- see the canary test below.
+_EXPECTED_BOUNDED_FIELDS = 25
+
+
+def _field_bounds() -> dict[str, tuple[float, float]]:
+    """Parse min/max per key out of the fields.js INPUT_DEFS literal.
+
+    There is no JS test harness in this repo (spec 8.4), so this regex
+    parse is the only automated guard that a shipped region value is
+    reachable from the UI and survives the share-URL validator.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        bounds = _field_bounds()
+        assert bounds["closingCostBuyerPct"][1] >= 12.07
+
+    """
+    bounds: dict[str, tuple[float, float]] = {}
+    pattern = re.compile(
+        r'key:\s*"(?P<key>\w+)".*?min:\s*(?P<min>-?[\d.]+)'
+        r".*?max:\s*(?P<max>-?[\d.]+)"
+    )
+    for line in _FIELDS_JS.read_text(encoding="utf-8").splitlines():
+        match = pattern.search(line)
+        if match:
+            scale_match = re.search(r"scale:\s*([\d.]+)", line)
+            scale = float(scale_match.group(1)) if scale_match else 1.0
+            bounds[match.group("key")] = (
+                float(match.group("min")) / scale,
+                float(match.group("max")) / scale,
+            )
+    return bounds
+
+
+def _segmented_options(key: str) -> list[float]:
+    """Allowed values for a segmented INPUT_DEFS entry.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        assert 30 in _segmented_options("mortgageTermYears")
+
+    """
+    pattern = re.compile(rf'key:\s*"{key}".*?options:\s*\[(?P<opts>[^\]]*)\]')
+    for line in _FIELDS_JS.read_text(encoding="utf-8").splitlines():
+        match = pattern.search(line)
+        if match:
+            return [float(x) for x in match.group("opts").split(",")]
+    raise AssertionError(f"no segmented options found for {key}")
+
 
 # Fields a config needs that no region bundle supplies (the outlook trio
 # plus the horizon), so a bundle can be constructed in isolation.
@@ -75,8 +133,11 @@ class TestBundleContract:
                 )
 
     def test_every_bundle_declares_the_amortisation_term(self):
+        # Parsed, not hard-coded: a literal tuple here would silently
+        # drift from fields.js's segmented options.
+        allowed = _segmented_options("mortgageTermYears")
         for region in _available():
-            assert region["typical"]["mortgageTermYears"] in (15, 20, 25, 30)
+            assert region["typical"]["mortgageTermYears"] in allowed
 
     def test_every_bundle_is_constructible(self):
         for region in _available():
@@ -500,3 +561,43 @@ class TestAllRegionsShip:
         for region in list_regions():
             assert region["typical"] is not None
             assert region["taxPrimitives"] is not None
+
+
+class TestBundleValuesAreReachableFromTheUi:
+    def test_parser_canary_named_fields(self):
+        bounds = _field_bounds()
+        assert "closingCostBuyerPct" in bounds
+        assert "propertyPrice" in bounds
+        assert bounds["levyDeductionCap"][0] < 0  # the uncapped sentinel
+        assert bounds["closingCostBuyerPct"][1] >= 12.07  # the DE blocker
+
+    def test_parser_canary_count(self):
+        # The parser is line-based: an INPUT_DEFS entry wrapped onto two
+        # lines silently drops out while the named canary above still
+        # passes, and the range check would then vacuously skip it. This
+        # count is the guard. If you added or removed a slider, update
+        # _EXPECTED_BOUNDED_FIELDS deliberately.
+        assert len(_field_bounds()) == _EXPECTED_BOUNDED_FIELDS
+
+    def test_every_numeric_bundle_value_is_inside_its_slider_range(self):
+        # state.js NUMERIC_RANGES derives from these bounds and DROPS
+        # out-of-range values on share-URL restore, falling back to
+        # DEFAULT_CONFIG -- i.e. silently to the US value, with no visible
+        # symptom. This is the test that would have caught DE's
+        # closingCostBuyerPct 12.07 against max 10.
+        bounds = _field_bounds()
+        for region in _available():
+            blocks = [
+                region["typical"],
+                region["taxPrimitives"],
+                region["firstTimeBuyerOverrides"],
+            ]
+            for block in blocks:
+                for key, value in block.items():
+                    if key not in bounds or isinstance(value, bool):
+                        continue
+                    low, high = bounds[key]
+                    assert low <= value <= high, (
+                        f"{region['id']}.{key} = {value} is outside the "
+                        f"fields.js range [{low}, {high}]"
+                    )
