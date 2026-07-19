@@ -230,7 +230,17 @@ def _net_value_series(
     contrib_buy = np.maximum(-surplus, 0.0)
 
     # Portfolio value with varying growth: V[t] = G[t]*(V0 + sum c[m]/G[m])
-    eq_growth = np.concatenate([[1.0], np.cumprod(1 + eq_rate_monthly)])
+    # NL box 3 (Wet IB 2001 art. 5.25): taxed on min(deemed, actual)
+    # return, floored at nil. Both operands are proportional to wealth,
+    # so the min reduces to a rate comparison and the closed form
+    # survives. Summed, not compounded: engine.py:402 and
+    # monte_carlo.py:187 both feed arithmetic annual/100/12, so twelve
+    # of them sum back to the annual draw exactly.
+    annual_return = eq_rate_monthly.reshape(config.horizon_years, 12).sum(axis=1)
+    deemed = config.portfolio_deemed_return_pct / 100
+    taxable = np.clip(np.minimum(deemed, annual_return), 0.0, None)
+    drag_monthly = np.repeat(taxable * (config.portfolio_drag_rate_pct / 100) / 12, 12)
+    eq_growth = np.concatenate([[1.0], np.cumprod(1 + eq_rate_monthly - drag_monthly)])
     rent_portfolio = eq_growth * (initial_outlay + np.cumsum(contrib_rent / eq_growth))
     buy_portfolio = eq_growth * np.cumsum(contrib_buy / eq_growth)
     basis_rent = initial_outlay + np.cumsum(contrib_rent)

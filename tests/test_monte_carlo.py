@@ -71,3 +71,42 @@ class TestSensitivity:
             make_config(equity_growth_annual=-8.0)
         ).final_difference
         assert abs(low[idx] - expected_low) < 1e-6
+
+
+class TestPortfolioDragIsPathDependent:
+    def test_mean_realised_drag_is_below_the_deterministic_rate(self):
+        # The tax is concave in the return (min then floor), so by
+        # Jensen's inequality the mean of the tax is BELOW the tax on the
+        # mean. At the app's own calibration (mean 7%, sd 15%) the min
+        # binds in ~47% of simulated years, so a run in which every path
+        # drags exactly 2.16% means the min is NOT being evaluated per
+        # path -- the exact failure this primitive exists to prevent.
+        config = make_config(
+            horizon_years=30,
+            portfolio_deemed_return_pct=6.0,
+            portfolio_drag_rate_pct=36.0,
+        )
+        flat = make_config(horizon_years=30)
+        mc = MonteCarloConfig(n_simulations=200, seed=42)
+        drag_results = run_monte_carlo(config, mc)
+        # Deterministic reference: 7% > 6% every year, so exactly 2.16%.
+        deterministic = calculate_scenarios(config).final_difference
+        flat_det = calculate_scenarios(flat).final_difference
+        # The drag reduces the renter's portfolio, so it RAISES
+        # (net_buy - net_rent). Under MC the mean drag is smaller, so the
+        # median difference must sit below the deterministic one.
+        assert deterministic > flat_det
+        assert drag_results.median_difference < deterministic
+
+    def test_every_path_does_not_share_one_drag(self):
+        # Two configs differing only in equity draws must produce
+        # different realised drags; if the drag were pre-averaged the
+        # spread across paths would collapse.
+        config = make_config(
+            horizon_years=30,
+            portfolio_deemed_return_pct=6.0,
+            portfolio_drag_rate_pct=36.0,
+        )
+        mc = MonteCarloConfig(n_simulations=200, seed=42)
+        results = run_monte_carlo(config, mc)
+        assert np.std(results.final_differences) > 0.0

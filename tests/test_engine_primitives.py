@@ -291,3 +291,126 @@ class TestOccupierBorneLevy:
         series = run_flat(cfg)
         # Renter pays rent only; the levy is nowhere in that line.
         assert abs(series["housing_cost_rent"][1] - cfg.monthly_rent) < 1e-9
+
+
+class TestPortfolioDrag:
+    """NL box 3: an annual tax on portfolio VALUE, assessed on the
+    LESSER of a deemed return and the actual return, floored at nil
+    (Wet IB 2001 art. 5.25 lid 1 + lid 2). Applied symmetrically; the
+    NL asymmetry emerges from the portfolios' different sizes, not from
+    a branch."""
+
+    @staticmethod
+    def _all_cash_config(deemed: float, rate: float, growth: float = 7.0):
+        # down_payment_pct=100 zeroes the loan, and taxfree_config zeroes
+        # levy/insurance/maintenance, so housing_cost_buy == 0 < rent.
+        # Therefore contrib_rent == 0 and the renter's portfolio is pure
+        # V0 compounding: rent_portfolio(t) = initial_outlay * G(t).
+        # This makes the assertion non-circular -- it does not reuse the
+        # engine's own contribution machinery.
+        return taxfree_config(
+            horizon_years=30,
+            down_payment_pct=100,
+            equity_growth_annual=growth,
+            portfolio_deemed_return_pct=deemed,
+            portfolio_drag_rate_pct=rate,
+        )
+
+    def test_renter_receives_no_contributions_in_this_fixture(self):
+        # Guards the fixture's own premise.
+        series = run_flat(self._all_cash_config(6.0, 36.0))
+        assert np.all(series["housing_cost_buy"][1:] == 0.0)
+        assert np.all(series["housing_cost_rent"][1:] > 0.0)
+
+    def test_portfolio_is_pure_v0_compounding_at_the_reduced_rate(self):
+        # At 7% actual vs 6% deemed the min binds on the deemed side, so
+        # the drag is 6.00% x 36% = 2.16%/yr every year.
+        series = run_flat(self._all_cash_config(6.0, 36.0))
+        initial_outlay = series["rent_portfolio"][0]
+        monthly = 0.07 / 12 - 0.0216 / 12
+        assert math.isclose(
+            series["rent_portfolio"][360] / initial_outlay,
+            (1 + monthly) ** 360,
+            rel_tol=1e-12,
+        )
+
+    def test_terminal_shortfall_against_a_zero_drag_run(self):
+        # ((1 + 0.07/12 - 0.0216/12) / (1 + 0.07/12)) ** 360
+        #   = 0.5247574800635896  ->  a 47.52% terminal shortfall.
+        # The engine applies the drag MONTHLY, so the monthly form
+        # governs; the annual form (0.542372) is what real box 3 does at
+        # the 1 January peildatum, and the 3.36% gap is disclosed as S10.
+        with_drag = run_flat(self._all_cash_config(6.0, 36.0))["rent_portfolio"][360]
+        without = run_flat(self._all_cash_config(0.0, 0.0))["rent_portfolio"][360]
+        assert abs(with_drag / without - 0.5247574800635896) < 1e-9
+
+    def test_min_binds_on_the_actual_return_when_it_is_lower(self):
+        # 4% actual < 6% deemed -> drag is 4% x 36% = 1.44%/yr, NOT 2.16%.
+        # This is the whole reason P5 is two fields: a pre-multiplied
+        # 2.16 has already discarded the operand the min needs.
+        series = run_flat(self._all_cash_config(6.0, 36.0, growth=4.0))
+        initial_outlay = series["rent_portfolio"][0]
+        monthly = 0.04 / 12 - 0.0144 / 12
+        assert math.isclose(
+            series["rent_portfolio"][360] / initial_outlay,
+            (1 + monthly) ** 360,
+            rel_tol=1e-12,
+        )
+
+    def test_negative_return_year_is_floored_at_zero_drag(self):
+        # art. 5.25 lid 2: the assessed return floors at nil. A negative
+        # drag would silently CREDIT the portfolio.
+        drag = run_flat(self._all_cash_config(6.0, 36.0, growth=-10.0))
+        none = run_flat(self._all_cash_config(0.0, 0.0, growth=-10.0))
+        assert np.array_equal(drag["rent_portfolio"], none["rent_portfolio"])
+
+    def test_both_defaults_zero_is_bit_identical_including_negative_growth(self):
+        # min(0, R) <= 0 is clipped to 0 for every R, including negative
+        # draws, so eq_growth must be elementwise identical to the
+        # pre-change formula. Exercised at negative growth so the lid-2
+        # floor is tested rather than assumed.
+        #
+        # MUST use the all-cash fixture. A default-down-payment config has
+        # a mortgage payment of 539.60 against 500 rent, so contrib_rent
+        # is positive and rent_portfolio is NOT pure V0 compounding --
+        # the comparison below then deviates by ~0.09 and can never pass.
+        for growth in (7.0, -10.0):
+            series = run_flat(self._all_cash_config(0.0, 0.0, growth))
+            eq_rate = np.full(360, (growth / 100) / 12)
+            expected = np.concatenate([[1.0], np.cumprod(1 + eq_rate)])
+            initial_outlay = series["rent_portfolio"][0]
+            assert np.array_equal(series["rent_portfolio"], initial_outlay * expected)
+
+    def test_drag_applies_symmetrically_to_the_buyer_portfolio(self):
+        # Rent must EXCEED the buy cost for the buyer to accumulate a
+        # portfolio at all. The default fixture's mortgage payment is
+        # 539.60, so a 500 rent puts the surplus on the renter's side and
+        # buy_portfolio stays identically zero, making this assertion
+        # 0.0 < 0.0. A 2,000 rent is what makes the buy side the cheap one.
+        kwargs = dict(horizon_years=20, equity_growth_annual=7.0, monthly_rent=2000)
+        drag = run_flat(
+            taxfree_config(
+                portfolio_deemed_return_pct=6.0,
+                portfolio_drag_rate_pct=36.0,
+                **kwargs,
+            )
+        )
+        none = run_flat(taxfree_config(**kwargs))
+        assert drag["buy_portfolio"][-1] < none["buy_portfolio"][-1]
+
+    def test_basis_arrays_are_unaffected(self):
+        # Bases are contribution sums, not returns. A user who also sets a
+        # portfolio CG rate is then taxed on a smaller gain, which is right.
+        # Same 2,000 rent as above, so _basis_buy is non-zero and the
+        # buy-side assertion is not vacuously true.
+        kwargs = dict(horizon_years=20, equity_growth_annual=7.0, monthly_rent=2000)
+        drag = run_flat(
+            taxfree_config(
+                portfolio_deemed_return_pct=6.0,
+                portfolio_drag_rate_pct=36.0,
+                **kwargs,
+            )
+        )
+        none = run_flat(taxfree_config(**kwargs))
+        assert np.allclose(drag["_basis_buy"], none["_basis_buy"], rtol=1e-12)
+        assert np.allclose(drag["_basis_rent"], none["_basis_rent"], rtol=1e-12)
