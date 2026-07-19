@@ -123,3 +123,40 @@ class TestMultiRegionPrimitiveValidation:
         )
         assert config.portfolio_deemed_return_pct == 6.0
         assert config.portfolio_drag_rate_pct == 36.0
+
+
+class TestSiblingCostFieldValidation:
+    """These five fields shipped with no validation at all (spec 6.3)."""
+
+    def test_negative_closing_cost_buyer_pct_rejected(self):
+        with pytest.raises(ValueError, match="closing_cost_buyer_pct"):
+            make_config(closing_cost_buyer_pct=-1.0)
+
+    def test_negative_closing_cost_seller_pct_rejected(self):
+        with pytest.raises(ValueError, match="closing_cost_seller_pct"):
+            make_config(closing_cost_seller_pct=-1.0)
+
+    def test_negative_property_tax_rate_rejected(self):
+        # A negative rate produced a housing subsidy, silently.
+        with pytest.raises(ValueError, match="property_tax_rate"):
+            make_config(property_tax_rate=-0.5)
+
+    def test_negative_annual_home_insurance_rejected(self):
+        with pytest.raises(ValueError, match="annual_home_insurance"):
+            make_config(annual_home_insurance=-1.0)
+
+    def test_negative_annual_maintenance_pct_rejected(self):
+        with pytest.raises(ValueError, match="annual_maintenance_pct"):
+            make_config(annual_maintenance_pct=-1.0)
+
+    def test_upper_bounds_reject_absurd_values(self):
+        with pytest.raises(ValueError, match="closing_cost_buyer_pct"):
+            make_config(closing_cost_buyer_pct=101.0)
+        with pytest.raises(ValueError, match="property_tax_rate"):
+            make_config(property_tax_rate=101.0)
+        with pytest.raises(ValueError, match="annual_home_insurance"):
+            make_config(annual_home_insurance=100_001.0)
+
+    def test_shipped_region_values_remain_constructible(self):
+        # Germany ships 12.07% buyer costs; the bound must not exclude it.
+        assert make_config(closing_cost_buyer_pct=12.07) is not None

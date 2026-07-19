@@ -270,6 +270,31 @@ class SimulationConfig:
                 "For 2.5% annual inflation, use 0.025. For no inflation, use 0."
             )
 
+        # Percentage-of-price cost rates. These shipped unvalidated; a
+        # negative rate silently produced a subsidy.
+        for name in ("closing_cost_buyer_pct", "closing_cost_seller_pct"):
+            value = getattr(self, name)
+            if not (0 <= value <= 100):
+                raise ValueError(f"{name} must be between 0 and 100 (got {value}).")
+
+        if not (0 <= self.property_tax_rate <= 100):
+            raise ValueError(
+                "property_tax_rate must be between 0 and 100 "
+                f"(got {self.property_tax_rate})."
+            )
+
+        if not (0 <= self.annual_home_insurance <= 100_000):
+            raise ValueError(
+                "annual_home_insurance must be between 0 and 100000 "
+                f"(got {self.annual_home_insurance})."
+            )
+
+        if not (0 <= self.annual_maintenance_pct <= 100):
+            raise ValueError(
+                "annual_maintenance_pct must be between 0 and 100 "
+                f"(got {self.annual_maintenance_pct})."
+            )
+
         # Multi-region primitives. Upper bounds are generous sanity caps,
         # not statutory limits.
         if not (0 <= self.annual_property_levy <= 100_000):
