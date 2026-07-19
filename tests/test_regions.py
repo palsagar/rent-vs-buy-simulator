@@ -120,3 +120,69 @@ class TestUnitedStates:
         assert primitives["annualMaintenanceAmount"] == 0.0
         assert primitives["portfolioDeemedReturnPct"] == 0.0
         assert primitives["portfolioDragRatePct"] == 0.0
+
+
+class TestFrance:
+    @staticmethod
+    def _fr():
+        return next(r for r in list_regions() if r["id"] == "fr")
+
+    def test_non_primo_buyer_cost_matches_the_verified_band(self):
+        # DMTO 6.318 + CSI 0.10 + emoluments ~1.05 = 7.468%, plus ~1,300
+        # of price-invariant notaire debours.
+        #   0.07468 * 290,000 + 1,300 = 22,957 = 7.916% of price,
+        # inside the verified 7.90-8.00% band.
+        primitives = self._fr()["taxPrimitives"]
+        total = (
+            290_000 * primitives["closingCostBuyerPct"] / 100
+            + primitives["closingCostBuyerAmount"]
+        )
+        assert abs(total - 22_957.20) < 0.01
+        assert abs(total / 290_000 * 100 - 7.9163) < 1e-3
+
+    def test_primo_accedant_relief_is_051_pp(self):
+        # The primo-accedant carve-out from the departmental increase is
+        # worth 0.51pp -- NOT the 1.5pp claimed in earlier research.
+        #   0.06958 * 290,000 + 1,300 = 21,478 = 7.406%
+        region = self._fr()
+        base = region["taxPrimitives"]["closingCostBuyerPct"]
+        ftb = region["firstTimeBuyerOverrides"]["closingCostBuyerPct"]
+        assert abs(base - ftb - 0.51) < 1e-9
+        total = 290_000 * ftb / 100 + region["taxPrimitives"]["closingCostBuyerAmount"]
+        assert abs(total - 21_478.20) < 0.01
+
+    def test_sale_is_exempt_with_no_duration_condition(self):
+        # CGI art. 150 U II 1 -- the primary-residence exemption carries no
+        # holding-period condition.
+        assert self._fr()["taxPrimitives"]["saleCgRegime"] == "fully_exempt"
+
+    def test_portfolio_cg_rate_is_314_not_the_superseded_30(self):
+        # 12.8% PFU + 18.6% PS. The PS rise came via LFSS 2026,
+        # LOI 2025-1403 art. 12 (CSG 9.2 -> 10.6). ADR-0007's "30% PFU" is
+        # superseded; see its 2026-07 amendment.
+        assert self._fr()["taxPrimitives"]["portfolioCgRatePct"] == 31.4
+
+    def test_home_sale_cg_rate_excludes_the_2026_social_levy_rise(self):
+        # 19% IR + 17.2% PS. The rise does NOT apply to plus-values
+        # immobilieres, which stay at 17.2%.
+        assert self._fr()["taxPrimitives"]["saleCgRatePct"] == 36.2
+
+    def test_levy_is_flat_and_owner_borne(self):
+        # Taxe fonciere is assessed on valeur locative cadastrale (a
+        # notional 1970 rent), so the base does not track market prices.
+        # Taxe d'habitation on main residences was abolished in 2023, so
+        # the renter bears nothing.
+        primitives = self._fr()["taxPrimitives"]
+        assert primitives["propertyTaxRate"] == 0.0
+        assert primitives["annualPropertyLevy"] == 1220.0
+        assert primitives["levyPaidByOccupier"] is False
+
+    def test_rent_is_the_corrected_oll_figure(self):
+        # 812 EUR/mo from Observatoires Locaux des Loyers 2024 microdata
+        # (n = 9,362, zone-3 median 12.50 EUR/m2). The superseded 1,100 was
+        # above the encadrement majored ceiling in EVERY Lyon zone.
+        assert self._fr()["typical"]["monthlyRent"] == 812
+
+    def test_low_confidence_maintenance_carries_its_caveat(self):
+        notes = " ".join(self._fr()["notes"]).lower()
+        assert "maintenance" in notes
