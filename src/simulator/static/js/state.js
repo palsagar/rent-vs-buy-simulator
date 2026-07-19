@@ -62,13 +62,23 @@ export function applyPreset(partial) {
 
 // --- share URL codec: only non-default values are written ---
 
+// Bumped when a value's ENCODING changes meaning, so readUrl can tell a
+// link written before the change from one written after. v2 moved the
+// levyDeductionCap "uncapped" sentinel from 0 to negative, which made 0 a
+// real value (the levy is not deductible) that four region bundles ship.
+const URL_SCHEMA_VERSION = "2";
+
 function writeUrl() {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(config)) {
     if (value !== DEFAULT_CONFIG[key]) params.set(key, value);
   }
   const qs = params.toString();
-  history.replaceState(null, "", qs ? `?${qs}` : location.pathname);
+  history.replaceState(
+    null,
+    "",
+    qs ? `?${qs}&v=${URL_SCHEMA_VERSION}` : location.pathname,
+  );
 }
 
 // Per-field validation metadata derived from INPUT_DEFS (the single source
@@ -96,16 +106,17 @@ function isValidNumber(key, n) {
 
 export function readUrl() {
   const params = new URLSearchParams(location.search);
+  // A link with no version marker predates the sentinel move, so its
+  // levyDeductionCap=0 still means "uncapped". A v2 link means what it
+  // says: 0 is a real cap of zero, which FR/DE/NL/UK all ship. Without
+  // this gate the migration would rewrite every European region link and
+  // silently make that region's levy deductible.
+  const isLegacy = !params.has("v");
   const restored = {};
   for (const [key, def] of Object.entries(DEFAULT_CONFIG)) {
     if (!params.has(key)) continue;
     const raw = params.get(key);
-    // Legacy share URLs used 0 to mean "uncapped"; that sentinel moved to
-    // negative in this release. Values written before the change must keep
-    // their original meaning, or a shared "uncapped SALT" scenario silently
-    // reopens with the levy not deductible at all -- a verdict flip with no
-    // visible cause.
-    if (key === "levyDeductionCap" && Number(raw) === 0) {
+    if (isLegacy && key === "levyDeductionCap" && Number(raw) === 0) {
       restored[key] = -1; // uncapped, new encoding
       continue;
     }

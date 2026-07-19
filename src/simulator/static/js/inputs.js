@@ -124,6 +124,98 @@ function hintEl(text) {
   return hint;
 }
 
+// The first-time-buyer relief is a modifier OF the region, not an engine
+// field: which buyer-cost numbers apply is region-specific statute the
+// engine must never know (ADR-0007). It defaults ON because the relief
+// is the common case, and it is visible rather than buried in Advanced
+// because a default-on relief with no visible cause is a trap.
+let selectedRegion = null;
+let ftbOn = true;
+let ftbBtn = null;
+
+/** Whether this region enacts any first-time-buyer relief (US, DE: no). */
+function hasRelief(region) {
+  return Object.keys(region?.firstTimeBuyerOverrides ?? {}).length > 0;
+}
+
+/** True when every override key currently holds its FTB value. */
+function ftbMatchesConfig(region) {
+  const overrides = region?.firstTimeBuyerOverrides ?? {};
+  const keys = Object.keys(overrides);
+  if (keys.length === 0) return false;
+  const cfg = getConfig();
+  return keys.every((k) => cfg[k] === overrides[k]);
+}
+
+/** The bundle whose taxPrimitives match the current config, or null. */
+function deriveSelectedRegion(regions) {
+  const cfg = getConfig();
+  return (
+    regions.find(
+      (region) =>
+        region.available &&
+        Object.entries(region.taxPrimitives).every(([k, v]) => cfg[k] === v),
+    ) ??
+    // A config matching no bundle is legitimate -- a hand-edited or
+    // FTB-modified share URL. Fall back to matching on the keys the FTB
+    // overrides do NOT touch, so a UK+FTB link still resolves to UK.
+    regions.find(
+      (region) =>
+        region.available &&
+        Object.entries(region.taxPrimitives)
+          .filter(([k]) => !(k in region.firstTimeBuyerOverrides))
+          .every(([k, v]) => cfg[k] === v),
+    ) ??
+    null
+  );
+}
+
+/** Move ONLY the override keys. Never re-applies the whole bundle. */
+function applyFtb(region, on) {
+  const keys = Object.keys(region?.firstTimeBuyerOverrides ?? {});
+  if (keys.length === 0) return; // DE, US: inert by data
+  applyPreset(
+    Object.fromEntries(
+      keys.map((k) => [
+        k,
+        on ? region.firstTimeBuyerOverrides[k] : region.taxPrimitives[k],
+      ]),
+    ),
+  );
+  syncInputs();
+}
+
+function refreshFtbPill() {
+  if (!ftbBtn) return;
+  const inert = !hasRelief(selectedRegion);
+  ftbBtn.disabled = inert;
+  ftbBtn.classList.toggle("disabled", inert);
+  ftbBtn.classList.toggle("active", !inert && ftbOn);
+  ftbBtn.title = inert
+    ? "This region has no first-time-buyer relief"
+    : "Apply this region's first-time-buyer relief";
+}
+
+function selectRegionPill(regionPills, regions, region) {
+  for (const el of regionPills.querySelectorAll(".preset-btn")) {
+    el.classList.remove("active");
+  }
+  if (!region) return;
+  const index = regions.filter((r) => r.available).indexOf(region);
+  const buttons = regionPills.querySelectorAll(".preset-btn:not(.disabled)");
+  buttons[index]?.classList.add("active");
+}
+
+function applySelectedRegion() {
+  if (!selectedRegion) return;
+  applyPreset({
+    ...selectedRegion.typical,
+    ...selectedRegion.taxPrimitives,
+    ...(ftbOn ? selectedRegion.firstTimeBuyerOverrides : {}),
+  });
+  syncInputs();
+}
+
 function buildPresetPills(regions) {
   const regionPills = document.getElementById("region-pills");
   for (const region of regions) {
@@ -135,15 +227,36 @@ function buildPresetPills(regions) {
       btn.title = "Coming in a follow-up — values pending research";
     } else {
       btn.addEventListener("click", () => {
-        for (const el of regionPills.querySelectorAll(".preset-btn")) el.classList.remove("active");
-        btn.classList.add("active");
-        applyPreset({ ...region.typical, ...region.taxPrimitives });
-        syncInputs();
+        selectedRegion = region;
+        selectRegionPill(regionPills, regions, region);
+        applySelectedRegion();
+        refreshFtbPill();
       });
     }
     regionPills.appendChild(btn);
   }
-  regionPills.querySelector(".preset-btn:not(.disabled)")?.classList.add("active");
+
+  ftbBtn = document.createElement("button");
+  ftbBtn.className = "preset-btn";
+  ftbBtn.textContent = "First-time buyer";
+  ftbBtn.addEventListener("click", () => {
+    ftbOn = !ftbOn;
+    applyFtb(selectedRegion, ftbOn);
+    refreshFtbPill();
+  });
+  document.getElementById("ftb-pill").appendChild(ftbBtn);
+
+  // Derive rather than assume: readUrl() has already run, so the config
+  // may be any region's. Marking the first pill active regardless would
+  // make the first FTB click apply the US delta to a UK config.
+  selectedRegion = deriveSelectedRegion(regions);
+  // Only derive the flag from a region that actually enacts relief.
+  // ftbMatchesConfig is false for an empty override set, so deriving it
+  // from US or DE would latch the flag OFF and the next region WITH
+  // relief would then load without it -- FTB must default ON.
+  ftbOn = hasRelief(selectedRegion) ? ftbMatchesConfig(selectedRegion) : true;
+  selectRegionPill(regionPills, regions, selectedRegion);
+  refreshFtbPill();
 
   const outlookPills = document.getElementById("outlook-pills");
   for (const [name, preset] of Object.entries(OUTLOOK_PRESETS)) {
