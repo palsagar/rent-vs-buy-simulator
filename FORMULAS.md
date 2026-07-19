@@ -27,13 +27,21 @@ and the mortgage may be paid off before or still outstanding at the Horizon.
 
 ```
 down_payment   = property_price × (down_payment_pct / 100)
-buyer_closing  = property_price × (closing_cost_buyer_pct / 100)
+buyer_closing  = max(property_price × (closing_cost_buyer_pct / 100)
+                     + closing_cost_buyer_amount, 0)
 initial_outlay = down_payment + buyer_closing
 
 L = property_price - down_payment         # loan amount
 r = (mortgage_rate_annual / 100) / 12     # monthly rate
 n_term = mortgage_term_years × 12         # amortization term, in months
 ```
+
+`closing_cost_buyer_amount` may be **negative**: a transfer tax with a
+zero-rate band has a negative intercept. UK SDLT is exactly linear over
+£250k–£925k with `pct = 5.0` and `amount = −6,900`. The clamp is on the
+**aggregate**, not on the amount term — the UK pair turns negative below a
+price of 138,000 against a slider floor of 50,000, and without the clamp an
+instantaneous buy-and-sell would report a profit.
 
 ### Monthly payment (PMT)
 
@@ -94,12 +102,26 @@ month's home value — the value base a bill for month t would actually be
 computed against:
 
 ```
+cost_index(t)  = (1 + cost_inflation_rate / 12)^(t-1)              t ≥ 1
+
 levy(t)        = home_value(t-1) × (property_tax_rate / 100) / 12
-insurance(t)   = (annual_home_insurance / 12) × (1 + cost_inflation_rate / 12)^(t-1)
+                 + (annual_property_levy / 12) × cost_index(t)
+
+insurance(t)   = (annual_home_insurance / 12) × cost_index(t)
+
 maintenance(t) = home_value(t-1) × (annual_maintenance_pct / 100) / 12
+                 + (annual_maintenance_amount / 12) × cost_index(t)
 
 housing_cost_buy(t) = payment(t) + levy(t) + insurance(t) + maintenance(t)
 ```
+
+The **flat** components are cost-indexed rather than tied to the
+appreciating home value, because no shipped region's flat-levy base tracks
+market prices: France assesses the *valeur locative cadastrale*, Germany the
+*Grundsteuerwert*, and the UK uses 1991 valuation bands. Both levy
+components land in the same `levy(t)` term, so the reported property-tax
+total, the deduction base (§6) and the ownership-cost breakdown all stay
+consistent.
 
 **Deliberate modeling change:** maintenance tracks the home's appreciation
 only, through `home_value(t-1)`. It is *not* separately compounded by
@@ -120,8 +142,22 @@ Rent is set at the end of the prior month and paid during the current one;
 rent_level(0) = monthly_rent
 rent_level(t) = monthly_rent × ∏_{m=1}^{t} (1 + rent_growth_monthly[m])
 
-housing_cost_rent(t) = rent_level(t-1)   for t ≥ 1;  housing_cost_rent(0) = 0
+housing_cost_rent(0) = 0
+housing_cost_rent(t) = rent_level(t-1)                             for t ≥ 1
+                     + levy(t)      if levy_paid_by_occupier
 ```
+
+> **The Verdict is invariant to an occupier-borne levy**, in the sense that
+> charging `L` to both arms leaves it unchanged: `surplus = (b + L) − (r + L)
+> = b − r`, so contributions and both portfolios are unchanged; and
+> `max(b + L, r + L) = max(b, r) + L`, so `cash_committed` rises identically
+> on both arms and cancels in the difference. Only the displayed monthly
+> costs and the cumulative-outflow chart move. The equivalence holds while
+> the levy is not deductible; where it is, the buyer additionally accrues
+> the tax shield on it (§6).
+>
+> It is **not** invariant to toggling the flag at a fixed levy — that moves
+> the cost from one arm to two, which is a real change in who pays.
 
 Note the shift: the cost paid *during* month t uses `rent_level(t-1)`, the
 level fixed at the *end* of month t-1 — mirroring the buyer's cost base.
@@ -170,6 +206,48 @@ G(t) = ∏_{m=1}^{t} (1 + rate_m)                 # cumulative growth factor
 
 V(t) = G(t) × ( V0 + Σ_{m=1}^{t} c[m] / G(m) )
 ```
+
+### Annual portfolio drag (wealth tax)
+
+An annual wealth tax charged on portfolio *value* is exactly a reduction in
+the compounding rate:
+
+```
+V(t) = V(t-1)(1 + g) − V(t-1)·d = V(t-1)(1 + g − d)
+```
+
+The Netherlands (box 3, Wet IB 2001 art. 5.25) assesses the taxpayer on the
+**lesser** of a deemed return and the actual return, floored at nil, so `d`
+is evaluated per year against that year's own return:
+
+```
+R(y)       = Σ_{m in year y} eq_rate_monthly[m]        # arithmetic SUM
+taxable(y) = max( min(deemed_rate, R(y)), 0 )          # art. 5.25 lid 1 + lid 2
+d_m(y)     = taxable(y) × (portfolio_drag_rate_pct / 100) / 12
+
+G(0) = 1
+G(t) = ∏_{m=1}^{t} (1 + eq_rate_monthly[m] − d_m(year of m))
+```
+
+Four things this form depends on:
+
+- **`R(y)` is a sum, not a compound.** The engine feeds arithmetic
+  `annual / 100 / 12` monthly rates, so twelve of them sum back to the
+  annual figure exactly. Compounding them would return 7.229% for a 7%
+  input and silently shift the `min` against a 6% deemed return.
+- **Both operands of the `min` are proportional to wealth**, so the
+  comparison reduces to a comparison of *rates* and `G(t)` stays a pure
+  cumulative product — no month loop and no wealth-feedback term. This
+  holds only because the exemption allowance is not modelled.
+- **The `min` is evaluated per year against each path's own realised
+  return**, so the drag is path-dependent under Monte Carlo and must not be
+  pre-averaged. The tax is concave in the return, so by Jensen's inequality
+  a single pre-multiplied rate overstates the mean tax.
+- **The bases are contribution sums and are correctly unaffected** — a user
+  who also sets a portfolio CG rate is then taxed on a smaller gain.
+
+The drag applies symmetrically to both portfolios; any asymmetry between
+the two strategies emerges from their different sizes, not from a branch.
 
 Applied with `eq_rate_monthly` as the rate and `c = contrib_rent` /
 `contrib_buy`:
@@ -220,6 +298,19 @@ cum_tax_savings(t) = cum_by_year(t // 12)
 `cum_tax_savings(t)` is therefore a step function: it holds flat through
 the 12 months of a year and jumps once, at the year boundary, by that
 year's full savings.
+
+`yearly_levy(y)` sums the **whole** `levy(t)` term, so the deduction base
+includes both the ad-valorem component and the flat `annual_property_levy`.
+The cap has three distinct settings:
+
+| `levy_deduction_cap` | Meaning |
+|---|---|
+| `None` | Uncapped — the full levy is deductible |
+| `0` | The levy is **not deductible at all** (Netherlands) |
+| `> 0` | Deductible up to that amount (US SALT cap: 10,000) |
+
+On the client a **negative** value encodes "uncapped" and is sent as
+`null`; zero is a real, reachable value.
 
 ### Sale capital gains (buyer, at exit)
 
