@@ -226,10 +226,13 @@ REGIONS: list[dict[str, Any]] = [
             "modelled: under the tegenbewijs route the allowance is not "
             "available (Hoge Raad), which would make the comparison "
             "depend on your wealth and break the vectorised portfolio "
-            "update. Effective drags with the allowance are 0.99% at "
-            "€250k, 1.12% at €500k and 1.19% at €1M, against this "
-            "model's ~1.31% — a residual 0.12–0.32pp, biased toward "
-            "buying.",
+            "update. The headline verdict applies the full 2.16%/yr "
+            "(6% × 36%) whenever your equity growth is 6% or above. "
+            "With the allowance the effective drag would be 1.65% at "
+            "€250k, 1.90% at €500k and 2.03% at €1M — a residual of "
+            "0.13–0.51pp, biased toward buying. The Monte Carlo mean "
+            "drag is lower (~1.30%), because the min binds in the "
+            "years your return falls below 6%.",
             "The 6%/36% figures are enacted for 2026 ONLY. The 2027 "
             "deemed return is an identified funding lever, and the whole "
             "forfait-plus-tegenbewijs system is slated for replacement by "

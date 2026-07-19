@@ -177,6 +177,60 @@ class TestTornadoLevyDelta:
         i = names.index("Property Tax Rate")
         assert high[i] < low[i]
 
+    def test_flat_levy_region_gets_its_own_bar(self):
+        # FR/DE/UK carry the levy as a flat amount, so before this bar
+        # existed the tornado was blind to the largest ownership cost
+        # after the mortgage. FR is the case that matters: its levy is
+        # owner-borne, so it genuinely moves Buy - Rent.
+        names, low, high, _ = _compute_sensitivity(
+            make_config(property_tax_rate=0.0, annual_property_levy=1220.0)
+        )
+        assert "Property Levy (flat)" in names
+        i = names.index("Property Levy (flat)")
+        # A higher levy must lower Buy - Rent.
+        assert high[i] < low[i]
+
+    def test_a_region_never_gets_two_levy_bars(self):
+        # Both fields are skipped at a zero base, so each region shows
+        # whichever representation its bundle actually uses.
+        for tax_rate, flat in ((1.2, 0.0), (0.0, 1220.0)):
+            names, _, _, _ = _compute_sensitivity(
+                make_config(property_tax_rate=tax_rate, annual_property_levy=flat)
+            )
+            levy_bars = [
+                n for n in names if n in ("Property Tax Rate", "Property Levy (flat)")
+            ]
+            assert len(levy_bars) == 1, levy_bars
+
+    def test_occupier_borne_levy_drops_the_bar_only_while_it_cancels(self):
+        # An occupier-borne levy lands in both arms and cancels out of
+        # Buy - Rent, so UK/DE would otherwise show a zero-width bar.
+        # The drop is measured, not structural: switch the interest
+        # deduction on and the levy reaches the verdict through the
+        # deductible base, so the bar must come back.
+        cancels = make_config(
+            property_tax_rate=0.0,
+            annual_property_levy=2392.0,
+            levy_paid_by_occupier=True,
+            interest_deduction_enabled=False,
+            marginal_tax_rate_pct=0.0,
+        )
+        names, _, _, _ = _compute_sensitivity(cancels)
+        assert "Property Levy (flat)" not in names
+
+        deductible = make_config(
+            property_tax_rate=0.0,
+            annual_property_levy=2392.0,
+            levy_paid_by_occupier=True,
+            interest_deduction_enabled=True,
+            marginal_tax_rate_pct=40.0,
+            levy_deduction_cap=None,
+        )
+        names, low, high, _ = _compute_sensitivity(deductible)
+        assert "Property Levy (flat)" in names
+        i = names.index("Property Levy (flat)")
+        assert not math.isclose(low[i], high[i], rel_tol=1e-12)
+
     def test_nonzero_levy_is_perturbed_proportionally_not_absolutely(self):
         # NL's base is 0.2815. An absolute +-0.5 would swing it -178%..
         # +178%; the proportional delta is 0.2815 * (0.5/1.2) = 0.1173,
@@ -194,6 +248,10 @@ class TestTornadoLevyDelta:
         assert math.isclose(high[idx], hi, rel_tol=1e-12)
 
     def test_flat_levy_region_still_reports_the_other_seven(self):
+        # Guards that a levy skip never drops an UNRELATED bar. That held
+        # when a flat-levy region got no levy bar at all, and must still
+        # hold now that it gets one of its own. Kept as an exact set so
+        # the guarantee stays as strong as it was.
         names, _, _, _ = _compute_sensitivity(
             make_config(property_tax_rate=0.0, annual_property_levy=2392.0)
         )
@@ -205,6 +263,7 @@ class TestTornadoLevyDelta:
             "Down Payment %",
             "Monthly Rent",
             "Mortgage Rate",
+            "Property Levy (flat)",
         }
 
     def test_static_primitives_flow_through_monte_carlo_unchanged(self):

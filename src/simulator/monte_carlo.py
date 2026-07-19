@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .engine import _net_value_series
+from .engine import _is_close, _net_value_series
 from .models import (
     MonteCarloConfig,
     MonteCarloResults,
@@ -20,6 +20,11 @@ from .models import (
 # The proportional levy delta is checked against this same value, so the
 # guard and the clamp cannot drift apart.
 _LOW_PERTURBATION_FLOOR = 0.001
+
+# Relative swing applied to whichever field carries a region's property
+# levy. Calibrated so the US ad-valorem base of 1.2 keeps its historical
+# absolute delta of exactly 0.5.
+_LEVY_RELATIVE_DELTA = 0.5 / 1.2
 
 
 def _generate_annual_draws(
@@ -271,6 +276,9 @@ def _compute_sensitivity(  # noqa: C901
         ("Down Payment %", "down_payment_pct", 5.0),
         ("Monthly Rent", "monthly_rent", 500),
         ("Property Tax Rate", "property_tax_rate", 0.5),
+        # Both are skipped at a zero base, so a region gets whichever one
+        # its bundle actually uses and never two levy bars at once.
+        ("Property Levy (flat)", "annual_property_levy", 0.0),
         ("Mortgage Rate", "mortgage_rate_annual", 1.0),
     ]
 
@@ -281,21 +289,24 @@ def _compute_sensitivity(  # noqa: C901
     for display_name, field, delta in perturbations:
         base_val = getattr(base_config, field)
 
-        # The levy delta must scale with its own base. Regions whose levy
-        # is a flat amount ship property_tax_rate == 0 (UK council tax, DE
-        # Grundsteuer, FR taxe fonciere) and get no bar at all; NL's
-        # folded-EWF 0.2815 would otherwise take an absolute +-0.5pp, a
-        # +-178% swing implying WOZ regimes it does not have. The 0.5/1.2
-        # factor is calibrated so the US base of 1.2 keeps its current
-        # delta of exactly 0.5.
-        if field == "property_tax_rate":
-            delta = base_val * (0.5 / 1.2)
-            # Skip whenever the low side would hit the 0.001 floor below.
-            # That covers the flat-levy regions (base 0) and also the
-            # near-zero band: a floored low side represents a HIGHER rate
-            # than the base, and below base 0.000706 it exceeds the high
-            # side outright, rendering the bar inverted. Reachable from
-            # the UI -- fields.js ships step 0.0005 from a min of 0.
+        # A levy delta must scale with its own base, and BOTH levy
+        # representations take the same relative swing: they are one
+        # economic quantity in different units -- ad-valorem for US/NL, a
+        # flat cost-indexed amount for FR/DE/UK -- so a region's measured
+        # sensitivity must not depend on which unit its bundle happens to
+        # use. An absolute delta cannot do this: +-0.5pp on NL's
+        # folded-EWF 0.2815 is a +-178% swing implying WOZ regimes it
+        # does not have. _LEVY_RELATIVE_DELTA is calibrated so the US
+        # base of 1.2 keeps its historical delta of exactly 0.5.
+        if field in ("property_tax_rate", "annual_property_levy"):
+            delta = base_val * _LEVY_RELATIVE_DELTA
+            # Skip whenever the low side would hit the floor below. That
+            # covers a region carrying its levy in the OTHER field (base
+            # 0) and also the near-zero band: a floored low side
+            # represents a HIGHER value than the base, and below
+            # 0.000706 it exceeds the high side outright, rendering the
+            # bar inverted. Reachable from the UI -- fields.js ships
+            # propertyTaxRate with step 0.0005 from a min of 0.
             if base_val - delta < _LOW_PERTURBATION_FLOOR:
                 continue
 
@@ -323,6 +334,16 @@ def _compute_sensitivity(  # noqa: C901
         try:
             val_low = _run_with_override(**{field: low_override})
             val_high = _run_with_override(**{field: high_override})
+            # An occupier-borne levy lands in BOTH arms and cancels out
+            # of Buy - Rent, so perturbing it moves nothing (UK, DE). The
+            # levy is the only tornado parameter that can be structurally
+            # neutral by design, and a zero-width bar reads as a broken
+            # chart rather than as "this does not matter". Drop it, but
+            # only on measured equality: with the interest deduction on,
+            # an occupier-borne levy DOES reach the verdict through the
+            # deductible base, and then the bar is real and stays.
+            if field == "annual_property_levy" and _is_close(val_low, val_high):
+                continue
             param_names.append(display_name)
             low_vals.append(val_low)
             high_vals.append(val_high)
