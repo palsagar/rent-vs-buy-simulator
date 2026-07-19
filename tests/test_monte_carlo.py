@@ -5,6 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+import itertools
 import math
 
 import numpy as np
@@ -230,6 +231,38 @@ class TestTornadoLevyDelta:
         assert "Property Levy (flat)" in names
         i = names.index("Property Levy (flat)")
         assert not math.isclose(low[i], high[i], rel_tol=1e-12)
+
+    def test_levy_neutrality_holds_at_slider_extremes(self):
+        # Cancellation is algebraic, not bit-exact: (a + levy) - (b +
+        # levy) carries rounding proportional to the verdict, which
+        # reaches 1e11 at the slider ceilings. An absolute tolerance
+        # leaked a zero-width bar in 86 of these 324 configs.
+        leaked = []
+        for price, rent, horizon, levy, rate in itertools.product(
+            (500_000, 2_000_000, 50_000_000),
+            (500, 10_000, 1_000_000),
+            (10, 40, 100),
+            (50.0, 2392.0, 10_000.0, 100_000.0),
+            (0.5, 4.65, 15.0),
+        ):
+            cfg = make_config(
+                horizon_years=horizon,
+                property_price=price,
+                monthly_rent=rent,
+                mortgage_rate_annual=rate,
+                mortgage_term_years=25,
+                property_tax_rate=0.0,
+                annual_property_levy=levy,
+                levy_paid_by_occupier=True,
+                interest_deduction_enabled=False,
+                marginal_tax_rate_pct=0.0,
+            )
+            names, _, _, _ = _compute_sensitivity(cfg)
+            if "Property Levy (flat)" in names:
+                leaked.append((price, rent, horizon, levy, rate))
+        assert not leaked, (
+            f"{len(leaked)} configs leaked a zero-width bar: {leaked[:3]}"
+        )
 
     def test_nonzero_levy_is_perturbed_proportionally_not_absolutely(self):
         # NL's base is 0.2815. An absolute +-0.5 would swing it -178%..

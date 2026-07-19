@@ -8,6 +8,7 @@ fabricated a plausible but entirely fictitious statute article.
 
 import re
 import sys
+from fractions import Fraction
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -20,6 +21,39 @@ _FIELDS_JS = Path(__file__).parent.parent / "src/simulator/static/js/fields.js"
 # Every INPUT_DEFS entry that declares min/max. Update deliberately when
 # a slider is added or removed -- see the canary test below.
 _EXPECTED_BOUNDED_FIELDS = 25
+
+
+def _field_steps() -> dict[str, tuple[Fraction, Fraction]]:
+    """Parse ``(min, step)`` per key out of the fields.js INPUT_DEFS.
+
+    Exact rationals, not floats: the whole point is a divisibility test,
+    and ``0.1`` is not representable in binary so ``12.07 % 0.1`` is
+    nonzero for reasons that have nothing to do with the slider.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        grid = _field_steps()
+        minimum, step = grid["closingCostBuyerPct"]
+        assert (Fraction("12.07") - minimum) % step == 0
+
+    """
+    grid: dict[str, tuple[Fraction, Fraction]] = {}
+    pattern = re.compile(
+        r'key:\s*"(?P<key>\w+)".*?min:\s*(?P<min>-?[\d.]+)'
+        r".*?step:\s*(?P<step>[\d.]+)"
+    )
+    for line in _FIELDS_JS.read_text(encoding="utf-8").splitlines():
+        match = pattern.search(line)
+        if match:
+            scale_match = re.search(r"scale:\s*([\d.]+)", line)
+            scale = Fraction(scale_match.group(1)) if scale_match else Fraction(1)
+            grid[match.group("key")] = (
+                Fraction(match.group("min")) / scale,
+                Fraction(match.group("step")) / scale,
+            )
+    return grid
 
 
 def _field_bounds() -> dict[str, tuple[float, float]]:
@@ -149,6 +183,53 @@ class TestBundleContract:
             assert isinstance(region["firstTimeBuyerOverrides"], dict)
             assert isinstance(region["notes"], list)
             assert all(isinstance(note, str) for note in region["notes"])
+
+    def test_every_bundle_declares_an_ftb_price_ceiling(self):
+        # The relief defaults ON, so every bundle must state where it
+        # stops applying -- None meaning "no ceiling in the sourced
+        # material", never a missing key that reads as the same thing by
+        # accident.
+        for region in _available():
+            assert "firstTimeBuyerMaxPrice" in region, region["id"]
+            cap = region["firstTimeBuyerMaxPrice"]
+            assert cap is None or cap > 0, f"{region['id']}: {cap}"
+
+    def test_ftb_ceilings_match_the_statute(self):
+        # gov.uk: "If the price is over GBP500,000, you cannot claim the
+        # relief." The NL startersvrijstelling is capped at EUR555,000
+        # (also age 18-35, own occupancy -- disclosed in notes since the
+        # tool cannot know either).
+        by_id = {r["id"]: r for r in _available()}
+        assert by_id["uk"]["firstTimeBuyerMaxPrice"] == 500_000.0
+        assert by_id["nl"]["firstTimeBuyerMaxPrice"] == 555_000.0
+        # No relief enacted at all, so no ceiling to declare.
+        assert by_id["us"]["firstTimeBuyerMaxPrice"] is None
+        assert by_id["de"]["firstTimeBuyerMaxPrice"] is None
+
+    def test_a_ceiling_is_declared_wherever_notes_describe_a_cliff(self):
+        # The UK cliff was disclosed in notes but not enforced, and NL's
+        # was enforced nowhere and disclosed nowhere. Any region whose
+        # notes tell the user relief stops must also carry the ceiling
+        # that makes the UI act on it.
+        for region in _available():
+            joined = " ".join(region["notes"]).lower()
+            describes_cliff = "cannot claim the relief" in joined or (
+                "startersvrijstelling" in joined and "or less" in joined
+            )
+            if describes_cliff:
+                assert region["firstTimeBuyerMaxPrice"] is not None, (
+                    f"{region['id']}: notes describe a relief cliff but no "
+                    "firstTimeBuyerMaxPrice enforces it"
+                )
+
+    def test_nl_discloses_the_startersvrijstelling_conditions(self):
+        # Verdict-relevant and previously absent: the value cap and the
+        # age condition reached docs/multi-region-spec.md but never the
+        # user, while the relief defaulted ON.
+        nl = next(r for r in _available() if r["id"] == "nl")
+        notes = " ".join(nl["notes"])
+        assert "555,000" in notes or "555.000" in notes
+        assert "18" in notes and "35" in notes
 
     def test_maintenance_path_is_exclusive(self):
         # Each region takes the path its own evidence unit dictates
@@ -600,4 +681,31 @@ class TestBundleValuesAreReachableFromTheUi:
                     assert low <= value <= high, (
                         f"{region['id']}.{key} = {value} is outside the "
                         f"fields.js range [{low}, {high}]"
+                    )
+
+    def test_statutory_values_sit_on_their_slider_step_grid(self):
+        # A range input snaps its thumb to min + n*step while the readout
+        # prints the unsnapped number, so an off-grid value makes the
+        # widget disagree with the config and the first drag silently
+        # rewrites a sourced figure.
+        #
+        # Enforced for taxPrimitives and the FTB overrides only. Those
+        # are statute -- 12.07% vs 12.1% is a different tax. `typical`
+        # is deliberately exempt: those are market medians carrying far
+        # more uncertainty than the step (NL rent ships a +-11% band),
+        # round stepping is the right interaction for them, and the
+        # resulting thumb offset is a fraction of a pixel.
+        grid = _field_steps()
+        for region in _available():
+            for block in ("taxPrimitives", "firstTimeBuyerOverrides"):
+                for key, value in region[block].items():
+                    if key not in grid or isinstance(value, bool):
+                        continue
+                    minimum, step = grid[key]
+                    offset = Fraction(str(value)) - minimum
+                    assert offset % step == 0, (
+                        f"{region['id']}.{key} = {value} is off the "
+                        f"fields.js grid (min {float(minimum)}, step "
+                        f"{float(step)}); the thumb would snap to "
+                        f"{float(minimum + round(offset / step) * step)}"
                     )

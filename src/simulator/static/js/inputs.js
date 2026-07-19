@@ -3,8 +3,14 @@
 // stored value and the displayed one (decimal rates display ×100).
 
 import { INPUT_DEFS } from "./fields.js";
-import { setCurrency } from "./format.js";
-import { applyPreset, getConfig, setParam } from "./state.js";
+import { fmtMoney, setCurrency } from "./format.js";
+import {
+  applyPreset,
+  getConfig,
+  getRegionId,
+  setParam,
+  setRegionId,
+} from "./state.js";
 
 const OUTLOOK_PRESETS = {
   conservative: { propertyAppreciationAnnual: 2.0, equityGrowthAnnual: 5.0, rentInflationRate: 0.02 },
@@ -43,6 +49,10 @@ function buildSlider(def, container) {
     const displayed = Number(input.value);
     value.textContent = def.fmt(displayed);
     setParam(def.key, displayed / scale);
+    // Dragging the price across a relief ceiling must withdraw the
+    // relief, so the buyer-cost keys cannot stay latched at their FTB
+    // values while the price says they no longer apply.
+    if (def.key === "propertyPrice") syncFtbToPrice();
   });
   container.appendChild(row);
   widgets.push({ refresh });
@@ -139,6 +149,19 @@ function hasRelief(region) {
   return Object.keys(region?.firstTimeBuyerOverrides ?? {}).length > 0;
 }
 
+// Reliefs are withdrawn above a statutory price (UK GBP500,000 outright;
+// NL the EUR555,000 startersvrijstelling ceiling). Applying one above its
+// ceiling models a discount that does not exist, and because the tool
+// outputs a single signed number that is enough to invert it -- the UK
+// verdict flips across roughly GBP610k-GBP710k. Relief must therefore be
+// a function of price, not a latched flag.
+/** Whether relief exists for this region AT this price. */
+function reliefApplies(region) {
+  if (!hasRelief(region)) return false;
+  const cap = region.firstTimeBuyerMaxPrice;
+  return cap == null || getConfig().propertyPrice <= cap;
+}
+
 /** True when every override key currently holds its FTB value. */
 function ftbMatchesConfig(region) {
   const overrides = region?.firstTimeBuyerOverrides ?? {};
@@ -148,8 +171,16 @@ function ftbMatchesConfig(region) {
   return keys.every((k) => cfg[k] === overrides[k]);
 }
 
-/** The bundle whose taxPrimitives match the current config, or null. */
+/**
+ * The selected region: its stored id when the link carries one, else
+ * reverse-matched from the numbers for links written before `r` existed.
+ */
 function deriveSelectedRegion(regions) {
+  const stored = getRegionId();
+  if (stored) {
+    const named = regions.find((r) => r.available && r.id === stored);
+    if (named) return named;
+  }
   const cfg = getConfig();
   return (
     regions.find(
@@ -188,13 +219,36 @@ function applyFtb(region, on) {
 
 function refreshFtbPill() {
   if (!ftbBtn) return;
-  const inert = !hasRelief(selectedRegion);
-  ftbBtn.disabled = inert;
-  ftbBtn.classList.toggle("disabled", inert);
-  ftbBtn.classList.toggle("active", !inert && ftbOn);
-  ftbBtn.title = inert
-    ? "This region has no first-time-buyer relief"
-    : "Apply this region's first-time-buyer relief";
+  const enacted = hasRelief(selectedRegion);
+  const applies = reliefApplies(selectedRegion);
+  // Priced out reads as disabled, like a region with no relief at all:
+  // in both cases there is nothing the user could switch on.
+  ftbBtn.disabled = !applies;
+  ftbBtn.classList.toggle("disabled", !applies);
+  ftbBtn.classList.toggle("active", applies && ftbOn);
+  if (!enacted) {
+    ftbBtn.title = "This region has no first-time-buyer relief";
+  } else if (!applies) {
+    const cap = selectedRegion.firstTimeBuyerMaxPrice;
+    ftbBtn.title =
+      `Relief is withdrawn above ${fmtMoney(cap)} — ` +
+      "it does not apply at this price";
+  } else {
+    ftbBtn.title = "Apply this region's first-time-buyer relief";
+  }
+}
+
+// The price slider can cross a relief ceiling, so the override keys must
+// be re-derived whenever the price moves -- not just when the pill is
+// clicked. ftbOn is preserved as the user's INTENT; whether it takes
+// effect is decided here.
+function syncFtbToPrice() {
+  if (!selectedRegion || !hasRelief(selectedRegion)) return;
+  const shouldApply = ftbOn && reliefApplies(selectedRegion);
+  if (shouldApply !== ftbMatchesConfig(selectedRegion)) {
+    applyFtb(selectedRegion, shouldApply);
+  }
+  refreshFtbPill();
 }
 
 function selectRegionPill(regionPills, regions, region) {
@@ -238,7 +292,14 @@ function applySelectedRegion() {
   applyPreset({
     ...selectedRegion.typical,
     ...selectedRegion.taxPrimitives,
-    ...(ftbOn ? selectedRegion.firstTimeBuyerOverrides : {}),
+    // The bundle's own typical price applies here, so eligibility is
+    // judged against it rather than against the outgoing region's.
+    ...(ftbOn &&
+    (selectedRegion.firstTimeBuyerMaxPrice == null ||
+      selectedRegion.typical.propertyPrice <=
+        selectedRegion.firstTimeBuyerMaxPrice)
+      ? selectedRegion.firstTimeBuyerOverrides
+      : {}),
   });
   syncInputs();
   renderRegionNotes(selectedRegion);
@@ -256,6 +317,7 @@ function buildPresetPills(regions) {
     } else {
       btn.addEventListener("click", () => {
         selectedRegion = region;
+        setRegionId(region.id);
         selectRegionPill(regionPills, regions, region);
         applySelectedRegion();
         refreshFtbPill();
@@ -278,6 +340,9 @@ function buildPresetPills(regions) {
   // may be any region's. Marking the first pill active regardless would
   // make the first FTB click apply the US delta to a UK config.
   selectedRegion = deriveSelectedRegion(regions);
+  // Persist whatever was derived, so a legacy link upgrades to a stored
+  // id on first load and stops depending on the numbers matching.
+  if (selectedRegion) setRegionId(selectedRegion.id);
   // Only derive the flag from a region that actually enacts relief.
   // ftbMatchesConfig is false for an empty override set, so deriving it
   // from US or DE would latch the flag OFF and the next region WITH
@@ -285,6 +350,10 @@ function buildPresetPills(regions) {
   ftbOn = hasRelief(selectedRegion) ? ftbMatchesConfig(selectedRegion) : true;
   if (selectedRegion) setCurrency(selectedRegion.currencySymbol);
   selectRegionPill(regionPills, regions, selectedRegion);
+  // A link shared before relief was priced can carry the FTB buyer costs
+  // above the ceiling. Correct the config rather than only the pill,
+  // otherwise the stale link keeps its inverted verdict.
+  syncFtbToPrice();
   refreshFtbPill();
   renderRegionNotes(selectedRegion);
 

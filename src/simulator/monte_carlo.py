@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .engine import _is_close, _net_value_series
+from .engine import _net_value_series
 from .models import (
     MonteCarloConfig,
     MonteCarloResults,
@@ -25,6 +25,43 @@ _LOW_PERTURBATION_FLOOR = 0.001
 # levy. Calibrated so the US ad-valorem base of 1.2 keeps its historical
 # absolute delta of exactly 0.5.
 _LEVY_RELATIVE_DELTA = 0.5 / 1.2
+
+# Fraction of the verdict below which a tornado swing is float noise
+# rather than signal. Well above IEEE-754 double precision (~1e-16
+# relative) and far below any swing a user could read off the chart.
+_NEGLIGIBLE_SWING_RATIO = 1e-6
+
+
+def _is_negligible_against(swing: float, reference: float) -> bool:
+    """Whether ``swing`` is rounding noise at the scale of ``reference``.
+
+    Absolute tolerances cannot serve here: the verdict spans roughly
+    1e3 to 1e11 across the slider ranges, so a fixed epsilon is either
+    too tight at the top or meaningless at the bottom.
+
+    Parameters
+    ----------
+    swing : float
+        Difference between the high and low perturbation outcomes.
+    reference : float
+        Unperturbed verdict the swing is judged against.
+
+    Returns
+    -------
+    bool
+        True when ``swing`` is negligible at that scale.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from simulator.monte_carlo import _is_negligible_against
+
+        _is_negligible_against(6.1e-05, 2.6e11)   # True
+        _is_negligible_against(9048.0, 134799.0)  # False
+
+    """
+    return abs(swing) <= _NEGLIGIBLE_SWING_RATIO * max(1.0, abs(reference))
 
 
 def _generate_annual_draws(
@@ -342,7 +379,15 @@ def _compute_sensitivity(  # noqa: C901
             # only on measured equality: with the interest deduction on,
             # an occupier-borne levy DOES reach the verdict through the
             # deductible base, and then the bar is real and stays.
-            if field == "annual_property_levy" and _is_close(val_low, val_high):
+            #
+            # The comparison must be RELATIVE. Cancellation is algebraic,
+            # not bit-exact -- (a + levy) - (b + levy) carries rounding
+            # that scales with the verdict, which reaches 1e11 at the
+            # slider ceilings. An absolute 1e-9 leaked a zero-width bar
+            # in 86 of 324 swept configs, residual up to 6.1e-05.
+            if field == "annual_property_levy" and _is_negligible_against(
+                val_high - val_low, base_value
+            ):
                 continue
             param_names.append(display_name)
             low_vals.append(val_low)

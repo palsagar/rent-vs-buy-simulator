@@ -68,11 +68,33 @@ export function applyPreset(partial) {
 // real value (the levy is not deductible) that four region bundles ship.
 const URL_SCHEMA_VERSION = "2";
 
+// Which region the user picked is state in its own right, NOT something
+// recoverable from the numbers. Reverse-matching a config against every
+// bundle's taxPrimitives fails the moment any one of them is edited --
+// and the Advanced drawer exists to be edited, with the bundle notes
+// actively telling users to do it. When the match failed, the currency
+// silently fell back to "$" and every modelling note vanished, so a
+// GBP simulation rendered in dollars with none of its caveats.
+//
+// Kept OUT of `config`: the config object is posted to the API verbatim
+// and api.py rejects unknown fields.
+let regionId = null;
+
+export function getRegionId() {
+  return regionId;
+}
+
+export function setRegionId(id) {
+  regionId = id;
+  writeUrl();
+}
+
 function writeUrl() {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(config)) {
     if (value !== DEFAULT_CONFIG[key]) params.set(key, value);
   }
+  if (regionId) params.set("r", regionId);
   const qs = params.toString();
   history.replaceState(
     null,
@@ -112,6 +134,9 @@ export function readUrl() {
   // this gate the migration would rewrite every European region link and
   // silently make that region's levy deductible.
   const isLegacy = !params.has("v");
+  // Validated against the real bundle list by the caller, which owns
+  // the region data; an unknown id simply derives as before.
+  regionId = params.get("r");
   const restored = {};
   for (const [key, def] of Object.entries(DEFAULT_CONFIG)) {
     if (!params.has(key)) continue;

@@ -52,6 +52,7 @@ REGIONS: list[dict[str, Any]] = [
             "portfolioDragRatePct": 0.0,
         },
         "firstTimeBuyerOverrides": {},
+        "firstTimeBuyerMaxPrice": None,
         "notes": [
             "Portfolios are modelled as plain taxable brokerage accounts. "
             "401(k)/IRA sheltering is not modelled, which understates the "
@@ -98,6 +99,9 @@ REGIONS: list[dict[str, Any]] = [
         # H — the primo-accédant carve-out from the departmental increase
         # is worth 0.51pp, not the 1.5pp in earlier research.
         "firstTimeBuyerOverrides": {"closingCostBuyerPct": 6.958},
+        # The primo-accedant carve-out carries no price ceiling in the
+        # sourced material, so none is modelled.
+        "firstTimeBuyerMaxPrice": None,
         "notes": [
             "Maintenance (€1,300/yr) is an owner-only estimate. A large "
             "share of French copropriété charges are récupérables from the "
@@ -155,6 +159,7 @@ REGIONS: list[dict[str, Any]] = [
             "portfolioDragRatePct": 0.0,
         },
         "firstTimeBuyerOverrides": {},  # H — no FTB relief enacted
+        "firstTimeBuyerMaxPrice": None,
         "notes": [
             "The Grundsteuer figure (€339/yr) is the weakest value in the "
             "set. The post-2025 reform runs eight state models and the "
@@ -218,7 +223,16 @@ REGIONS: list[dict[str, Any]] = [
         },
         # H — startersvrijstelling: 0% vs 2% overdrachtsbelasting.
         "firstTimeBuyerOverrides": {"closingCostBuyerPct": 1.2},
+        # H — the exemption is capped by property value; above it the
+        # full 2% is due, so the relief must not apply there.
+        "firstTimeBuyerMaxPrice": 555_000.0,
         "notes": [
+            "The startersvrijstelling (0% instead of 2% "
+            "overdrachtsbelasting) applies only to a home worth "
+            "€555,000 or less, bought by someone aged 18–35 who will "
+            "live in it. The first-time-buyer pill switches itself off "
+            "above that price, but it cannot know your age — if you are "
+            "36 or over, switch it off yourself.",
             "Box 3 is charged on the LESSER of a 6% deemed return and "
             "your actual return, floored at nil — so a bad year is taxed "
             "less, and a loss is not taxed at all.",
@@ -292,6 +306,10 @@ REGIONS: list[dict[str, Any]] = [
             "closingCostBuyerPct": 0.0,
             "closingCostBuyerAmount": 3100.0,
         },
+        # H — gov.uk: "If the price is over £500,000, you cannot claim
+        # the relief." Above this the relief does not exist, so applying
+        # it inverts the verdict across roughly £610k-£710k.
+        "firstTimeBuyerMaxPrice": 500_000.0,
         "notes": [
             "First-time-buyer relief is withdrawn entirely above £500,000 "
             '— gov.uk: "If the price is over £500,000, you cannot claim '
