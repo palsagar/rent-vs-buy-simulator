@@ -206,6 +206,29 @@ function selectRegionPill(regionPills, regions, region) {
   buttons[index]?.classList.add("active");
 }
 
+// Every region's known simplifications are disclosed here rather than in
+// a doc nobody opens. Notes are authored in regions.py, so they travel
+// with the values they qualify.
+function renderRegionNotes(region) {
+  const host = document.getElementById("region-notes");
+  if (!host) return;
+  // replaceChildren, not innerHTML: notes are authored data, but the
+  // habit matters. Note text below goes in via textContent for the
+  // same reason.
+  host.replaceChildren();
+  if (!region?.notes?.length) return;
+  const heading = document.createElement("strong");
+  heading.textContent = `${region.label} — modelling notes:`;
+  const list = document.createElement("ul");
+  for (const note of region.notes) {
+    const item = document.createElement("li");
+    item.textContent = note;
+    list.appendChild(item);
+  }
+  host.appendChild(heading);
+  host.appendChild(list);
+}
+
 function applySelectedRegion() {
   if (!selectedRegion) return;
   applyPreset({
@@ -214,6 +237,7 @@ function applySelectedRegion() {
     ...(ftbOn ? selectedRegion.firstTimeBuyerOverrides : {}),
   });
   syncInputs();
+  renderRegionNotes(selectedRegion);
 }
 
 function buildPresetPills(regions) {
@@ -257,6 +281,7 @@ function buildPresetPills(regions) {
   ftbOn = hasRelief(selectedRegion) ? ftbMatchesConfig(selectedRegion) : true;
   selectRegionPill(regionPills, regions, selectedRegion);
   refreshFtbPill();
+  renderRegionNotes(selectedRegion);
 
   const outlookPills = document.getElementById("outlook-pills");
   for (const [name, preset] of Object.entries(OUTLOOK_PRESETS)) {
