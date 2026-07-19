@@ -9,7 +9,7 @@ The single headline answer the app produces for a given set of inputs: which str
 _Avoid_: Winner, difference, result
 
 **Net Value**:
-The wealth you would walk away with if you exited a strategy at year t, minus all cash you put in through t. Exit is priced fully and symmetrically: for Buy, home value − mortgage balance − seller closing costs − capital-gains tax beyond the Section 121 exclusion + accrued tax savings; for Rent, portfolio value − capital-gains tax on gains − cumulative rent. One formula, applied at every t, used by the verdict, the charts, the breakeven, and Monte Carlo alike.
+The wealth you would walk away with if you exited a strategy at year t, minus all cash you put in through t. Exit is priced fully and symmetrically: for Buy, home value − mortgage balance − seller closing costs − capital-gains tax on the home gain under the region's sale-CG regime (exempt amount, exempt after N years, or fully exempt) + accrued tax savings; for Rent, portfolio value − capital-gains tax on gains − cumulative rent. One formula, applied at every t, used by the verdict, the charts, the breakeven, and Monte Carlo alike.
 _Avoid_: Net worth, equity, asset value minus outflows
 
 **Breakeven**:
@@ -24,7 +24,7 @@ Purchase the home with a mortgage. Monthly cost is mortgage + property tax + ins
 _Avoid_: Scenario A
 
 **Rent strategy**:
-Rent the home and invest the capital not spent on buying: the down payment and buyer closing costs at t=0 (in equities), plus the monthly surplus whenever renting is the cheaper side. There is exactly one Rent strategy.
+Rent the home and invest the capital not spent on buying: the down payment and buyer closing costs at t=0 (in equities), plus the monthly surplus whenever renting is the cheaper side. Where the levy is occupier-borne (UK council tax, DE umlagefähige Grundsteuer), the renter pays it too. There is exactly one Rent strategy.
 _Avoid_: Scenario B, Scenario C, Rent + Invest Savings
 
 **Confidence**:

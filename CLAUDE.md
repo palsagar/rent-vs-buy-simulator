@@ -40,7 +40,8 @@ uv venv --seed && uv pip install -e .
 - **`src/simulator/regions.py`** — Region preset bundles as data.
 - **`src/simulator/static/`** — Hand-rolled frontend: `index.html`, `css/style.css`, `js/` ES modules, Plotly.js via CDN.
 - **`src/simulator/models.py`** — `SimulationConfig` and `SimulationResults` dataclasses. Validation in `__post_init__`.
-- **`src/simulator/engine.py`** — Pure calculation engine. `calculate_scenarios(config)` returns `SimulationResults`. All time-series math uses NumPy vectorized arrays (no Python loops). Uses `numpy_financial.pmt()`/`pv()` for mortgage amortization.
+- **`src/simulator/engine.py`** — Pure calculation engine. `calculate_scenarios(config)` returns `SimulationResults`. All time-series math uses NumPy vectorized arrays (no Python loops). Uses `numpy_financial.pmt()` for mortgage amortization.
+- **`src/simulator/monte_carlo.py`** — Stochastic paths over the same `_net_value_series` core, plus the tornado sensitivity (one-at-a-time on the *deterministic* engine, not the MC paths).
 
 ## Git Workflow
 

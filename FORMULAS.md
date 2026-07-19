@@ -422,6 +422,27 @@ rate_monthly[m] = annual_draw(y) / 100 / 12    for every month m in year y
 
 `net_buy`/`net_rent` for that simulation path are exactly the Section 7
 series computed with these month-varying rates in place of the
-deterministic engine's constant ones. Percentiles, the buy-win share, and
-the tornado-chart sensitivity all derive from these same per-path Net Value
-series — never a separately defined metric.
+deterministic engine's constant ones. Percentiles and the buy-win share
+derive from these same per-path Net Value series — never a separately
+defined metric.
+
+The tornado chart does not. It is one-at-a-time sensitivity on the
+*deterministic* engine: for each candidate parameter it re-runs
+`calculate_scenarios` at ±1 standard deviation and reads
+`final_difference`. The MC paths are not involved.
+
+Two details are region-specific. Both levy fields — ad-valorem
+`property_tax_rate` and flat `annual_property_levy` — take a **relative**
+swing of `0.5 / 1.2` (≈ ±41.7%) rather than an absolute one, so a
+region's measured sensitivity does not depend on which unit its bundle
+expresses the levy in. An absolute ±0.5pp on the Netherlands' folded-EWF
+0.2815 would be a ±178% swing implying a regime it does not have; the
+relative factor is calibrated so the US base of 1.2 keeps its historical
+delta of exactly 0.5.
+
+A levy bar is dropped when it would carry no information: at a zero base
+(the region carries its levy in the other field), when the low side would
+clamp against the positive-only floor and so misrepresent its own
+direction, and — for the flat levy — when the swing is negligible against
+the Verdict, which happens exactly when the levy is occupier-borne and
+therefore cancels between the two arms.

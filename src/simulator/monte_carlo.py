@@ -243,9 +243,16 @@ def _compute_sensitivity(  # noqa: C901
     """Compute one-at-a-time sensitivity for tornado chart.
 
     Uses the EXISTING deterministic ``calculate_scenarios`` engine
-    (not the MC path simulator). Perturbs 8 key parameters by +/- 1
-    standard deviation and measures the effect on the Verdict
+    (not the MC path simulator). Perturbs 9 candidate parameters by
+    +/- 1 standard deviation and measures the effect on the Verdict
     (``final_difference``, i.e. net_buy - net_rent).
+
+    Fewer than 9 bars are returned in general. The two levy fields --
+    ad-valorem ``property_tax_rate`` and flat ``annual_property_levy``
+    -- take a RELATIVE swing rather than an absolute one, and each is
+    skipped at a zero base, so a region gets whichever levy unit its
+    bundle uses and never both. A flat levy that is occupier-borne
+    cancels out of the Verdict entirely and is skipped too.
 
     Parameters
     ----------

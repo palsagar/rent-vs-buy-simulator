@@ -313,10 +313,9 @@ REGIONS: list[dict[str, Any]] = [
         "notes": [
             "First-time-buyer relief is withdrawn entirely above £500,000 "
             '— gov.uk: "If the price is over £500,000, you cannot claim '
-            'the relief." At £501,000 the true total is £18,150 against '
-            "this model's £3,100 — £15,050 understated. This is the "
-            "sharpest known bias in the tool; switch the first-time-buyer "
-            "pill off above £500k.",
+            'the relief." The first-time-buyer pill switches itself off '
+            "above that price and full SDLT applies, so the verdict is "
+            "not overstated there.",
             "First-time-buyer SDLT is also under-charged between £300,000 "
             "and £500,000, where relief is 5% rather than 0%: £5,000 low "
             "at £400k, £7,500 at £450k, £10,000 at £500k.",

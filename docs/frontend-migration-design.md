@@ -2,6 +2,8 @@
 
 Date: 2026-07-17 · Status: **Implemented** (2026-07-18) — this design ships in the current app · Supersedes: ADR-0006 (superseded by ADR-0008)
 
+> **Two parts of this document no longer describe the shipped app.** The port change to 8000 was reverted before ship — the app serves on **8501** via CLI, Docker and compose alike (ADR-0008). And the region scope here ("US only", "FR/DE/NL/UK declared with `available: false`") was superseded by the multi-region work: all five bundles now ship available, in their own currencies. See [`multi-region-spec.md`](./multi-region-spec.md).
+
 ## Context
 
 The app currently ships on Streamlit ([ADR-0006](adr/0006-stay-on-streamlit-for-redesign.md)), which recorded a client-side rewrite as the future path. That path is now being taken. The engine completed the Phase 1 "Engine Truth" redesign (one liquidation-based Net Value shared by engine and Monte Carlo, ADR-0001..0005); the Streamlit UI around it is still the pre-redesign surface. This migration replaces the entire frontend with the stack and aesthetic of the author's other two apps (`webgpu-fluid-solver`, `webgpu-gray-scott`): FastAPI serving a `static/` directory of hand-rolled HTML/CSS/JS in a GitHub-dark visual system. Product surface follows the approved [redesign spec](redesign-spec.md) §2–3 (single scrolling narrative), with its §4 light theme superseded by the dark system below. Terminology per [CONTEXT.md](../CONTEXT.md).

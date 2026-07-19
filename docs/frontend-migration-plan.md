@@ -1,6 +1,8 @@
 # Frontend Migration Implementation Plan
 
 > **Status (2026-07-18): Completed.** This plan has been fully executed — the app now ships the FastAPI + static-JavaScript frontend. Retained as an implementation record; the code (not this checklist) is the source of truth.
+>
+> Two specifics in this plan were overtaken and are **not** what shipped: the port is **8501**, not the 8000 this plan specifies throughout; and FR/DE/NL/UK no longer ship with `available: false` — all five regions are live (see [`multi-region-spec.md`](./multi-region-spec.md)).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

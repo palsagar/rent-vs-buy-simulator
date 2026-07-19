@@ -1,6 +1,8 @@
 # Multi-Region Spec — France, Germany, Netherlands, United Kingdom
 
-Status: proposed. Supersedes nothing; amends [ADR-0007](adr/0007-multi-region-via-tax-primitives.md) (see §9).
+Status: **implemented** (2026-07). Retained as the design and research record; the code is the source of truth. Supersedes nothing; amends [ADR-0007](adr/0007-multi-region-via-tax-primitives.md) (see §9).
+
+> Line references in §2 and §5 point at the pre-implementation tree and are not maintained. Sections written in the imperative ("must be fixed", "Fix: widen…") are the design record of work that has since shipped, except where §8 marks a gap as shipping unfixed.
 Scope discipline: this document is written against the repo's `CLAUDE.md` mandate — *"Minimum code that solves the problem. Nothing speculative. No abstractions for single-use code."* Every primitive below is justified inline by a named, quantified defect in a named shipped region. §3 records what was rejected and why; that section is the enforcement mechanism, not an afterthought.
 
 ---
@@ -41,7 +43,7 @@ Everything else is data, a wire fix, or a documentation change:
 
 ### 1.3 What the constraint bought
 
-Research proposed ~20 candidate primitives. This spec ships **5**, by finding four consolidations:
+Research proposed ~20 candidate primitives. This spec ships **6**, by finding four consolidations:
 
 - **D1 + D2 collapse into one field.** The engine already has the exact mechanism needed — `annual_home_insurance` is an absolute amount indexed by `cost_inflation_rate` (`engine.py:184-186`). Giving the levy that same shape fixes *both* "no flat-amount path exists" and "levy is welded to appreciating home value."
 - **D5's two sub-defects collapse into one field.** The ~£3,100 of price-invariant UK fees demand a fixed-amount companion field. Once that field exists, UK SDLT is *exactly* linear in price over £250k–£925k — `SDLT(P) = 0.05P − 10,000` — so the existing `closing_cost_buyer_pct` plus the new amount reproduce SDLT with zero error over the dominant range. No band schedule, no list-shaped config, no new widget.
@@ -284,10 +286,11 @@ eq_growth = np.concatenate([[1.0], np.cumprod(1 + eq_rate_monthly - drag_monthly
 
 FTB relief changes only **which buyer-cost numbers apply**. That is region data. Adding a `first_time_buyer` field to `SimulationConfig` would create a config field the engine cannot consume — the relief depends on region-specific statute the engine must never know (ADR-0007).
 
-**Design.** Each bundle gains a sibling of `taxPrimitives`:
+**Design.** Each bundle gains two siblings of `taxPrimitives` — the overrides, and the statutory price above which the relief does not exist:
 
 ```python
 "firstTimeBuyerOverrides": {"closingCostBuyerPct": 0.0, "closingCostBuyerAmount": 3100.0},
+"firstTimeBuyerMaxPrice": 500_000.0,  # None where the sourced material states no ceiling
 ```
 
 The toggle applies or omits that dict when a region is applied (`inputs.js:140`). DE and US ship `{}` — the toggle is visible and inert, which is exactly what keeps it consistent across regions per locked decision 3.
@@ -325,12 +328,12 @@ Each was a plausible candidate. Each is rejected against the simplicity constrai
 | **`insurance_paid_by_occupier`** | No region needs it. UK buildings insurance is the landlord's; DE condo insurance is already €0. | — |
 | **`closing_cost_seller_amount`** | No named, quantified defect. All four seller costs (FR 6.0%, DE 4.0%, NL 1.4%, UK 1.75%) are genuinely percentage-shaped. | — |
 | **Portfolio tax wrapper primitive** (ISA/PEA/Sparer-Pauschbetrag) | Locked decision 4. PEA is EU-equity-only, so it assumes a portfolio the user is not buying; ISA and Sparer-Pauschbetrag caps bind inside the horizon, so a flat 0% is wrong past year ~3. | Plain taxable everywhere, including the US. Understatement documented in §8 and in every bundle's `notes`. |
-| **Heffingsvrij vermogen in P5** | Breaks the vectorised closed form; needs a month loop. | Documented 6–8% bias toward buying (§8). |
+| **Heffingsvrij vermogen in P5** | Breaks the vectorised closed form; needs a month loop. | Documented 0.13–0.51pp bias toward buying (§8, S2). |
 | **P5 applied to the German Vorabpauschale** | It is creditable at exit — a timing drag. P5 models a permanent tax; using it would overstate the German cost. | DE drag = 0. |
 | **FTB as a `SimulationConfig` field** | The engine cannot consume it without knowing region statute. A field the engine ignores is semantic pollution that survives `config_to_dict` round-trip tests. | Region-bundle overrides + UI pill (§2.6). |
-| **UK FTB £500k cliff in the engine** | Price-conditional per-country logic in `_net_value_series` — the thing ADR-0007 exists to prevent. | UK `notes`; quantified in §8. |
+| **UK FTB £500k cliff in the engine** | Price-conditional per-country logic in `_net_value_series` — the thing ADR-0007 exists to prevent. | `firstTimeBuyerMaxPrice` in the region bundle, enforced by the UI pill (§2.6). The engine stays price-unconditional. |
 | **`sale_cg_regime` deprecation** | Five files touched for zero user benefit. | Keep; §2.7. |
-| **German Bundesland sub-region selector** | Provenance does not support it (§8.4): of 16 GrESt rates only Bremen is primary-sourced. Also a second selector dimension on a UI capped at 8 visible inputs. | Single national default at NRW 6.5%, labelled. The 3pp spread (≈€12,000 on €400k) is recorded as a known gap. |
+| **German Bundesland sub-region selector** | Provenance does not support it (§8.4): of 16 GrESt rates only Bremen is primary-sourced. Also a second selector dimension on a UI capped at 8 visible inputs. | Single national default at NRW 6.5%, labelled. The 3pp spread (≈€10,170 on the shipped €339,000) is recorded as a known gap. |
 | **Mortgage reversion / refinancing model** | Needs an unfounded forward-rate assumption. | Per-region `notes` (§2.8). |
 | **Rent-regulation modelling** (encadrement, Mietpreisbremse) | Would need a per-region rent-growth cap; the outlook presets own rent inflation by design. | Known gap (§8). |
 
@@ -713,7 +716,7 @@ NL therefore keeps the **ad-valorem** levy path with `annualPropertyLevy = 0`. T
 
 *(An earlier revision of this spec claimed the product was `0.5000000000000001` and relaxed the gate to `rel_tol=1e-12` on that basis. The premise was false. A gate loosened for a reason that turns out to be false is a gate nobody ever tightens again, so the assertion is restored and made explicit below.)*
 
-**Rejected:** a generic "skip any zero-valued parameter" rule (blunter than the reason justifies); adding `annual_property_levy` as a ninth tornado bar (speculative — the flat levy is a minor driver, and the chart is already at 8); and leaving the delta absolute with a disclosure (the bar is auto-run and ranked by magnitude, so a wrong bar does not merely mislead, it can top the chart).
+**Rejected:** a generic "skip any zero-valued parameter" rule (blunter than the reason justifies); and leaving the delta absolute with a disclosure (the bar is auto-run and ranked by magnitude, so a wrong bar does not merely mislead, it can top the chart).
 
 ### 5.7 `FORMULAS.md` updates
 
@@ -868,7 +871,7 @@ Two new keys per bundle: `firstTimeBuyerOverrides: dict` and `notes: list[str]`.
 
 ### 6.7 Currency display — scheduled into Phase 2, not caveated away
 
-**`currencySymbol` is declared in all five bundles and consumed by nothing.** Verified: three occurrences in the tree, all inside `regions.py` itself. Ship the bundles as previously specified and every European preset renders in dollars — the UK's SDLT-exact £7,555.30 displays as **"$7,555"**, in a verdict hero whose entire job is to state one number credibly. ADR-0007's Consequences explicitly promise *"Currency is formatting only ($, €, £)"*; that promise is currently unimplemented, and shipping four European regions is the moment it becomes false rather than merely pending.
+**DELIVERED (commit `31fcb96`).** At the time of writing, **`currencySymbol` was declared in all five bundles and consumed by nothing.** Verified: three occurrences in the tree, all inside `regions.py` itself. Ship the bundles as previously specified and every European preset renders in dollars — the UK's SDLT-exact £7,555.30 displays as **"$7,555"**, in a verdict hero whose entire job is to state one number credibly. ADR-0007's Consequences explicitly promise *"Currency is formatting only ($, €, £)"*; that promise is currently unimplemented, and shipping four European regions is the moment it becomes false rather than merely pending.
 
 **This is scheduled into Phase 2, not deferred to §8.** A ship-with-caveat was considered and rejected: a caveat cannot repair a headline number, and "the currency is wrong" is not a modelling simplification with a bias direction — it is a defect. The work is bounded:
 
@@ -954,10 +957,10 @@ New engine code is ~20 lines, all on paths the fixtures above exercise; new `mod
 | # | Simplification | Region | Magnitude | Bias |
 |---|---|---|---|---|
 | S1 | Portfolios are plain taxable; no ISA / PEA / Sparer-Pauschbetrag / heffingsvrij vermogen (locked decision 4) | **All, incl. US** | UK ISA alone removes a 24% CGT on the renter's gains | **Toward buying, in every region** |
-| S2 | Heffingsvrij vermogen (€59,357 pp) not modelled inside P5 — **and not modellable in closed form**, since under tegenbewijs the allowance is unavailable (Hoge Raad), making the `min` wealth-dependent | NL | **Restated after the P5 split.** Verified effective drags *with* the allowance: €250k → 0.99%, €500k → 1.12%, €1M → 1.19%, against this model's ~1.31%. Residual **0.12–0.32pp**, an order of magnitude below the 6–8% previously stated — the tegenbewijs fix absorbed most of what the allowance was compensating for | Toward buying |
+| S2 | Heffingsvrij vermogen (€59,357 pp) not modelled inside P5 — **and not modellable in closed form**, since under tegenbewijs the allowance is unavailable (Hoge Raad), making the `min` wealth-dependent | NL | **Restated twice.** The headline verdict applies the full **2.16%/yr** (6% × 36%) whenever equity growth is at or above 6%. Effective drags *with* the allowance, on that same basis: €250k → 1.65%, €500k → 1.90%, €1M → 2.03%. Residual **0.13–0.51pp**, an order of magnitude below the 6–8% previously stated. The Monte Carlo mean drag is lower (~1.30%) because the `min` binds in below-6% years; an earlier revision quoted that MC figure as though it were the headline, which mixed the two bases | Toward buying |
 | S3 | Flat levy indexed at `cost_inflation_rate`, not each country's statutory uprate | FR, DE, UK | FR: recovers ~30% of the gap; residual ~€8k over 25yr | Toward renting (FR over-indexed) |
 | S4 | Rents modelled as exclusive of council tax — **unverifiable**, ONS never states it; PIPR uses *achieved* rents | UK | £199/mo = 13.9% of rent | Neutral on verdict (P2 invariance); shifts displayed levels |
-| S5 | FTB relief withdrawal above £500,000 not modelled | UK | At £501,000 true total £18,150 vs model £3,100: **£15,050 understated** (previously stated as £11,950, which wrongly netted the £3,100 of fees against the SDLT) | Toward buying, above £500k only |
+| S5 | FTB relief withdrawal above £500,000 — **now modelled, at the UI layer** | UK | **Closed.** Each bundle declares `firstTimeBuyerMaxPrice` (UK £500,000, NL €555,000) and the pill withholds the overrides above it, so full SDLT applies. Left unfixed this understated £15,050 at £501,000 and **inverted the verdict across roughly £610k–£710k**. The engine stays price-unconditional; the gate is region data plus UI | **None** |
 | S6 | Non-FTB buyer cost under-charged across the whole **£125k–£250k** band, clamped to zero below £138,000 | UK | Worst point **£138,000: model £0 vs true £3,360**. Both the range and the bound were understated previously ("below £138,000", "≤£3,100") | Toward buying, below the target range |
 | S7 | FR degressive notaire emoluments modelled as flat | FR | ≤0.2pp of a 7.9% cost | Negligible |
 | S8 | DE Vorabpauschale not modelled (creditable at exit) | DE | ~0.41%/yr timing only | Slightly toward renting |

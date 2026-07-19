@@ -5,7 +5,7 @@ Every shipped region models the equity portfolio as a plain taxable brokerage ac
 ## Considered Options
 
 - Per-region sheltered defaults (ISA 0%, PEA 18.6%): rejected — PEA is EU-equity-only, so it assumes a portfolio the user is not buying; ISA and Sparer-Pauschbetrag caps bind inside the horizon, so a flat sheltered rate is wrong from roughly year 3 onward.
-- A `portfolio_wrapper` primitive with a contribution cap: rejected — a cap is not a scalar rate, it needs a per-month allowance loop against the vectorised portfolio update, and it would be the sixth primitive serving a case no region's *default* needs.
+- A `portfolio_wrapper` primitive with a contribution cap: rejected — a cap is not a scalar rate, it needs a per-month allowance loop against the vectorised portfolio update, and it would be one more primitive serving a case no region's *default* needs.
 - Plain taxable everywhere: chosen. The portfolio CG rate is already a user-editable Advanced field, so a wrapper user can set it to 0 themselves.
 
 ## Consequences

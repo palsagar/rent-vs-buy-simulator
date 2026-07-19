@@ -16,9 +16,9 @@ A financial simulation tool that compares two capital allocation strategies over
 ## Features
 
 - Mortgage amortization, property appreciation, equity growth, closing costs, property tax, insurance, and maintenance
-- Tax primitives: mortgage-interest and property-levy deductibility (with a configurable levy cap), plus a selectable home-sale capital-gains regime (US defaults provided)
+- Tax primitives: mortgage-interest and property-levy deductibility (with a configurable levy cap), a selectable home-sale capital-gains regime, a flat cost-indexed levy and maintenance amount, a fixed buyer-cost component (negative where a transfer tax has a zero-rate band), an occupier-borne-levy flag, and an annual portfolio drag on the lesser of a deemed and actual return
 - Interactive Plotly.js charts in a dark GitHub-style UI — Net Value decision chart, uncertainty fan, sensitivity tornado, and cash-flow views
-- Market-outlook presets and region-based tax defaults (US; more regions coming)
+- Market-outlook presets and region-based tax defaults — US, France (Lyon), Germany (Köln), Netherlands and the UK (England & NI), each rendered in its own currency, with a first-time-buyer toggle that withdraws itself above each region's statutory price cap
 - Liquidation-based Net Value — a single wealth series, at every year, that drives every chart, the verdict, and Monte Carlo alike (see [FORMULAS.md](FORMULAS.md))
 - Cash-flow matching — whichever side is cheaper each month invests the difference in equities
 - Independent horizon (when you'd sell) and mortgage term, instead of one combined duration

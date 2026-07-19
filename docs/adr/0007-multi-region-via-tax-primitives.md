@@ -22,6 +22,8 @@ Two factual claims in the context paragraph above are wrong and are corrected he
 
 2. **"France: 30% PFU" is now 31.4%** — 12.8% PFU + 18.6% prélèvements sociaux, the PS rise coming via LFSS 2026 (LOI 2025-1403 art. 12, CSG 9.2 → 10.6). Note that the rise does **not** apply to plus-values immobilières, which stay at 17.2%, so the home-sale rate is 36.2%.
 
-**The primitive list has grown.** "Five neutral primitives" is now seven categories: buyer transaction costs **including a fixed component**, seller transaction costs, annual property levy **including a flat component, an incidence flag, and a maintenance amount**, interest deductibility + rate, CG treatment at exit including the portfolio gains rate, and **annual portfolio drag, expressed as a deemed return and a rate applied to the lesser of that and the actual return**. All remain scalar, and the "countries are data, not code" decision is unaffected — no per-country branch exists in the engine.
+3. **No "Custom" region ships.** The context paragraph promises one; it was dropped during design. The Advanced drawer already keeps every other country reachable by hand, so a Custom bundle would have been an empty preset with no values to offer. Five bundles ship: US, FR, DE, NL, UK.
+
+**The primitive list has grown.** "Five neutral primitives" is now six categories: buyer transaction costs **including a fixed component**, seller transaction costs, annual property levy **including a flat component, an incidence flag, and a maintenance amount**, interest deductibility + rate, CG treatment at exit including the portfolio gains rate, and **annual portfolio drag, expressed as a deemed return and a rate applied to the lesser of that and the actual return**. All remain scalar, and the "countries are data, not code" decision is unaffected — no per-country branch exists in the engine.
 
 See `docs/multi-region-spec.md` for the full derivation and `tests/test_regions.py` for the source-cited fixtures.
