@@ -72,13 +72,17 @@ class TestSensitivity:
 
     def test_tornado_low_uses_negative_growth_rate(self):
         # Equity Growth low perturbation must reflect the true negative rate,
-        # not a clamped near-zero floor. With default std=15, the low target
-        # for equity_growth_annual=7.0 is -8.0.
-        base_cfg = make_config(equity_growth_annual=7.0)
+        # not a clamped near-zero floor. The delta is now the standard error,
+        # std/sqrt(horizon), so a 1-year horizon takes the full std=15 and the
+        # low target for equity_growth_annual=7.0 is -8.0 -- unchanged from
+        # when the delta was the raw std. This is deliberately the horizon at
+        # which the perturbation still goes negative, because a negative
+        # target is what proves nothing floors it at zero.
+        base_cfg = make_config(horizon_years=1, equity_growth_annual=7.0)
         names, low, _high, _base = _compute_sensitivity(base_cfg)
         idx = names.index("Equity Growth")
         expected_low = calculate_scenarios(
-            make_config(equity_growth_annual=-8.0)
+            make_config(horizon_years=1, equity_growth_annual=-8.0)
         ).final_difference
         assert abs(low[idx] - expected_low) < 1e-6
 
@@ -149,7 +153,7 @@ class TestTornadoLevyDelta:
     def test_zero_levy_region_drops_the_bar(self):
         # UK/DE/FR ship propertyTaxRate 0.0. A proportional delta at a
         # zero base is itself zero, and _compute_sensitivity would then
-        # floor the low side at _LOW_PERTURBATION_FLOOR while the high
+        # floor the low side at _POSITIVE_FIELD_FLOOR while the high
         # side stayed 0 -- producing a tiny INVERTED bar rather than no
         # bar. Hence the skip is kept alongside the proportional delta.
         # The guard covers the whole near-zero band, not just an exact

@@ -7,6 +7,8 @@ deterministic verdict (ADR-0001, ADR-0003).
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 from .engine import _net_value_series
@@ -16,10 +18,12 @@ from .models import (
     SimulationConfig,
 )
 
-# Lower bound for the tornado's low perturbation on positive-only fields.
-# The proportional levy delta is checked against this same value, so the
-# guard and the clamp cannot drift apart.
-_LOW_PERTURBATION_FLOOR = 0.001
+# Smallest value a positive-only field may be perturbed to. A NUMERIC
+# safety floor, unrelated to _UI_MAXIMUM below, which is a per-field UI
+# policy -- the names are not an antonym pair. The proportional levy
+# delta is checked against this same value so guard and clamp cannot
+# drift apart.
+_POSITIVE_FIELD_FLOOR = 0.001
 
 # Relative swing applied to whichever field carries a region's property
 # levy. Calibrated so the US ad-valorem base of 1.2 keeps its historical
@@ -31,13 +35,37 @@ _LEVY_RELATIVE_DELTA = 0.5 / 1.2
 # relative) and far below any swing a user could read off the chart.
 _NEGLIGIBLE_SWING_RATIO = 1e-6
 
+# Fields whose tornado delta is an ANNUAL standard deviation.
+#
+# That sigma is what run_monte_carlo needs: it generates a fresh draw
+# every year, so year-to-year dispersion is exactly the right scale. The
+# tornado asks a different question. It shifts the deterministic engine's
+# single long-run average and holds it for the whole horizon, so the
+# relevant uncertainty is the uncertainty of that AVERAGE -- the standard
+# error, sigma / sqrt(horizon).
+#
+# Using the raw annual sigma conflated the two. At 22 years it moved a 9%
+# equity CAGR to 24% and held it there, compounding a 150k initial outlay
+# into ~17M and producing a bar an order of magnitude wider than the rest
+# of the chart combined. The standard error at that horizon is 3.2pp, not
+# 15pp.
+#
+# The remaining perturbations are fixed absolute steps (a 100k price
+# move, 5pp of down payment), not standard deviations, so sqrt(horizon)
+# does not apply to them.
+_STOCHASTIC_FIELDS = frozenset(
+    {
+        "property_appreciation_annual",
+        "equity_growth_annual",
+        "rent_inflation_rate",
+    }
+)
+
 # Highest value the UI lets a user set for each perturbed field, in
-# STORED units. A high perturbation is capped here so the tornado never
-# measures a scenario the app cannot be configured to produce: equity
-# growth was swinging to +1 sigma = 24% against a slider that stops at
-# 15%, and over a long horizon that compounds into a bar an order of
-# magnitude wider than every other one put together, collapsing the rest
-# of the chart into slivers.
+# STORED units. With the standard-error delta above, a perturbation
+# rarely reaches this -- it is the guard for a base that is already at or
+# beyond the slider maximum, which the engine accepts (down payment is
+# valid to 100, the slider stops at 50) and the API will hand over.
 #
 # The LOW side is deliberately NOT capped at the slider minimum. A crash
 # is a real outcome the model must be able to represent even though the
@@ -46,7 +74,7 @@ _NEGLIGIBLE_SWING_RATIO = 1e-6
 #
 # Mirrors fields.js. Kept honest by tests/test_tornado_bounds.py, which
 # parses the slider maxima out of it rather than trusting this copy.
-_PERTURBATION_CEILING = {
+_UI_MAXIMUM = {
     "property_appreciation_annual": 10.0,
     "equity_growth_annual": 15.0,
     "rent_inflation_rate": 0.1,
@@ -369,6 +397,12 @@ def _compute_sensitivity(  # noqa: C901
         # folded-EWF 0.2815 is a +-178% swing implying WOZ regimes it
         # does not have. _LEVY_RELATIVE_DELTA is calibrated so the US
         # base of 1.2 keeps its historical delta of exactly 0.5.
+        # An annual sigma is the dispersion of ONE year. The tornado holds
+        # its shift for the whole horizon, so the uncertainty that applies
+        # is that of the long-run average: the standard error.
+        if field in _STOCHASTIC_FIELDS:
+            delta = delta / math.sqrt(base_config.horizon_years)
+
         if field in ("property_tax_rate", "annual_property_levy"):
             delta = base_val * _LEVY_RELATIVE_DELTA
             # Skip whenever the low side would hit the floor below. That
@@ -378,7 +412,7 @@ def _compute_sensitivity(  # noqa: C901
             # 0.000706 it exceeds the high side outright, rendering the
             # bar inverted. Reachable from the UI -- fields.js ships
             # propertyTaxRate with step 0.0005 from a min of 0.
-            if base_val - delta < _LOW_PERTURBATION_FLOOR:
+            if base_val - delta < _POSITIVE_FIELD_FLOOR:
                 continue
 
         # Low perturbation (subtract delta). Growth rates may legitimately
@@ -387,7 +421,7 @@ def _compute_sensitivity(  # noqa: C901
         if field in ("property_appreciation_annual", "equity_growth_annual"):
             low_override = max(base_val - delta, -99.0)
         else:
-            low_override = max(base_val - delta, _LOW_PERTURBATION_FLOOR)
+            low_override = max(base_val - delta, _POSITIVE_FIELD_FLOOR)
         # Clamp down_payment_pct to [5, 100]
         if field == "down_payment_pct":
             low_override = max(low_override, 5.0)
@@ -396,10 +430,25 @@ def _compute_sensitivity(  # noqa: C901
             low_override = max(low_override, 0.0)
 
         # High perturbation (add delta), never past what the UI can set.
+        #
+        # The outer max() is load-bearing, not defensive. The engine
+        # accepts bases ABOVE the slider maximum (down_payment_pct is
+        # valid to 100, the slider stops at 50) and a config can arrive
+        # that way through the API. Clamping to the ceiling alone would
+        # then put the "higher" bar BELOW the base -- and below the
+        # "lower" bar -- so both bars land on the same side of the pivot
+        # and the one labelled "higher" shows the outcome of a DECREASE.
+        # It also let a proportional levy delta land low and high on the
+        # ceiling together, collapsing the swing to zero so the
+        # negligible-swing guard silently deleted a real bar.
+        #
+        # At base == ceiling this leaves the high half zero-width, which
+        # is the honest reading: at the maximum the parameter can only
+        # go down. The bar still renders at full width from the low side.
         high_override = base_val + delta
-        ceiling = _PERTURBATION_CEILING.get(field)
+        ceiling = _UI_MAXIMUM.get(field)
         if ceiling is not None:
-            high_override = min(high_override, ceiling)
+            high_override = max(base_val, min(high_override, ceiling))
 
         try:
             val_low = _run_with_override(**{field: low_override})

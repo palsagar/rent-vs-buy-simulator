@@ -428,8 +428,37 @@ defined metric.
 
 The tornado chart does not. It is one-at-a-time sensitivity on the
 *deterministic* engine: for each candidate parameter it re-runs
-`calculate_scenarios` at ±1 standard deviation and reads
-`final_difference`. The MC paths are not involved.
+`calculate_scenarios` at a perturbed value and reads `final_difference`.
+The MC paths are not involved.
+
+The perturbation width differs by parameter kind:
+
+| Parameter kind | Delta |
+|---|---|
+| Stochastic drivers (property appreciation, equity growth, rent inflation) | `σ / √horizon` |
+| Property levy, either representation | `± 41.7%` of its own base |
+| Everything else (price, down payment, rent, mortgage rate) | a fixed absolute step |
+
+The `√horizon` matters. `σ` is the *annual* standard deviation, which is
+what the Monte Carlo needs — it redraws every year, so year-to-year
+dispersion is the right scale. The tornado instead shifts the single
+long-run average and holds it for the whole horizon, so the uncertainty
+that applies is the uncertainty of that **average**: the standard error,
+`σ / √N`. At 22 years a 15pp annual σ is a 3.2pp standard error.
+
+Conflating the two moved a 9% equity CAGR to 24% and held it there,
+which over 22 years compounded a €150k outlay into roughly €17M and
+produced a bar an order of magnitude wider than the rest of the chart
+combined.
+
+A high perturbation is additionally capped at the parameter's slider
+maximum, so the chart never measures a configuration the app cannot be
+set to. That cap is one-sided: the low side may fall below the slider
+minimum, because a crash is a real outcome the model has to represent
+even though the UI will not let you type a negative growth rate. The cap
+never pulls the high side below the base — the engine accepts bases above
+the slider maximum, and clamping alone put the "higher" bar below the
+"lower" one.
 
 Two details are region-specific. Both levy fields — ad-valorem
 `property_tax_rate` and flat `annual_property_levy` — take a **relative**

@@ -37,7 +37,11 @@ function baseLayout(xTitle) {
 // It cannot simply be set on both: Plotly ignores a tickformat on a
 // category axis but honours a tickprefix, so a prefix left on Y labels
 // every category "<symbol>Rent Inflation".
+// Not idempotent by construction, so it refuses to run twice: a second
+// call would read the already-deleted y-axis keys and assign undefined,
+// silently wiping the currency it just installed.
 function moveCurrencyToXAxis(layout) {
+  if (layout.yaxis.tickprefix === undefined) return;
   layout.xaxis.tickprefix = layout.yaxis.tickprefix;
   layout.xaxis.tickformat = layout.yaxis.tickformat;
   delete layout.yaxis.tickprefix;
