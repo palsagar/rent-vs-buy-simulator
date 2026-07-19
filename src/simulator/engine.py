@@ -214,6 +214,16 @@ def _net_value_series(
     housing_cost_rent = np.zeros(h + 1)
     housing_cost_rent[1:] = rent_level[:-1]
 
+    # Occupier-borne levies (UK council tax; DE umlagefaehige Grundsteuer)
+    # are owed by whoever lives there, so the renter bears them too.
+    # Charging the levy to BOTH arms leaves the Verdict unchanged against
+    # charging it to neither: it shifts both by the same amount and
+    # cancels in the difference. (It is NOT invariant to toggling this
+    # flag at a fixed levy -- that moves the cost from one arm to two.)
+    # The headline monthly costs and the outflow chart do move.
+    if config.levy_paid_by_occupier:
+        housing_cost_rent = housing_cost_rent + levy
+
     # --- Cash-flow matching: cheaper side invests the difference
     surplus = housing_cost_buy - housing_cost_rent
     contrib_rent = np.maximum(surplus, 0.0)

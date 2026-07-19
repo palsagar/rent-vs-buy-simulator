@@ -4,6 +4,7 @@ Each class pins one primitive's arithmetic against a worked example, so
 a sign flip or a misplaced /12 fails a build rather than shipping.
 """
 
+import math
 import sys
 from pathlib import Path
 
@@ -137,3 +138,156 @@ class TestFlatMaintenanceAmount:
             pct_only["_maintenance"] + amount_only["_maintenance"],
             atol=1e-9,
         )
+
+
+class TestOccupierBorneLevy:
+    """Occupier-borne levies (UK council tax, DE umlagefaehige Grundsteuer)
+    are owed by whoever lives there, so the renter bears them too.
+
+    TWO DIFFERENT PAIRINGS, testing two different properties. Do not
+    merge them -- each is false under the other's comparison.
+    """
+
+    @staticmethod
+    def _incidence_pair():
+        """Same levy, flag off vs on. Tests WHO PAYS.
+
+        Not verdict-invariant: with the flag off the buyer alone bears L,
+        with it on both do, so the surplus and hence the portfolios move.
+        """
+        kwargs = dict(
+            horizon_years=5,
+            annual_property_levy=2392.0,
+            equity_growth_annual=7.0,
+            property_appreciation_annual=3.0,
+            rent_inflation_rate=0.03,
+        )
+        off = taxfree_config(levy_paid_by_occupier=False, **kwargs)
+        on = taxfree_config(levy_paid_by_occupier=True, **kwargs)
+        return off, on
+
+    @staticmethod
+    def _invariance_pair():
+        """No levy at all vs an occupier-borne levy. Tests THE VERDICT.
+
+        This is the comparison the invariance proof is actually about:
+        surplus = (b+L) - (r+L) = b - r, so contributions and both
+        portfolios are unchanged, and cash_committed rises identically on
+        both arms and cancels in the difference.
+
+        interest_deduction_enabled is set EXPLICITLY, not inherited: the
+        equivalence holds only while the levy does not feed the deduction
+        block at engine.py:226, which adds the yearly levy to the
+        deductible base. With deduction on, the levy config accrues
+        cum_tax_savings the zero-levy config does not and net_buy
+        diverges -- see test_equivalence_requires_a_non_deductible_levy.
+        UK and DE both ship interestDeductionEnabled False, so the
+        shipped regions satisfy this; a test resting on that as an
+        inherited default would be resting on an unstated assumption.
+        """
+        kwargs = dict(
+            horizon_years=5,
+            equity_growth_annual=7.0,
+            property_appreciation_annual=3.0,
+            rent_inflation_rate=0.03,
+            interest_deduction_enabled=False,
+        )
+        none = taxfree_config(annual_property_levy=0.0, **kwargs)
+        both = taxfree_config(
+            annual_property_levy=2392.0, levy_paid_by_occupier=True, **kwargs
+        )
+        return none, both
+
+    def test_verdict_is_invariant(self):
+        # Relative tolerance, not absolute: cash_committed changes
+        # magnitude and both nets are re-rounded before the subtraction,
+        # and one ulp at ~1e7 is already ~2e-9.
+        none, both = self._invariance_pair()
+        assert math.isclose(
+            calculate_scenarios(none).final_difference,
+            calculate_scenarios(both).final_difference,
+            rel_tol=1e-12,
+        )
+
+    def test_net_value_series_are_invariant_at_every_month(self):
+        none, both = self._invariance_pair()
+        s_none, s_both = run_flat(none), run_flat(both)
+        diff_none = s_none["net_buy"] - s_none["net_rent"]
+        diff_both = s_both["net_buy"] - s_both["net_rent"]
+        # atol carries the near-zero months: the difference series passes
+        # close to zero around breakeven, where a pure rtol has no room.
+        assert np.allclose(diff_none, diff_both, rtol=1e-12, atol=1e-6)
+
+    def test_levy_lands_on_both_arms(self):
+        # NOT redundant with the two invariance tests above -- it is what
+        # makes them meaningful. A flag that did nothing at all would
+        # leave the DIFFERENCE unchanged and pass both of them trivially.
+        # This pins the levels: each arm must drop by the full levy, so
+        # the levy is proved to have landed rather than cancelled by
+        # never being applied. Verified exact: 2392/yr x 5 = 11,960.00.
+        none, both = self._invariance_pair()
+        s_none, s_both = run_flat(none), run_flat(both)
+        total_levy = float(np.sum(s_both["_levy"]))
+        assert abs(total_levy - 2392.0 * 5) < 1e-9
+        for arm in ("net_buy", "net_rent"):
+            assert abs(s_none[arm][-1] - s_both[arm][-1] - total_levy) < 1e-6, (
+                f"{arm} did not drop by the full levy"
+            )
+
+    def test_equivalence_requires_a_non_deductible_levy(self):
+        # Pins the precondition above rather than leaving it in a comment.
+        # This is NOT hypothetical: the US ships interestDeductionEnabled
+        # True with levyDeductionCap 10000, so a US flat-levy component
+        # would be one data change away from making the invariance
+        # premise false while the test above still passed on its own
+        # non-deductible fixture.
+        kwargs = dict(
+            horizon_years=5,
+            equity_growth_annual=7.0,
+            property_appreciation_annual=3.0,
+            rent_inflation_rate=0.03,
+            interest_deduction_enabled=True,
+            marginal_tax_rate_pct=24.0,
+        )
+        none = taxfree_config(annual_property_levy=0.0, **kwargs)
+        both = taxfree_config(
+            annual_property_levy=2392.0, levy_paid_by_occupier=True, **kwargs
+        )
+        r_none, r_both = calculate_scenarios(none), calculate_scenarios(both)
+        # The gap is exactly the tax shield on the levy:
+        #   2392/yr x 5 years x 24% = 2,870.40
+        shield = 2392.0 * 5 * 0.24
+        assert abs(r_both.final_difference - r_none.final_difference - shield) < 1e-6
+        assert abs(r_both.total_tax_savings - r_none.total_tax_savings - shield) < 1e-6
+
+    def test_renter_year1_monthly_cost_rises_by_exactly_the_mean_levy(self):
+        off, on = self._incidence_pair()
+        levy = run_flat(on)["_levy"]
+        expected = float(np.mean(levy[1:13]))
+        assert (
+            abs(
+                calculate_scenarios(on).monthly_cost_rent_year1
+                - calculate_scenarios(off).monthly_cost_rent_year1
+                - expected
+            )
+            < 1e-9
+        )
+
+    def test_buyer_side_is_untouched_by_the_flag(self):
+        # Under the INCIDENCE pairing the buyer pays L either way, so the
+        # flag moves the renter only. (Under the invariance pairing both
+        # sides move by L -- which is the point of that comparison.)
+        off, on = self._incidence_pair()
+        assert (
+            abs(
+                calculate_scenarios(on).monthly_cost_buy_year1
+                - calculate_scenarios(off).monthly_cost_buy_year1
+            )
+            < 1e-9
+        )
+
+    def test_default_is_buyer_only(self):
+        cfg = taxfree_config(annual_property_levy=2392.0)
+        series = run_flat(cfg)
+        # Renter pays rent only; the levy is nowhere in that line.
+        assert abs(series["housing_cost_rent"][1] - cfg.monthly_rent) < 1e-9
