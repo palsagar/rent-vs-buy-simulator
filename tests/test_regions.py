@@ -186,3 +186,89 @@ class TestFrance:
     def test_low_confidence_maintenance_carries_its_caveat(self):
         notes = " ".join(self._fr()["notes"]).lower()
         assert "maintenance" in notes
+
+
+class TestGermany:
+    @staticmethod
+    def _de():
+        return next(r for r in list_regions() if r["id"] == "de")
+
+    def test_buyer_cost_at_the_preset_price(self):
+        # GrESt 6.5 (NRW, Landtag Drucksache 16/7147, effective 01.01.2015)
+        # + Notar/Grundbuch 2.0 + Makler 3.57 (incl. USt) = 12.07%
+        #   0.1207 * 339,000 = 40,917.30
+        primitives = self._de()["taxPrimitives"]
+        total = (
+            339_000 * primitives["closingCostBuyerPct"] / 100
+            + primitives["closingCostBuyerAmount"]
+        )
+        assert abs(total - 40_917.30) < 0.01
+
+    def test_sale_is_exempt_at_any_holding_period(self):
+        # 23 Abs.1 Nr.1 Satz 3 EStG, owner-occupier limb: exempt at ANY
+        # holding period. The 10-year speculation period applies to
+        # NON-owner-occupied property, which this tool does not model.
+        # ADR-0007's "sale tax-free after a 10-year hold" is wrong for the
+        # case modelled here; see its 2026-07 amendment.
+        assert self._de()["taxPrimitives"]["saleCgRegime"] == "fully_exempt"
+
+    def test_levy_and_insurance_are_umlagefaehig(self):
+        # BetrKV 2 Nr.1 (Grundsteuer) and Nr.13 (Wohngebaeudeversicherung)
+        # are umlagefaehig, so German Kaltmiete excludes them and the
+        # tenant bears them.
+        primitives = self._de()["taxPrimitives"]
+        assert primitives["levyPaidByOccupier"] is True
+        assert primitives["annualHomeInsurance"] == 0.0
+
+    def test_maintenance_is_area_proportional_not_value_proportional(self):
+        # 28 Abs.2 II. BV states the convention in EUR/m2/yr (9.00),
+        # explicitly not value-linked: 9.00 x 80 m2 = 720 EUR
+        # Instandhaltungsruecklage + Verwalter + Sondereigentum ~ 1,700.
+        # Scoped to the NON-umlagefaehig components only.
+        primitives = self._de()["taxPrimitives"]
+        assert primitives["annualMaintenancePct"] == 0.0
+        assert primitives["annualMaintenanceAmount"] == 1700.0
+
+    def test_amortisation_term_is_30_not_the_zinsbindung(self):
+        # A 4.0% rate with the conventional 2% anfaengliche Tilgung fully
+        # repays in ~29 years. The 15 in the research is the Zinsbindung
+        # (the fixing period), NOT the amortisation term. Shipping 15 would
+        # inflate the monthly payment and badly bias DE toward renting.
+        assert self._de()["typical"]["mortgageTermYears"] == 30
+
+    def test_price_and_rent_reproduce_their_own_derivation(self):
+        # Matched pair over the SAME 259 sold-and-rented condos:
+        #   4,239 EUR/m2 x 80 m2 = 339,120 -> ships 339,000
+        #   12.40 EUR/m2 x 80 m2 = 992
+        # Superseded: 400,000, then 345,000 -- the latter did not
+        # reproduce from its own 4,239 EUR/m2 and gave P/R 28.2.
+        typical = self._de()["typical"]
+        assert typical["propertyPrice"] == 339000
+        assert typical["monthlyRent"] == 992  # Kaltmiete, same matched pair
+
+    def test_price_to_rent_reproduces_the_research_headline_ratio(self):
+        # 339,000 / (992 x 12) = 28.478 -> 28.48, reproducing the
+        # research's own stated P/R of 28.5. The superseded 345,000/1,020
+        # pair gave 28.2. A derivation that regenerates the source's
+        # headline ratio is more trustworthy than a rounded price that
+        # does not. Genuine, not a Kaltmiete artefact: on the most
+        # conservative Warmmiete basis it is 36.6.
+        typical = self._de()["typical"]
+        ratio = typical["propertyPrice"] / (typical["monthlyRent"] * 12)
+        assert abs(ratio - 28.48) < 0.005
+
+    def test_vorabpauschale_is_deliberately_not_modelled(self):
+        # ~0.41%/yr for 2026, but CREDITABLE against tax at exit -- a
+        # timing drag, not a permanent tax. P5 models a permanent tax, so
+        # applying it here would overstate the German cost by construction.
+        primitives = self._de()["taxPrimitives"]
+        assert primitives["portfolioDeemedReturnPct"] == 0.0
+        assert primitives["portfolioDragRatePct"] == 0.0
+
+    def test_no_ftb_relief_is_enacted(self):
+        assert self._de()["firstTimeBuyerOverrides"] == {}
+
+    def test_weakest_values_carry_their_caveats(self):
+        notes = " ".join(self._de()["notes"]).lower()
+        assert "grundsteuer" in notes  # the L-rated levy
+        assert "makler" in notes  # the conditional 3.57pp

@@ -105,6 +105,68 @@ REGIONS: list[dict[str, Any]] = [
             "Portfolios are modelled as plain taxable accounts — no PEA (ADR-0009).",
         ],
     },
+    {
+        "id": "de",
+        "label": "Germany (Köln)",
+        "available": True,
+        "currencySymbol": "€",
+        "typical": {
+            "propertyPrice": 339000,  # H — €4,239/m² x 80 m² = €339,120, rounded
+            "monthlyRent": 992,  # H — €12.40/m² x 80 m², same matched pair
+            "mortgageRateAnnual": 4.0,  # M — 15yr Zinsbindung; see notes
+            # M — 2% anfängliche Tilgung => ~29yr full repayment
+            "mortgageTermYears": 30,
+        },
+        "taxPrimitives": {
+            # M — GrESt 6.5 (NRW) + Notar/Grundbuch 2.0 + Makler 3.57
+            "closingCostBuyerPct": 12.07,
+            "closingCostBuyerAmount": 0.0,
+            "closingCostSellerPct": 4.0,  # M
+            "propertyTaxRate": 0.0,
+            # L — ~0.1% of market value; Köln Hebesatz 550% for 2026
+            "annualPropertyLevy": 339.0,
+            "levyPaidByOccupier": True,  # H — BetrKV §2 Nr.1, umlagefähig
+            # H — condo: inside Hausgeld, umlagefähig (BetrKV §2 Nr.13)
+            "annualHomeInsurance": 0.0,
+            "annualMaintenancePct": 0.0,
+            # M — §28 Abs.2 II.BV €9.00/m² x 80 + Verwalter + Sondereigentum
+            "annualMaintenanceAmount": 1700.0,
+            "interestDeductionEnabled": False,  # H — owner-occupied
+            "marginalTaxRatePct": 0.0,
+            "levyDeductionCap": 0.0,
+            # H — §23 Abs.1 Nr.1 Satz 3 EStG, owner-occupier limb
+            "saleCgRegime": "fully_exempt",
+            "saleCgExemptAmount": 0.0,
+            # inert; the §23 speculation period for non-owner-occupied
+            "saleCgExemptAfterYears": 10,
+            # inert; a taxable DE sale is taxed at the personal income rate
+            "saleCgRatePct": 0.0,
+            "portfolioCgRatePct": 26.375,  # H — 25% x 1.055 Soli
+            # Vorabpauschale deliberately not modelled — creditable at exit
+            "portfolioDeemedReturnPct": 0.0,
+            "portfolioDragRatePct": 0.0,
+        },
+        "firstTimeBuyerOverrides": {},  # H — no FTB relief enacted
+        "notes": [
+            "The Grundsteuer figure (€339/yr) is the weakest value in the "
+            "set. The post-2025 reform runs eight state models and the "
+            "effective rate is unsourceable at precision; ~0.1% of market "
+            "value is likely understated at Köln's 550% Hebesatz.",
+            "The Makler buyer-half (3.57% incl. USt) is conditional — a "
+            "maklerfrei sale drops the total to 8.50%, a €12,102 swing at "
+            "this price. Adjust the buyer-cost slider in Advanced.",
+            "Grunderwerbsteuer varies 3.5–6.5% by Bundesland; 6.5% (NRW) "
+            "is used nationally. The 3pp spread is ≈€10,170 on the shipped "
+            "€339,000.",
+            "The mortgage rate is held fixed for the full amortisation "
+            "term; the 10/15/20yr Zinsbindung and Anschlussfinanzierung "
+            "are not modelled, nor is the §489 BGB exit right after 10 yrs.",
+            "Heating and water Nebenkosten are omitted from both arms — "
+            "both parties pay them, so they are decision-neutral.",
+            "Portfolios are modelled as plain taxable accounts — no "
+            "Sparer-Pauschbetrag (ADR-0009).",
+        ],
+    },
     *[
         {
             "id": region_id,
@@ -117,7 +179,6 @@ REGIONS: list[dict[str, Any]] = [
             "notes": [],
         }
         for region_id, label, symbol in [
-            ("de", "Germany", "€"),
             ("nl", "Netherlands", "€"),
             ("uk", "United Kingdom", "£"),
         ]
