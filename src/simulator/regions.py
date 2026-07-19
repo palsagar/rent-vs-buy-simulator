@@ -167,6 +167,80 @@ REGIONS: list[dict[str, Any]] = [
             "Sparer-Pauschbetrag (ADR-0009).",
         ],
     },
+    {
+        "id": "nl",
+        "label": "Netherlands",
+        "available": True,
+        "currencySymbol": "€",
+        "typical": {
+            "propertyPrice": 490000,  # H — CBS, verified 487,383
+            "monthlyRent": 2300,  # L — derived, ±11% band; see notes
+            "mortgageRateAnnual": 4.3,  # M — non-NHG (above the €470,000 NHG cap)
+            # H — annuity; also the 30yr deduction period
+            "mortgageTermYears": 30,
+        },
+        "taxPrimitives": {
+            # H — overdrachtsbelasting 2% + ~1.2% other
+            "closingCostBuyerPct": 3.2,
+            "closingCostBuyerAmount": 0.0,
+            "closingCostSellerPct": 1.4,  # M
+            # H — 0.15% owner charges + 0.13146% EWF expressed as its exact
+            # cash equivalent (0.35% of WOZ x 37.56% marginal rate).
+            "propertyTaxRate": 0.2815,
+            "annualPropertyLevy": 0.0,
+            "levyPaidByOccupier": False,
+            # M — opstalverzekering, €1.30/€1,000 herbouwwaarde
+            "annualHomeInsurance": 550.0,
+            "annualMaintenancePct": 1.0,  # M-H — Nibud "ruim 1%"/yr; VEH 1% of WOZ
+            # deliberate: the sources are value-proportional
+            "annualMaintenanceAmount": 0.0,
+            "interestDeductionEnabled": True,  # H
+            # H — 2026 tariefsaanpassing maximum, NOT the 49.5% top rate
+            "marginalTaxRatePct": 37.56,
+            "levyDeductionCap": 0.0,  # H — the NL levy is not deductible
+            "saleCgRegime": "fully_exempt",  # H — eigen woning, box 1
+            "saleCgExemptAmount": 0.0,
+            "saleCgExemptAfterYears": 0,
+            "saleCgRatePct": 0.0,  # H — no property CGT
+            "portfolioCgRatePct": 0.0,  # H — the burden is box 3, not CGT
+            # H — enacted 2026-01-01 (Wet IB 2001 art. 5.2 lid 2 / 5.5 / 2.13).
+            # Two operands, not a product: art. 5.25 taxes min(deemed, actual).
+            "portfolioDeemedReturnPct": 6.0,
+            "portfolioDragRatePct": 36.0,
+        },
+        # H — startersvrijstelling: 0% vs 2% overdrachtsbelasting.
+        "firstTimeBuyerOverrides": {"closingCostBuyerPct": 1.2},
+        "notes": [
+            "Box 3 is charged on the LESSER of a 6% deemed return and "
+            "your actual return, floored at nil — so a bad year is taxed "
+            "less, and a loss is not taxed at all.",
+            "The heffingsvrij vermogen (€59,357 per person) is not "
+            "modelled: under the tegenbewijs route the allowance is not "
+            "available (Hoge Raad), which would make the comparison "
+            "depend on your wealth and break the vectorised portfolio "
+            "update. Effective drags with the allowance are 0.99% at "
+            "€250k, 1.12% at €500k and 1.19% at €1M, against this "
+            "model's ~1.31% — a residual 0.12–0.32pp, biased toward "
+            "buying.",
+            "The 6%/36% figures are enacted for 2026 ONLY. The 2027 "
+            "deemed return is an identified funding lever, and the whole "
+            "forfait-plus-tegenbewijs system is slated for replacement by "
+            "the Wet werkelijk rendement box 3 from 1 January 2028. A 10-, "
+            "25- or 30-year simulation should not be read as assuming "
+            "this regime persists.",
+            "Rent (€2,300/mo free-sector) is a derivation with a ±11% "
+            "band; free-sector stock comparable to a large owner-occupied "
+            "home barely exists. The blend overstates rent for a large "
+            "home, so the true price/rent ratio is higher than shown.",
+            "Hillen relief is inert at these defaults because deductible "
+            "interest exceeds the eigenwoningforfait throughout. It would "
+            "only bite above a ~91.9% down payment.",
+            "Box 3 uses a 1 January peildatum; the model applies the drag "
+            "monthly, which overstates it by ~3.36% of the terminal "
+            "portfolio over 30 years, biased toward buying.",
+            "Portfolios are modelled as plain taxable accounts (ADR-0009).",
+        ],
+    },
     *[
         {
             "id": region_id,
@@ -179,7 +253,6 @@ REGIONS: list[dict[str, Any]] = [
             "notes": [],
         }
         for region_id, label, symbol in [
-            ("nl", "Netherlands", "€"),
             ("uk", "United Kingdom", "£"),
         ]
     ],

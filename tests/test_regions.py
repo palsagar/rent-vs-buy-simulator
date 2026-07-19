@@ -272,3 +272,93 @@ class TestGermany:
         notes = " ".join(self._de()["notes"]).lower()
         assert "grundsteuer" in notes  # the L-rated levy
         assert "makler" in notes  # the conditional 3.57pp
+
+
+class TestNetherlands:
+    @staticmethod
+    def _nl():
+        return next(r for r in list_regions() if r["id"] == "nl")
+
+    def test_eigenwoningforfait_is_an_exact_algebraic_identity(self):
+        # EWF adds 0.35% of WOZ to box-1 income, taxed at the marginal rate
+        # and netted against deductible interest. In cash terms that is
+        # identical to a levy of 0.35% x 37.56% = 0.13146% of WOZ. Total:
+        #   0.15% (owner-specific public charges) + 0.13146% = 0.28146%
+        # This is NOT a fudged effective rate -- it is an exact reduction,
+        # asserted here as arithmetic rather than trusted as prose.
+        rate = self._nl()["taxPrimitives"]["propertyTaxRate"]
+        assert abs(rate - (0.15 + 0.35 * 0.3756)) < 1e-4
+        assert rate == 0.2815
+
+    def test_marginal_rate_is_the_tariefsaanpassing_maximum(self):
+        # 37.56% is the 2026 tariefsaanpassing maximum -- NOT the 49.5%
+        # top income rate. The identity above depends on the SAME rate
+        # applying to the addback and the deduction, true by construction.
+        assert self._nl()["taxPrimitives"]["marginalTaxRatePct"] == 37.56
+
+    def test_levy_is_not_deductible_and_zero_means_exactly_that(self):
+        # Requires the api.js sentinel fix: client 0 used to map to null,
+        # and null means UNCAPPED. Left unfixed, NL would silently deduct
+        # its own levy -- 0.2815% x 490,000 x 37.56% = 518 EUR/yr, ~5,200
+        # over a 10-year horizon, credited to the WRONG arm.
+        assert self._nl()["taxPrimitives"]["levyDeductionCap"] == 0.0
+
+    def test_box_3_ships_two_separate_operands_not_a_product(self):
+        # 6.00% deemed return and 36% rate, both definitive for 2026 and
+        # enacted at 2026-01-01 (Wet IB 2001 art. 5.2 lid 2 / 5.5 / 2.13).
+        # They ship SEPARATELY because Wet IB 2001 art. 5.25 assesses the
+        # taxpayer on min(deemed, actual) floored at nil -- a test
+        # asserting a pre-multiplied 2.16 would lock in the ~1.65x
+        # overtax the split exists to remove. Do not "simplify" these.
+        primitives = self._nl()["taxPrimitives"]
+        assert primitives["portfolioDeemedReturnPct"] == 6.0
+        assert primitives["portfolioDragRatePct"] == 36.0
+
+    def test_superseded_introduction_figures_are_not_shipped(self):
+        # 7.78% / EUR 51,396 were Belastingplan 2026 AS INTRODUCED and
+        # were struck by adopted amendment nr. 47 -- real documents,
+        # never law. Do not reintroduce them.
+        primitives = self._nl()["taxPrimitives"]
+        assert primitives["portfolioDeemedReturnPct"] != 7.78
+
+    def test_box_1_dwelling_is_outside_box_3(self):
+        # Wet IB 2001 art. 2.14 lid 2: the owner-occupied dwelling sits in
+        # box 1 and is entirely outside box 3, and the box-1 mortgage does
+        # not offset box-3 assets. The Netherlands taxes the renter's
+        # wealth annually and exempts the buyer's completely -- the whole
+        # NL story, and it emerges from portfolio SIZE, not a branch.
+        assert self._nl()["taxPrimitives"]["saleCgRegime"] == "fully_exempt"
+
+    def test_no_capital_gains_tax_on_either_the_home_or_the_portfolio(self):
+        primitives = self._nl()["taxPrimitives"]
+        assert primitives["saleCgRegime"] == "fully_exempt"  # eigen woning, box 1
+        assert primitives["saleCgRatePct"] == 0.0
+        assert primitives["portfolioCgRatePct"] == 0.0  # the burden is box 3
+
+    def test_maintenance_stays_on_the_percentage_path_deliberately(self):
+        # Nibud ("ruim 1%" per year) and Vereniging Eigen Huis (1% of WOZ)
+        # both state this VALUE-PROPORTIONALLY. Converting 1.0% into
+        # ~4,900 EUR at the default price would discard the rescaling
+        # behaviour the sources actually assert and launder a value-
+        # proportional convention into a frozen constant. DO NOT "tidy"
+        # this onto the absolute path (spec P3).
+        primitives = self._nl()["taxPrimitives"]
+        assert primitives["annualMaintenancePct"] == 1.0
+        assert primitives["annualMaintenanceAmount"] == 0.0
+
+    def test_startersvrijstelling_is_a_2pp_relief(self):
+        # 0% vs 2% overdrachtsbelasting (age 18-35, own occupancy,
+        # value <= 555,000) -- a ~9,000 EUR swing.
+        region = self._nl()
+        base = region["taxPrimitives"]["closingCostBuyerPct"]
+        ftb = region["firstTimeBuyerOverrides"]["closingCostBuyerPct"]
+        assert abs(base - ftb - 2.0) < 1e-9
+
+    def test_interest_deduction_is_on(self):
+        assert self._nl()["taxPrimitives"]["interestDeductionEnabled"] is True
+
+    def test_low_confidence_rent_and_forward_risk_carry_caveats(self):
+        notes = " ".join(self._nl()["notes"]).lower()
+        assert "rent" in notes
+        assert "heffingsvrij" in notes  # the unmodelled box-3 exemption
+        assert "2028" in notes  # the regime's known expiry date
