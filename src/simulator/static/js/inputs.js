@@ -3,6 +3,7 @@
 // stored value and the displayed one (decimal rates display ×100).
 
 import { INPUT_DEFS } from "./fields.js";
+import { setCurrency } from "./format.js";
 import { applyPreset, getConfig, setParam } from "./state.js";
 
 const OUTLOOK_PRESETS = {
@@ -231,6 +232,9 @@ function renderRegionNotes(region) {
 
 function applySelectedRegion() {
   if (!selectedRegion) return;
+  // Before applyPreset, so the re-render it triggers already has the
+  // right symbol -- the chart hovertemplates are built at call time.
+  setCurrency(selectedRegion.currencySymbol);
   applyPreset({
     ...selectedRegion.typical,
     ...selectedRegion.taxPrimitives,
@@ -279,6 +283,7 @@ function buildPresetPills(regions) {
   // from US or DE would latch the flag OFF and the next region WITH
   // relief would then load without it -- FTB must default ON.
   ftbOn = hasRelief(selectedRegion) ? ftbMatchesConfig(selectedRegion) : true;
+  if (selectedRegion) setCurrency(selectedRegion.currencySymbol);
   selectRegionPill(regionPills, regions, selectedRegion);
   refreshFtbPill();
   renderRegionNotes(selectedRegion);

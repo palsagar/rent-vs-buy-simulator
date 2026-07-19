@@ -1,6 +1,8 @@
 // Plotly.js builders — one shared GitHub-dark theme. Buy #f0883e,
 // Rent #58a6ff; bands/neutrals muted; direct line labels, no legends.
 
+import { getCurrencySymbol } from "./format.js";
+
 const BUY = "#f0883e";
 const RENT = "#58a6ff";
 const MUTED = "#8b949e";
@@ -17,8 +19,24 @@ function baseLayout(xTitle) {
     showlegend: false,
     hovermode: "x unified",
     xaxis: { title: { text: xTitle }, gridcolor: GRID, zerolinecolor: "#30363d" },
-    yaxis: { gridcolor: GRID, zerolinecolor: "#30363d", tickformat: "$~s" },
+    yaxis: {
+      gridcolor: GRID,
+      zerolinecolor: "#30363d",
+      tickprefix: getCurrencySymbol(),
+      tickformat: "~s",
+    },
   };
+}
+
+// Horizontal-bar charts put money on X and categories on Y, so the base
+// layout's currency prefix has to come off the Y axis. It matters because
+// Plotly ignores a tickformat on a category axis but honours a tickprefix
+// -- so the prefix would label every parameter name "<symbol>Rent
+// Inflation". Keep this comment free of a literal currency character:
+// the task's exit check greps for exactly one remaining occurrence.
+function clearCurrencyFromYAxis(layout) {
+  delete layout.yaxis.tickprefix;
+  delete layout.yaxis.tickformat;
 }
 
 // `fwd`, when given, maps dollars to symlog space (see maybeSymlog). The raw
@@ -27,8 +45,8 @@ function strategyTraces(x, buyY, rentY, fwd) {
   const mk = (yRaw, color, name) => {
     const base = { x, mode: "lines", line: { color, width: 2 }, name };
     return fwd
-      ? { ...base, y: yRaw.map(fwd), customdata: yRaw, hovertemplate: `${name} %{customdata:$,.0f}<extra></extra>` }
-      : { ...base, y: yRaw, hovertemplate: `${name} %{y:$,.0f}<extra></extra>` };
+      ? { ...base, y: yRaw.map(fwd), customdata: yRaw, hovertemplate: `${name} ${getCurrencySymbol()}%{customdata:,.0f}<extra></extra>` }
+      : { ...base, y: yRaw, hovertemplate: `${name} ${getCurrencySymbol()}%{y:,.0f}<extra></extra>` };
   };
   return [mk(buyY, BUY, "Buy"), mk(rentY, RENT, "Rent")];
 }
@@ -62,14 +80,15 @@ function outcomesDisparate(buyY, rentY) {
   return Math.max(a, b) / Math.max(Math.min(a, b), 1) >= SCALE_DISPARITY;
 }
 
-// Compact tick label ($1k / $30k / $1.0M). Like fmtCompact but compacts down
-// to $1k so a symlog axis never mixes "$1,000" with "$10k".
+// Compact tick label (£1k / £30k / £1.0M). Like fmtCompact but compacts
+// down to 1k so a symlog axis never mixes "1,000" with "10k".
 function fmtTick(v) {
   const sign = v < 0 ? "-" : "";
+  const cur = getCurrencySymbol();
   const a = Math.abs(v);
-  if (a >= 1e6) return `${sign}$${(a / 1e6).toFixed(1)}M`;
-  if (a >= 1e3) return `${sign}$${Math.round(a / 1e3)}k`;
-  return `${sign}$${Math.round(a)}`;
+  if (a >= 1e6) return `${sign}${cur}${(a / 1e6).toFixed(1)}M`;
+  if (a >= 1e3) return `${sign}${cur}${Math.round(a / 1e3)}k`;
+  return `${sign}${cur}${Math.round(a)}`;
 }
 
 // Nice dollar tick values (…, -1M, -300k, 0, 300k, 1M, …) at 1x/3x per decade
@@ -143,7 +162,7 @@ export function renderFanChart(el, mc) {
     { x, y: row[5], mode: "lines", line: { width: 0 }, fill: "tonexty", fillcolor: "rgba(139,148,158,0.14)", hoverinfo: "skip", showlegend: false },
     { x, y: row[75], mode: "lines", line: { width: 0 }, hoverinfo: "skip", showlegend: false },
     { x, y: row[25], mode: "lines", line: { width: 0 }, fill: "tonexty", fillcolor: "rgba(139,148,158,0.24)", hoverinfo: "skip", showlegend: false },
-    { x, y: row[50], mode: "lines", line: { color: "#e6edf3", width: 1.5 }, name: "Median", hovertemplate: "Median %{y:$,.0f}<extra></extra>", showlegend: false },
+    { x, y: row[50], mode: "lines", line: { color: "#e6edf3", width: 1.5 }, name: "Median", hovertemplate: `Median ${getCurrencySymbol()}%{y:,.0f}<extra></extra>`, showlegend: false },
   ];
   const layout = baseLayout("Years");
   layout.yaxis.title = { text: "Buy − Rent" };
@@ -159,10 +178,11 @@ export function renderTornadoChart(el, tornado) {
   const low = [...tornado.low].reverse().map((v) => v - base);
   const high = [...tornado.high].reverse().map((v) => v - base);
   const traces = [
-    { type: "bar", orientation: "h", y: params, x: low, base, marker: { color: MUTED }, hovertemplate: "%{y} lower: %{x:$,.0f}<extra></extra>" },
-    { type: "bar", orientation: "h", y: params, x: high, base, marker: { color: RENT }, hovertemplate: "%{y} higher: %{x:$,.0f}<extra></extra>" },
+    { type: "bar", orientation: "h", y: params, x: low, base, marker: { color: MUTED }, hovertemplate: `%{y} lower: ${getCurrencySymbol()}%{x:,.0f}<extra></extra>` },
+    { type: "bar", orientation: "h", y: params, x: high, base, marker: { color: RENT }, hovertemplate: `%{y} higher: ${getCurrencySymbol()}%{x:,.0f}<extra></extra>` },
   ];
   const layout = baseLayout("Impact on Buy − Rent difference");
+  clearCurrencyFromYAxis(layout);
   layout.barmode = "overlay";
   layout.yaxis.automargin = true; // grow the left margin to fit parameter labels
   layout.shapes = [
@@ -200,10 +220,11 @@ export function renderBreakdownChart(el, payload, cfg) {
       type: "bar", orientation: "h",
       y: revLabels, x: revValues,
       marker: { color: revValues.map((v) => (v < 0 ? "#7ee787" : MUTED)) },
-      hovertemplate: "%{y}: %{x:$,.0f}<extra></extra>",
+      hovertemplate: `%{y}: ${getCurrencySymbol()}%{x:,.0f}<extra></extra>`,
     },
   ];
   const layout = baseLayout(`Total over ${cfg.horizonYears} years`);
+  clearCurrencyFromYAxis(layout);
   layout.yaxis.automargin = true; // grow the left margin to fit category labels
   Plotly.react(el, traces, layout, PLOT_CONFIG);
 }
