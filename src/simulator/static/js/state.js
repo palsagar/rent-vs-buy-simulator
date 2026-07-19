@@ -18,6 +18,12 @@ export const DEFAULT_CONFIG = {
   annualHomeInsurance: 1200,
   annualMaintenancePct: 1.0,
   costInflationRate: 0.025,
+  annualPropertyLevy: 0,
+  levyPaidByOccupier: false,
+  annualMaintenanceAmount: 0,
+  closingCostBuyerAmount: 0,
+  portfolioDeemedReturnPct: 0,
+  portfolioDragRatePct: 0,
   interestDeductionEnabled: true,
   marginalTaxRatePct: 24.0,
   levyDeductionCap: 10000,
@@ -94,6 +100,15 @@ export function readUrl() {
   for (const [key, def] of Object.entries(DEFAULT_CONFIG)) {
     if (!params.has(key)) continue;
     const raw = params.get(key);
+    // Legacy share URLs used 0 to mean "uncapped"; that sentinel moved to
+    // negative in this release. Values written before the change must keep
+    // their original meaning, or a shared "uncapped SALT" scenario silently
+    // reopens with the levy not deductible at all -- a verdict flip with no
+    // visible cause.
+    if (key === "levyDeductionCap" && Number(raw) === 0) {
+      restored[key] = -1; // uncapped, new encoding
+      continue;
+    }
     // Drop values outside the field's known range or allowed set so a
     // hand-edited share URL can't push an invalid config into the API.
     if (typeof def === "boolean") {

@@ -1,10 +1,11 @@
-// Fetch wrappers for the simulation API. `levyDeductionCap: 0` on the
-// client means "uncapped" — the engine represents that as null.
+// Fetch wrappers for the simulation API. A NEGATIVE `levyDeductionCap` on
+// the client means "uncapped"; the engine represents that as null. Zero
+// means "the levy is not deductible at all" (NL), which is a real value.
 
 export function serializeForWire(cfg) {
   return {
     ...cfg,
-    levyDeductionCap: cfg.levyDeductionCap > 0 ? cfg.levyDeductionCap : null,
+    levyDeductionCap: cfg.levyDeductionCap >= 0 ? cfg.levyDeductionCap : null,
   };
 }
 

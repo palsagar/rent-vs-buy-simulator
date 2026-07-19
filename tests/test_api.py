@@ -247,3 +247,54 @@ class TestNonScalarFallThrough:
         # non-scalar, so no real field can reach the TypeError branch.
         config = make_config()
         assert config_from_dict(config_to_dict(config)) == config
+
+
+class TestLevyDeductionCapSentinel:
+    def test_zero_cap_means_not_deductible_not_uncapped(self):
+        # The NL levy is genuinely not deductible. Before the api.js
+        # sentinel moved off zero, this value was unreachable from the UI.
+        payload = {**config_to_dict(make_config()), "levyDeductionCap": 0.0}
+        config = config_from_dict(payload)
+        assert config.levy_deduction_cap == 0.0
+        assert config.levy_deduction_cap is not None
+
+    def test_null_cap_still_means_uncapped(self):
+        payload = {**config_to_dict(make_config()), "levyDeductionCap": None}
+        assert config_from_dict(payload).levy_deduction_cap is None
+
+    def test_zero_cap_suppresses_the_levy_deduction_entirely(self):
+        base = {**config_to_dict(make_config()), "propertyTaxRate": 1.2}
+        capped = config_from_dict({**base, "levyDeductionCap": 0.0})
+        uncapped = config_from_dict({**base, "levyDeductionCap": None})
+        assert (
+            calculate_scenarios(capped).total_tax_savings
+            < calculate_scenarios(uncapped).total_tax_savings
+        )
+
+
+class TestNewPrimitivesOnTheWire:
+    def test_negative_buyer_amount_round_trips(self):
+        payload = {
+            **config_to_dict(make_config()),
+            "closingCostBuyerAmount": -6900.0,
+        }
+        config = config_from_dict(payload)
+        assert config.closing_cost_buyer_amount == -6900.0
+        assert config_to_dict(config)["closingCostBuyerAmount"] == -6900.0
+
+    def test_non_boolean_occupier_flag_rejected(self):
+        payload = {**config_to_dict(make_config()), "levyPaidByOccupier": "yes"}
+        with pytest.raises(ValueError, match="levy_paid_by_occupier"):
+            config_from_dict(payload)
+
+    def test_all_six_primitives_serialize_with_camel_case_keys(self):
+        payload = config_to_dict(make_config())
+        for key in (
+            "annualPropertyLevy",
+            "levyPaidByOccupier",
+            "annualMaintenanceAmount",
+            "closingCostBuyerAmount",
+            "portfolioDeemedReturnPct",
+            "portfolioDragRatePct",
+        ):
+            assert key in payload
