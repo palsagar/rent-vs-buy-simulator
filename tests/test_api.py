@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from simulator.api import (
+    _validate_value,
     config_from_dict,
     config_to_dict,
     monte_carlo_payload,
@@ -232,3 +233,17 @@ def test_config_from_dict_rejects_out_of_range_growth_rate() -> None:
     payload = {**config_to_dict(make_config()), "equityGrowthAnnual": 1e6}
     with pytest.raises(ValueError, match="equity_growth_annual"):
         config_from_dict(payload)
+
+
+class TestNonScalarFallThrough:
+    def test_unsupported_annotation_raises(self):
+        # Every SimulationConfig field is scalar by design. A non-scalar
+        # field would previously arrive here and be returned unvalidated.
+        with pytest.raises(TypeError, match="unsupported field annotation"):
+            _validate_value("x", [1, 2], list[int])
+
+    def test_every_config_field_round_trips_through_the_codec(self):
+        # The invariant the guard protects: no SimulationConfig field is
+        # non-scalar, so no real field can reach the TypeError branch.
+        config = make_config()
+        assert config_from_dict(config_to_dict(config)) == config

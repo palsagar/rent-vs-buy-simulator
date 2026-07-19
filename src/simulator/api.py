@@ -53,6 +53,8 @@ def _validate_value(name: str, value: Any, annotation: Any) -> Any:  # noqa: C90
     ------
     ValueError
         If the value does not match the annotated type.
+    TypeError
+        If the annotation is not a supported scalar type.
 
     Examples
     --------
@@ -96,7 +98,10 @@ def _validate_value(name: str, value: Any, annotation: Any) -> Any:  # noqa: C90
             raise ValueError(f"{name} must be a string")
         return value
 
-    return value
+    # Every SimulationConfig field is scalar by design
+    # (docs/multi-region-spec.md 3 rejects list-shaped primitives). A
+    # non-scalar field would otherwise be returned unvalidated.
+    raise TypeError(f"{name}: unsupported field annotation {annotation!r}")
 
 
 def config_from_dict(payload: dict[str, Any]) -> SimulationConfig:
