@@ -362,3 +362,141 @@ class TestNetherlands:
         assert "rent" in notes
         assert "heffingsvrij" in notes  # the unmodelled box-3 exemption
         assert "2028" in notes  # the regime's known expiry date
+
+
+class TestUnitedKingdom:
+    @staticmethod
+    def _uk():
+        return next(r for r in list_regions() if r["id"] == "uk")
+
+    def test_sdlt_linear_identity_is_exact_at_the_preset_price(self):
+        # SDLT 2026/27 England & NI, standard single dwelling (gov.uk):
+        #   0% to 125,000 | 2% to 250,000 | 5% to 925,000 | 10% to 1.5m
+        # For P in (250,000, 925,000]:
+        #   SDLT(P) = 0.02*125,000 + 0.05*(P - 250,000) = 0.05P - 10,000
+        # Plus ~3,100 of price-invariant fees:  C(P) = 0.05P - 6,900
+        # At the England semi-detached price of 289,106:
+        #   0.05 * 289,106 - 6,900 = 7,555.30, of which SDLT = 4,455.30
+        primitives = self._uk()["taxPrimitives"]
+        total = (
+            289_106 * primitives["closingCostBuyerPct"] / 100
+            + primitives["closingCostBuyerAmount"]
+        )
+        assert abs(total - 7_555.30) < 1e-6
+        assert abs(total - 3_100.0 - 4_455.30) < 1e-6  # SDLT alone
+
+    def test_ftb_pays_fees_only(self):
+        # First-time-buyer relief takes SDLT to zero at this price.
+        region = self._uk()
+        overrides = region["firstTimeBuyerOverrides"]
+        total = (
+            289_106 * overrides["closingCostBuyerPct"] / 100
+            + overrides["closingCostBuyerAmount"]
+        )
+        assert abs(total - 3_100.0) < 1e-9
+
+    def test_council_tax_is_flat_and_occupier_borne(self):
+        # England average Band D 2026/27 = 2,392 (2,343 excl. parish
+        # precepts). Bands are fixed on 1 April 1991 values and band
+        # amounts are ninths of Band D (LGFA 1992 s.5). The resident is
+        # liable (LGFA 1992 s.6(2)), so the renter bears it too.
+        primitives = self._uk()["taxPrimitives"]
+        assert primitives["propertyTaxRate"] == 0.0
+        assert primitives["annualPropertyLevy"] == 2392.0
+        assert primitives["levyPaidByOccupier"] is True
+
+    def test_maintenance_is_observed_spend_not_a_percentage(self):
+        # ONS Family Spending FYE2025 puts England maintenance-and-repair
+        # at 634/yr across all households; scaled to ~65% owner-occupation,
+        # ~900/yr. 1.0% of 289,106 would be 2,891 -- an overstatement of
+        # 3.2x. This is a LOWER bound: the survey is recall-based and
+        # under-captures lumpy repairs.
+        primitives = self._uk()["taxPrimitives"]
+        assert primitives["annualMaintenancePct"] == 0.0
+        assert primitives["annualMaintenanceAmount"] == 900.0
+
+    def test_seller_cost_is_already_vat_inclusive(self):
+        # The 1.42% agent fee is VAT-INCLUSIVE; the Property Ombudsman has
+        # required VAT-inclusive quoting since October 2016. Do NOT add 20%.
+        assert self._uk()["taxPrimitives"]["closingCostSellerPct"] == 1.75
+
+    def test_sale_is_exempt_via_private_residence_relief(self):
+        assert self._uk()["taxPrimitives"]["saleCgRegime"] == "fully_exempt"
+
+    def test_no_interest_deduction_since_miras_withdrawal(self):
+        assert self._uk()["taxPrimitives"]["interestDeductionEnabled"] is False
+
+    def test_amortisation_term_is_25_not_the_fix(self):
+        # A 5yr fix on a 25-year amortisation. The 5 is the fix.
+        assert self._uk()["typical"]["mortgageTermYears"] == 25
+
+    def test_label_names_the_actual_jurisdiction(self):
+        # SDLT is England & NI only; Scotland uses LBTT and Wales LTT,
+        # with no FTB relief in Wales. A plain "United Kingdom" label would
+        # silently misprice ~16% of the population.
+        label = self._uk()["label"]
+        assert "England" in label and "NI" in label
+
+    def test_sdlt_divergences_above_the_linear_band_are_pinned(self):
+        # The two-parameter form is EXACT over 250k-925k and diverges
+        # outside it. These assert the MODEL's value and record the true
+        # one, so the known gaps cannot silently drift. They document the
+        # gap; they do not bless it.
+        primitives = self._uk()["taxPrimitives"]
+
+        def model(price):
+            return max(
+                price * primitives["closingCostBuyerPct"] / 100
+                + primitives["closingCostBuyerAmount"],
+                0.0,
+            )
+
+        # S18: above 925,000 the marginal rate steps to 10% then 12%,
+        # but the model's line stays at 5%.
+        assert abs(model(1_000_000) - 43_100.0) < 1e-6  # true 46,850 (-3,750)
+        assert abs(model(2_000_000) - 93_100.0) < 1e-6  # true 156,850 (-63,750, 41%)
+        # S6: under-charged across the whole 125k-250k band, clamped to
+        # zero below 138,000. Worst point 138,000: true 3,360.
+        assert model(138_000) == 0.0
+
+    def test_ftb_divergences_are_pinned(self):
+        # S19: FTB relief is 5% between 300,000 and 500,000, not 0%, and
+        # is withdrawn ENTIRELY above 500,000.
+        overrides = self._uk()["firstTimeBuyerOverrides"]
+
+        def model(price):
+            return max(
+                price * overrides["closingCostBuyerPct"] / 100
+                + overrides["closingCostBuyerAmount"],
+                0.0,
+            )
+
+        assert abs(model(400_000) - 3_100.0) < 1e-6  # true 8,100  (-5,000)
+        assert abs(model(450_000) - 3_100.0) < 1e-6  # true 10,600 (-7,500)
+        assert abs(model(500_000) - 3_100.0) < 1e-6  # true 13,100 (-10,000)
+        # S5, the sharpest bias in the change: above 500,000 an FTB owes
+        # the FULL charge. At 501,000 that is 15,050 SDLT + 3,100 fees =
+        # 18,150 against the model's 3,100 -- 15,050 understated.
+        assert abs(model(501_000) - 3_100.0) < 1e-6
+
+    def test_sharpest_known_biases_are_disclosed(self):
+        notes = " ".join(self._uk()["notes"])
+        assert "£500,000" in notes  # the FTB relief withdrawal cliff
+        assert "£925,000" in notes  # the SDLT band divergence above the line
+        assert "council tax" in notes.lower()  # the rent-exclusivity premise
+
+
+class TestAllRegionsShip:
+    def test_every_region_is_available(self):
+        # Phase 2 delivers FOUR new regions, not three. This test is what
+        # stops a bundle being quietly shipped disabled.
+        unavailable = [r["id"] for r in list_regions() if not r["available"]]
+        assert unavailable == [], f"not shipped: {unavailable}"
+
+    def test_all_five_regions_are_present(self):
+        assert {r["id"] for r in list_regions()} == {"us", "fr", "de", "nl", "uk"}
+
+    def test_no_bundle_has_a_null_data_block(self):
+        for region in list_regions():
+            assert region["typical"] is not None
+            assert region["taxPrimitives"] is not None

@@ -1,9 +1,17 @@
 """Region preset bundles (ADR-0007): trustworthy defaults per market.
 
-v1 ships the US bundle, carried over from the app's long-standing
-verified defaults. FR/DE/NL/UK are declared but unavailable until the
-redesign spec §7 research completes — shipped values must be
-source-verified, never guessed.
+Five bundles ship: US, France (Lyon), Germany (Köln), Netherlands and
+the United Kingdom (England & NI). Countries are data, not code — no
+per-country branch exists in the engine; each bundle expresses its
+regime through the shared scalar primitives on ``SimulationConfig``.
+
+Every value is source-verified, never guessed, and each one's
+justification is pinned by a fixture in ``tests/test_regions.py`` with
+its citation. Values that are derived rather than primary-sourced, and
+every known divergence between a bundle and the real statute, carry a
+caveat in that bundle's ``notes`` — rendered in the UI. See
+``docs/multi-region-spec.md`` §8 for the full list of known gaps and
+their bias directions.
 """
 
 from __future__ import annotations
@@ -241,21 +249,80 @@ REGIONS: list[dict[str, Any]] = [
             "Portfolios are modelled as plain taxable accounts (ADR-0009).",
         ],
     },
-    *[
-        {
-            "id": region_id,
-            "label": label,
-            "available": False,
-            "currencySymbol": symbol,
-            "typical": None,
-            "taxPrimitives": None,
-            "firstTimeBuyerOverrides": {},
-            "notes": [],
-        }
-        for region_id, label, symbol in [
-            ("uk", "United Kingdom", "£"),
-        ]
-    ],
+    {
+        "id": "uk",
+        "label": "United Kingdom (England & NI)",
+        "available": True,
+        "currencySymbol": "£",
+        "typical": {
+            # H — HM Land Registry UKHPI, England semi-detached, Apr 2026
+            "propertyPrice": 289106,
+            "monthlyRent": 1431,  # H — ONS PIPR, England semi-detached, May 2026
+            "mortgageRateAnnual": 4.65,  # M — 5yr fix, 75% LTV
+            "mortgageTermYears": 25,  # amortisation; the 5 is the fix
+        },
+        "taxPrimitives": {
+            "closingCostBuyerPct": 5.0,  # H — SDLT marginal slice 250k-925k
+            # H — SDLT nil-rate intercept (-10,000) + ~3,100 fixed fees
+            "closingCostBuyerAmount": -6900.0,
+            "closingCostSellerPct": 1.75,  # H — agent 1.42% VAT-INCLUSIVE + legal
+            "propertyTaxRate": 0.0,
+            # H — England avg Band D 2026/27 (2,343 excl. parish precepts)
+            "annualPropertyLevy": 2392.0,
+            "levyPaidByOccupier": True,  # H — LGFA 1992 s.6(2), resident liable
+            "annualHomeInsurance": 310.0,  # M
+            "annualMaintenancePct": 0.0,
+            # M — ONS Family Spending FYE2025, LOWER bound
+            "annualMaintenanceAmount": 900.0,
+            "interestDeductionEnabled": False,  # H — MIRAS withdrawn 2000
+            "marginalTaxRatePct": 0.0,
+            "levyDeductionCap": 0.0,
+            "saleCgRegime": "fully_exempt",  # H — Private Residence Relief
+            "saleCgExemptAmount": 0.0,
+            "saleCgExemptAfterYears": 0,
+            "saleCgRatePct": 24.0,  # inert; the residential rate absent PRR
+            "portfolioCgRatePct": 24.0,  # H — unwrapped higher rate (18% basic)
+            "portfolioDeemedReturnPct": 0.0,
+            "portfolioDragRatePct": 0.0,
+        },
+        "firstTimeBuyerOverrides": {
+            "closingCostBuyerPct": 0.0,
+            "closingCostBuyerAmount": 3100.0,
+        },
+        "notes": [
+            "First-time-buyer relief is withdrawn entirely above £500,000 "
+            '— gov.uk: "If the price is over £500,000, you cannot claim '
+            'the relief." At £501,000 the true total is £18,150 against '
+            "this model's £3,100 — £15,050 understated. This is the "
+            "sharpest known bias in the tool; switch the first-time-buyer "
+            "pill off above £500k.",
+            "First-time-buyer SDLT is also under-charged between £300,000 "
+            "and £500,000, where relief is 5% rather than 0%: £5,000 low "
+            "at £400k, £7,500 at £450k, £10,000 at £500k.",
+            "Above £925,000 the SDLT marginal rate steps to 10% then 12%, "
+            "but this model's line stays at 5% — £3,750 low at £1M, and "
+            "£63,750 (41%) low at the £2M slider ceiling.",
+            "SDLT applies to England & Northern Ireland only. Scotland "
+            "uses LBTT and Wales uses LTT, with different bands and no "
+            "first-time-buyer relief in Wales.",
+            "Rents are modelled as exclusive of council tax. This premise "
+            "is unverifiable — ONS never states it, and PIPR measures "
+            "achieved rather than advertised rents. It shifts the displayed "
+            "monthly costs but cannot change the verdict.",
+            "Maintenance (£900/yr) is a lower bound: the ONS survey is "
+            "recall-based and under-captures lumpy repairs.",
+            "Buyer costs are under-charged across the whole £125,000–"
+            "£250,000 band and clamp at zero below £138,000, where the "
+            "true cost is £3,360.",
+            "The additional-dwelling (+5pp) and non-resident (+2pp) SDLT "
+            "surcharges are not modelled; this tool prices a single "
+            "owner-occupied primary residence.",
+            "The mortgage rate is held fixed for the full 25 years; "
+            "reversion from the 5yr fix to SVR (currently ~195bp higher) "
+            "is not modelled.",
+            "Portfolios are modelled as plain taxable accounts — no ISA (ADR-0009).",
+        ],
+    },
 ]
 
 _BY_ID: dict[str, dict[str, Any]] = {region["id"]: region for region in REGIONS}
