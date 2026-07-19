@@ -20,13 +20,18 @@ REGIONS: list[dict[str, Any]] = [
             "propertyPrice": 500000,
             "monthlyRent": 2400,
             "mortgageRateAnnual": 6.5,
+            "mortgageTermYears": 30,
         },
         "taxPrimitives": {
             "closingCostBuyerPct": 3.0,
+            "closingCostBuyerAmount": 0.0,
             "closingCostSellerPct": 6.0,
             "propertyTaxRate": 1.2,
+            "annualPropertyLevy": 0.0,
+            "levyPaidByOccupier": False,
             "annualHomeInsurance": 1200.0,
             "annualMaintenancePct": 1.0,
+            "annualMaintenanceAmount": 0.0,
             "interestDeductionEnabled": True,
             "marginalTaxRatePct": 24.0,
             "levyDeductionCap": 10000.0,
@@ -35,7 +40,15 @@ REGIONS: list[dict[str, Any]] = [
             "saleCgExemptAfterYears": 10,
             "saleCgRatePct": 15.0,
             "portfolioCgRatePct": 15.0,
+            "portfolioDeemedReturnPct": 0.0,
+            "portfolioDragRatePct": 0.0,
         },
+        "firstTimeBuyerOverrides": {},
+        "notes": [
+            "Portfolios are modelled as plain taxable brokerage accounts. "
+            "401(k)/IRA sheltering is not modelled, which understates the "
+            "renter's after-tax returns (ADR-0009).",
+        ],
     },
     *[
         {
@@ -45,6 +58,8 @@ REGIONS: list[dict[str, Any]] = [
             "currencySymbol": symbol,
             "typical": None,
             "taxPrimitives": None,
+            "firstTimeBuyerOverrides": {},
+            "notes": [],
         }
         for region_id, label, symbol in [
             ("fr", "France", "€"),

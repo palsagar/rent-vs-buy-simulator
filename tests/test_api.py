@@ -147,7 +147,7 @@ def test_monte_carlo_payload_shape_and_determinism() -> None:
     assert json.loads(json.dumps(first)) == first
 
 
-def test_regions_us_available_others_disabled() -> None:
+def test_region_availability_matches_data_presence() -> None:
     regions = {r["id"]: r for r in list_regions()}
     assert set(regions) == {"us", "fr", "de", "nl", "uk"}
 
@@ -159,10 +159,16 @@ def test_regions_us_available_others_disabled() -> None:
     assert us["taxPrimitives"]["marginalTaxRatePct"] == 24.0
     assert us["taxPrimitives"]["saleCgRegime"] == "exempt_amount"
 
+    # Availability and data presence must agree in both directions: an
+    # available region without data would crash applyPreset, and an
+    # unavailable region carrying data is a bundle someone forgot to
+    # ship. Phase 2 flips fr/de/nl/uk to available; this invariant holds
+    # throughout, which is why it replaced a hard-coded region list.
     for rid in ("fr", "de", "nl", "uk"):
-        assert regions[rid]["available"] is False
-        assert regions[rid]["typical"] is None
-        assert regions[rid]["taxPrimitives"] is None
+        region = regions[rid]
+        has_data = region["typical"] is not None
+        assert region["taxPrimitives"] is not None if has_data else True
+        assert region["available"] is has_data
 
 
 def test_get_region_unknown_raises_key_error() -> None:
