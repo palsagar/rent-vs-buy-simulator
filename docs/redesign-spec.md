@@ -86,6 +86,8 @@ Ships as FastAPI + static ES-module frontend with Plotly.js (ADR-0008, which sup
 
 Per region — verify with citable sources, encode as data + tests: typical buyer/seller transaction %, levy basis, deductibility rules (NL), CG-at-exit rule (DE 10-year rule, FR/UK primary-residence exemption, US §121 + SALT), portfolio CG rate (DE ~26.4%, FR 30% PFU, UK CGT, US LTCG), plus credible default price/rent/rate bundles.
 
+**Status: complete (2026-07).** All five regions ship with source-verified values. The research, its corrections, and the per-region confidence ratings are recorded in `docs/multi-region-spec.md`; the shipped values carry their citations in `tests/test_regions.py`, so a wrong number fails a build rather than decaying in prose. Known gaps, simplifications and bias directions are enumerated in that spec's §8 and surfaced to users in each region's `notes`.
+
 ## 8. Non-goals
 
 Regions beyond the five · FX conversion · dark theme · PDF export · server-side storage/accounts · client-side rewrite (deferred) · changes to PyPI/CLI packaging.

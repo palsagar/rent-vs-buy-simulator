@@ -36,11 +36,16 @@ The rule that makes the two strategies comparable: both spend the same total cas
 _Avoid_: Monthly savings (the old mortgage−rent-only formula)
 
 **Region**:
-A named bundle of trustworthy defaults — currency formatting plus tax-primitive and cost values — for one housing market. v1 ships US, France, Germany, Netherlands, UK. Regions configure the engine; the engine contains no per-country logic.
+A named bundle of trustworthy defaults — currency formatting plus tax-primitive and cost values — for one housing market. Ships US, France (Lyon), Germany (Köln), Netherlands, United Kingdom (England & NI). Regions configure the engine; the engine contains no per-country logic.
 _Avoid_: Country mode, locale
 
 **Tax primitives**:
-The five neutral parameters through which every region's rules are expressed: buyer transaction costs, seller transaction costs, annual property levy, mortgage-interest deductibility (on/off + rate), and capital-gains treatment at each exit (exemption amount, exempt-after-N-years, or fully exempt; plus a portfolio gains rate).
+The neutral, scalar parameters through which every region's rules are expressed: buyer transaction costs (a percentage of price **plus a fixed amount, which may be negative where a transfer tax has a zero-rate band**), seller transaction costs, annual property levy (**ad-valorem, plus a flat cost-indexed amount, plus a flag for whether the occupier rather than the owner bears it**), maintenance (**a percentage of value or a flat cost-indexed amount, whichever unit the region's own evidence is collected in**), mortgage-interest deductibility (on/off + rate + a cap where 0 means "not deductible" and None means uncapped), capital-gains treatment at each exit (exemption amount, exempt-after-N-years, or fully exempt; plus a portfolio gains rate), and **annual portfolio drag** — a tax on portfolio *value* rather than on realised gains, applied symmetrically to both strategies, expressed as a deemed return plus a rate and charged on the **lesser of that deemed return and the actual return, floored at nil** (NL box 3).
+_Avoid_: per-country logic, effective-rate fudges
+
+**Portfolio tax wrappers**:
+Deliberately out of scope in every region — ISA, PEA, Sparer-Pauschbetrag, heffingsvrij vermogen and 401(k)/IRA are not modelled, so every portfolio is a plain taxable brokerage account (ADR-0009). This understates after-tax returns for wrapper users and biases every region toward buying; it is disclosed in each region's `notes`.
+_Avoid_: treating a sheltered rate as a region default
 
 ## Example dialogue
 
