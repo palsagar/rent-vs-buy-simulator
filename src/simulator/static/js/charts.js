@@ -32,8 +32,7 @@ function baseLayout(xTitle) {
 // layout's currency prefix has to come off the Y axis. It matters because
 // Plotly ignores a tickformat on a category axis but honours a tickprefix
 // -- so the prefix would label every parameter name "<symbol>Rent
-// Inflation". Keep this comment free of a literal currency character:
-// the task's exit check greps for exactly one remaining occurrence.
+// Inflation".
 function clearCurrencyFromYAxis(layout) {
   delete layout.yaxis.tickprefix;
   delete layout.yaxis.tickformat;
@@ -80,8 +79,9 @@ function outcomesDisparate(buyY, rentY) {
   return Math.max(a, b) / Math.max(Math.min(a, b), 1) >= SCALE_DISPARITY;
 }
 
-// Compact tick label (£1k / £30k / £1.0M). Like fmtCompact but compacts
-// down to 1k so a symlog axis never mixes "1,000" with "10k".
+// Compact tick label (1k / 30k / 1.0M in the active currency). Like
+// fmtCompact but compacts down to 1k so a symlog axis never mixes
+// "1,000" with "10k".
 function fmtTick(v) {
   const sign = v < 0 ? "-" : "";
   const cur = getCurrencySymbol();

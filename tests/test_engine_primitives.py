@@ -176,9 +176,9 @@ class TestOccupierBorneLevy:
         both arms and cancels in the difference.
 
         interest_deduction_enabled is set EXPLICITLY, not inherited: the
-        equivalence holds only while the levy does not feed the deduction
-        block at engine.py:226, which adds the yearly levy to the
-        deductible base. With deduction on, the levy config accrues
+        equivalence holds only while the levy does not feed the
+        cum_tax_savings block in _net_value_series, which adds the
+        yearly levy to the deductible base. With deduction on, the levy config accrues
         cum_tax_savings the zero-levy config does not and net_buy
         diverges -- see test_equivalence_requires_a_non_deductible_levy.
         UK and DE both ship interestDeductionEnabled False, so the

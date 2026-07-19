@@ -203,11 +203,14 @@ class SimulationConfig:
                 f"(got {self.mortgage_term_years})."
             )
 
-        # Validate property_price
-        if self.property_price <= 0:
+        # Validate property_price. The upper cap is a generous sanity
+        # bound, not a market limit: an unbounded price overflows to inf
+        # through 30 years of appreciation, and the resulting NaN makes
+        # api.py report a confident "rent" verdict (NaN > 0 is False).
+        if not (0 < self.property_price <= 100_000_000):
             raise ValueError(
-                f"property_price must be positive (got {self.property_price}). "
-                "Please specify a property price greater than $0."
+                f"property_price must be between 0 and 100000000 "
+                f"(got {self.property_price})."
             )
 
         # Validate down_payment_pct (must be between 5% and 100%)
@@ -249,11 +252,11 @@ class SimulationConfig:
                 f"(got {self.equity_growth_annual})."
             )
 
-        # Validate monthly_rent
-        if self.monthly_rent <= 0:
+        # Validate monthly_rent (same overflow-to-NaN guard as
+        # property_price; rent compounds for the whole horizon).
+        if not (0 < self.monthly_rent <= 1_000_000):
             raise ValueError(
-                f"monthly_rent must be positive (got {self.monthly_rent}). "
-                "Please specify a monthly rent greater than $0."
+                f"monthly_rent must be between 0 and 1000000 (got {self.monthly_rent})."
             )
 
         # Validate rent_inflation_rate (must be between 0 and 1, i.e., 0-100%)
@@ -341,10 +344,12 @@ class SimulationConfig:
                 "For no tax benefits, use 0."
             )
 
-        # Validate levy_deduction_cap (None means uncapped; else non-negative)
-        if self.levy_deduction_cap is not None and self.levy_deduction_cap < 0:
+        # Validate levy_deduction_cap (None means uncapped; else bounded)
+        if self.levy_deduction_cap is not None and not (
+            0 <= self.levy_deduction_cap <= 10_000_000
+        ):
             raise ValueError(
-                "levy_deduction_cap cannot be negative "
+                "levy_deduction_cap must be between 0 and 10000000 "
                 f"(got {self.levy_deduction_cap}). Use None for uncapped."
             )
 
@@ -359,17 +364,19 @@ class SimulationConfig:
                 f"(got {self.sale_cg_regime!r})."
             )
 
-        # Validate sale_cg_exempt_amount (must be non-negative)
-        if self.sale_cg_exempt_amount < 0:
+        # Validate sale_cg_exempt_amount (bounded, same NaN guard)
+        if not (0 <= self.sale_cg_exempt_amount <= 100_000_000):
             raise ValueError(
-                "sale_cg_exempt_amount cannot be negative "
+                "sale_cg_exempt_amount must be between 0 and 100000000 "
                 f"(got {self.sale_cg_exempt_amount})."
             )
 
-        # Validate sale_cg_exempt_after_years (must be non-negative)
-        if self.sale_cg_exempt_after_years < 0:
+        # Validate sale_cg_exempt_after_years. Capped at the horizon
+        # ceiling: a longer holding period than any simulation can run
+        # is indistinguishable from "never exempt".
+        if not (0 <= self.sale_cg_exempt_after_years <= 100):
             raise ValueError(
-                "sale_cg_exempt_after_years cannot be negative "
+                "sale_cg_exempt_after_years must be between 0 and 100 "
                 f"(got {self.sale_cg_exempt_after_years})."
             )
 

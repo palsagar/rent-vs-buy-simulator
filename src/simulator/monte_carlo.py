@@ -16,6 +16,11 @@ from .models import (
     SimulationConfig,
 )
 
+# Lower bound for the tornado's low perturbation on positive-only fields.
+# The proportional levy delta is checked against this same value, so the
+# guard and the clamp cannot drift apart.
+_LOW_PERTURBATION_FLOOR = 0.001
+
 
 def _generate_annual_draws(
     base_config: SimulationConfig,
@@ -284,9 +289,15 @@ def _compute_sensitivity(  # noqa: C901
         # factor is calibrated so the US base of 1.2 keeps its current
         # delta of exactly 0.5.
         if field == "property_tax_rate":
-            if base_val == 0:
-                continue
             delta = base_val * (0.5 / 1.2)
+            # Skip whenever the low side would hit the 0.001 floor below.
+            # That covers the flat-levy regions (base 0) and also the
+            # near-zero band: a floored low side represents a HIGHER rate
+            # than the base, and below base 0.000706 it exceeds the high
+            # side outright, rendering the bar inverted. Reachable from
+            # the UI -- fields.js ships step 0.0005 from a min of 0.
+            if base_val - delta < _LOW_PERTURBATION_FLOOR:
+                continue
 
         # Low perturbation (subtract delta). Growth rates may legitimately
         # go negative; floor them just above -100% so the monthly compounding
@@ -294,7 +305,7 @@ def _compute_sensitivity(  # noqa: C901
         if field in ("property_appreciation_annual", "equity_growth_annual"):
             low_override = max(base_val - delta, -99.0)
         else:
-            low_override = max(base_val - delta, 0.001)
+            low_override = max(base_val - delta, _LOW_PERTURBATION_FLOOR)
         # Clamp down_payment_pct to [5, 100]
         if field == "down_payment_pct":
             low_override = max(low_override, 5.0)

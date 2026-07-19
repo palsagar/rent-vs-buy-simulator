@@ -48,8 +48,8 @@ GOLDENS = {
 
 # The 8 tornado bars, in rank order, captured at the same commit. T9
 # changes how the levy delta is computed; these pin that the US chart
-# does not move. Ordering is by descending impact range
-# (monte_carlo.py:314), so a reordering is itself a regression.
+# does not move. _compute_sensitivity orders by descending impact
+# range, so a reordering is itself a regression.
 TORNADO_NAMES = [
     "Equity Growth",
     "Property Appreciation",

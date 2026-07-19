@@ -139,20 +139,43 @@ class TestTornadoLevyDelta:
         # unchanged bit for bit and no ulp allowance is warranted.
         # Asserted so that if a future change does introduce drift,
         # someone decides deliberately rather than inheriting a silent
-        # allowance. See the plan's ambiguity A7.
+        # allowance. The test above covers the same goldens at a
+        # tolerance; this one is deliberately stricter.
         _, low, high, _ = _compute_sensitivity(SimulationConfig(**US_PRESET))
         assert list(low) == TORNADO_LOW
         assert list(high) == TORNADO_HIGH
 
     def test_zero_levy_region_drops_the_bar(self):
         # UK/DE/FR ship propertyTaxRate 0.0. A proportional delta at a
-        # zero base is itself zero, and monte_carlo.py:285 would then
-        # floor the low side at 0.001 while the high side stayed 0 --
-        # producing a tiny INVERTED bar rather than no bar. Hence the
-        # skip is kept alongside the proportional delta.
+        # zero base is itself zero, and _compute_sensitivity would then
+        # floor the low side at _LOW_PERTURBATION_FLOOR while the high
+        # side stayed 0 -- producing a tiny INVERTED bar rather than no
+        # bar. Hence the skip is kept alongside the proportional delta.
+        # The guard covers the whole near-zero band, not just an exact
+        # 0.0; see test_near_zero_levy_does_not_invert_the_bar.
         names, _, _, _ = _compute_sensitivity(make_config(property_tax_rate=0.0))
         assert "Property Tax Rate" not in names
         assert len(names) == 7
+
+    def test_near_zero_levy_does_not_invert_the_bar(self):
+        # fields.js ships propertyTaxRate with step 0.0005 from a min of
+        # 0, so 0.0005 is one click away. The proportional delta there is
+        # 0.000208, putting the low side below the 0.001 floor: clamped,
+        # it represents a HIGHER rate than the high side and the bar
+        # renders backwards. Every base whose low side would be floored
+        # is skipped, so no reachable slider value produces a bar that
+        # contradicts its own direction.
+        for rate in (0.0005, 0.001, 0.0015):
+            names, _, _, _ = _compute_sensitivity(make_config(property_tax_rate=rate))
+            assert "Property Tax Rate" not in names, (
+                f"base {rate} kept a bar whose low side is floor-clamped"
+            )
+
+        # Just above the band the bar returns, and it points the right
+        # way: a higher levy must lower Buy - Rent.
+        names, low, high, _ = _compute_sensitivity(make_config(property_tax_rate=0.01))
+        i = names.index("Property Tax Rate")
+        assert high[i] < low[i]
 
     def test_nonzero_levy_is_perturbed_proportionally_not_absolutely(self):
         # NL's base is 0.2815. An absolute +-0.5 would swing it -178%..

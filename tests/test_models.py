@@ -1,5 +1,6 @@
 """Tests for SimulationConfig validation and defaults."""
 
+import math
 import sys
 from pathlib import Path
 
@@ -7,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import pytest
 
+from simulator.engine import calculate_scenarios
 from simulator.models import MonteCarloConfig, SimulationConfig
 
 
@@ -160,3 +162,56 @@ class TestSiblingCostFieldValidation:
     def test_shipped_region_values_remain_constructible(self):
         # Germany ships 12.07% buyer costs; the bound must not exclude it.
         assert make_config(closing_cost_buyer_pct=12.07) is not None
+
+
+class TestOverflowToNanBounds:
+    """Fields that had a lower bound but no upper one.
+
+    Left open, each overflows to inf across the horizon. The resulting
+    NaN difference then reads as a confident verdict, because every NaN
+    comparison is False and api.py's ``winner`` is a bare ``> 0``.
+    """
+
+    def test_unbounded_property_price_rejected(self):
+        with pytest.raises(ValueError, match="property_price"):
+            make_config(property_price=1e308)
+
+    def test_unbounded_monthly_rent_rejected(self):
+        with pytest.raises(ValueError, match="monthly_rent"):
+            make_config(monthly_rent=1e308)
+
+    def test_unbounded_sale_cg_exempt_amount_rejected(self):
+        with pytest.raises(ValueError, match="sale_cg_exempt_amount"):
+            make_config(sale_cg_exempt_amount=1e300)
+
+    def test_unbounded_levy_deduction_cap_rejected(self):
+        with pytest.raises(ValueError, match="levy_deduction_cap"):
+            make_config(levy_deduction_cap=1e300)
+
+    def test_unbounded_sale_cg_exempt_after_years_rejected(self):
+        with pytest.raises(ValueError, match="sale_cg_exempt_after_years"):
+            make_config(sale_cg_exempt_after_years=10**12)
+
+    def test_no_reachable_config_yields_a_nan_verdict(self):
+        # The bound exists to keep the verdict finite, so assert the
+        # property rather than the bound: at every ceiling at once the
+        # difference must still be a real number.
+        results = calculate_scenarios(
+            make_config(
+                property_price=100_000_000,
+                monthly_rent=1_000_000,
+                sale_cg_exempt_amount=100_000_000,
+                sale_cg_exempt_after_years=100,
+                horizon_years=100,
+            )
+        )
+        assert math.isfinite(results.final_difference)
+
+    def test_slider_ceilings_remain_constructible(self):
+        # fields.js caps these well below the server bound; none of the
+        # reachable UI values may be rejected.
+        assert make_config(property_price=2_000_000) is not None
+        assert make_config(monthly_rent=10_000) is not None
+        assert make_config(sale_cg_exempt_amount=1_000_000) is not None
+        assert make_config(levy_deduction_cap=50_000) is not None
+        assert make_config(sale_cg_exempt_after_years=30) is not None

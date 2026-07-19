@@ -117,7 +117,11 @@ export function readUrl() {
     if (!params.has(key)) continue;
     const raw = params.get(key);
     if (isLegacy && key === "levyDeductionCap" && Number(raw) === 0) {
-      restored[key] = -1; // uncapped, new encoding
+      // -1000, not -1: the slider is min -1000 / step 1000, so -1 snaps
+      // the thumb to 0 -- which under v2 means "not deductible", the
+      // exact opposite of the uncapped value being restored. -1000 is
+      // on the grid, so the thumb agrees with the config.
+      restored[key] = -1000; // uncapped, new encoding
       continue;
     }
     // Drop values outside the field's known range or allowed set so a

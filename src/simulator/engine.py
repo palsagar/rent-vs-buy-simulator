@@ -233,9 +233,10 @@ def _net_value_series(
     # NL box 3 (Wet IB 2001 art. 5.25): taxed on min(deemed, actual)
     # return, floored at nil. Both operands are proportional to wealth,
     # so the min reduces to a rate comparison and the closed form
-    # survives. Summed, not compounded: engine.py:402 and
-    # monte_carlo.py:187 both feed arithmetic annual/100/12, so twelve
-    # of them sum back to the annual draw exactly.
+    # survives. Summed, not compounded: both callers -- this module's
+    # calculate_scenarios and monte_carlo._simulate_single_path -- feed
+    # an arithmetic annual/100/12, so twelve of them sum back to the
+    # annual draw exactly.
     annual_return = eq_rate_monthly.reshape(config.horizon_years, 12).sum(axis=1)
     deemed = config.portfolio_deemed_return_pct / 100
     taxable = np.clip(np.minimum(deemed, annual_return), 0.0, None)
