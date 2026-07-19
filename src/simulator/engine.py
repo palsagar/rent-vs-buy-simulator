@@ -113,8 +113,8 @@ def _net_value_series(
         ``outflow_rent``, ``cash_committed``, ``cum_tax_savings``,
         ``net_buy``, ``net_rent``, plus underscore-prefixed internals
         (``_interest``, ``_levy``, ``_insurance``, ``_maintenance``,
-        ``_basis_rent``, ``_basis_buy``, ``_monthly_payment``) consumed
-        by the tax layer.
+        ``_basis_rent``, ``_basis_buy``, ``_monthly_payment``,
+        ``_buyer_closing``) consumed by the tax layer.
 
     Examples
     --------
@@ -149,7 +149,15 @@ def _net_value_series(
     t_arr = np.arange(h + 1)
 
     down_payment = config.property_price * (config.down_payment_pct / 100)
-    buyer_closing = config.property_price * (config.closing_cost_buyer_pct / 100)
+    # A transfer tax with a zero-rate band has a negative intercept (UK
+    # SDLT ships -6,900), so the amount may be negative. Clamp the
+    # aggregate, not the term: the UK pair goes negative below a price of
+    # 138,000 and the slider floor is 50,000.
+    buyer_closing = max(
+        config.property_price * (config.closing_cost_buyer_pct / 100)
+        + config.closing_cost_buyer_amount,
+        0.0,
+    )
     initial_outlay = down_payment + buyer_closing
     loan = config.property_price - down_payment
     r = (config.mortgage_rate_annual / 100) / 12
@@ -178,14 +186,24 @@ def _net_value_series(
     interest[1:] = balance[:-1] * r
 
     # --- Ongoing ownership costs paid during month m (prior-month value base)
+    # Hoisted: three cost lines are now absolute amounts sharing one index.
+    cost_index = (1 + config.cost_inflation_rate / 12) ** (t_arr[1:] - 1)
+
+    # No new region's levy base tracks market prices (FR valeur locative
+    # cadastrale, DE Grundsteuerwert, UK 1991 bands), so the flat component
+    # is cost-indexed rather than tied to the appreciating home value.
     levy = np.zeros(h + 1)
-    levy[1:] = home_value[:-1] * (config.property_tax_rate / 100) / 12
+    levy[1:] = (
+        home_value[:-1] * (config.property_tax_rate / 100) / 12
+        + (config.annual_property_levy / 12) * cost_index
+    )
     insurance = np.zeros(h + 1)
-    insurance[1:] = (config.annual_home_insurance / 12) * (
-        1 + config.cost_inflation_rate / 12
-    ) ** (t_arr[1:] - 1)
+    insurance[1:] = (config.annual_home_insurance / 12) * cost_index
     maintenance = np.zeros(h + 1)
-    maintenance[1:] = home_value[:-1] * (config.annual_maintenance_pct / 100) / 12
+    maintenance[1:] = (
+        home_value[:-1] * (config.annual_maintenance_pct / 100) / 12
+        + (config.annual_maintenance_amount / 12) * cost_index
+    )
 
     housing_cost_buy = payment + levy + insurance + maintenance
 
@@ -196,13 +214,34 @@ def _net_value_series(
     housing_cost_rent = np.zeros(h + 1)
     housing_cost_rent[1:] = rent_level[:-1]
 
+    # Occupier-borne levies (UK council tax; DE umlagefaehige Grundsteuer)
+    # are owed by whoever lives there, so the renter bears them too.
+    # Charging the levy to BOTH arms leaves the Verdict unchanged against
+    # charging it to neither: it shifts both by the same amount and
+    # cancels in the difference. (It is NOT invariant to toggling this
+    # flag at a fixed levy -- that moves the cost from one arm to two.)
+    # The headline monthly costs and the outflow chart do move.
+    if config.levy_paid_by_occupier:
+        housing_cost_rent = housing_cost_rent + levy
+
     # --- Cash-flow matching: cheaper side invests the difference
     surplus = housing_cost_buy - housing_cost_rent
     contrib_rent = np.maximum(surplus, 0.0)
     contrib_buy = np.maximum(-surplus, 0.0)
 
     # Portfolio value with varying growth: V[t] = G[t]*(V0 + sum c[m]/G[m])
-    eq_growth = np.concatenate([[1.0], np.cumprod(1 + eq_rate_monthly)])
+    # NL box 3 (Wet IB 2001 art. 5.25): taxed on min(deemed, actual)
+    # return, floored at nil. Both operands are proportional to wealth,
+    # so the min reduces to a rate comparison and the closed form
+    # survives. Summed, not compounded: both callers -- this module's
+    # calculate_scenarios and monte_carlo._simulate_single_path -- feed
+    # an arithmetic annual/100/12, so twelve of them sum back to the
+    # annual draw exactly.
+    annual_return = eq_rate_monthly.reshape(config.horizon_years, 12).sum(axis=1)
+    deemed = config.portfolio_deemed_return_pct / 100
+    taxable = np.clip(np.minimum(deemed, annual_return), 0.0, None)
+    drag_monthly = np.repeat(taxable * (config.portfolio_drag_rate_pct / 100) / 12, 12)
+    eq_growth = np.concatenate([[1.0], np.cumprod(1 + eq_rate_monthly - drag_monthly)])
     rent_portfolio = eq_growth * (initial_outlay + np.cumsum(contrib_rent / eq_growth))
     buy_portfolio = eq_growth * np.cumsum(contrib_buy / eq_growth)
     basis_rent = initial_outlay + np.cumsum(contrib_rent)
@@ -283,6 +322,7 @@ def _net_value_series(
         "_basis_rent": basis_rent,
         "_basis_buy": basis_buy,
         "_monthly_payment": np.array([pmt]),
+        "_buyer_closing": np.array([buyer_closing]),
     }
 
 
@@ -431,8 +471,7 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
         monthly_mortgage_payment=float(series["_monthly_payment"][0]),
         monthly_cost_buy_year1=float(np.mean(series["housing_cost_buy"][1:13])),
         monthly_cost_rent_year1=float(np.mean(series["housing_cost_rent"][1:13])),
-        total_closing_costs_buyer=config.property_price
-        * (config.closing_cost_buyer_pct / 100),
+        total_closing_costs_buyer=float(series["_buyer_closing"][0]),
         total_closing_costs_seller=float(
             series["home_value"][-1] * (config.closing_cost_seller_pct / 100)
         ),

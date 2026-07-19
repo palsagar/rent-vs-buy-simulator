@@ -1,5 +1,6 @@
 """Tests for SimulationConfig validation and defaults."""
 
+import math
 import sys
 from pathlib import Path
 
@@ -7,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import pytest
 
+from simulator.engine import calculate_scenarios
 from simulator.models import MonteCarloConfig, SimulationConfig
 
 
@@ -68,3 +70,148 @@ class TestMonteCarloDefaults:
         assert mc.rent_inflation_std == 1.5
         assert mc.appreciation_equity_correlation == 0.3
         assert mc.n_simulations == 500
+
+
+class TestMultiRegionPrimitiveValidation:
+    def test_new_fields_default_to_inert_values(self):
+        config = make_config()
+        assert config.annual_property_levy == 0.0
+        assert config.levy_paid_by_occupier is False
+        assert config.annual_maintenance_amount == 0.0
+        assert config.closing_cost_buyer_amount == 0.0
+        assert config.portfolio_deemed_return_pct == 0.0
+        assert config.portfolio_drag_rate_pct == 0.0
+
+    def test_negative_annual_property_levy_rejected(self):
+        with pytest.raises(ValueError, match="annual_property_levy"):
+            make_config(annual_property_levy=-1.0)
+
+    def test_annual_property_levy_upper_bound(self):
+        with pytest.raises(ValueError, match="annual_property_levy"):
+            make_config(annual_property_levy=100_001.0)
+
+    def test_negative_annual_maintenance_amount_rejected(self):
+        with pytest.raises(ValueError, match="annual_maintenance_amount"):
+            make_config(annual_maintenance_amount=-1.0)
+
+    def test_closing_cost_buyer_amount_permits_negative(self):
+        # The UK SDLT nil-rate band gives the buyer cost line a negative
+        # intercept (-6,900). A >= 0 check would make the UK bundle
+        # unconstructible -- see docs/multi-region-spec.md P4.
+        config = make_config(closing_cost_buyer_amount=-6900.0)
+        assert config.closing_cost_buyer_amount == -6900.0
+
+    def test_closing_cost_buyer_amount_bounded_both_sides(self):
+        with pytest.raises(ValueError, match="closing_cost_buyer_amount"):
+            make_config(closing_cost_buyer_amount=-100_001.0)
+        with pytest.raises(ValueError, match="closing_cost_buyer_amount"):
+            make_config(closing_cost_buyer_amount=100_001.0)
+
+    def test_portfolio_deemed_return_pct_bounded(self):
+        with pytest.raises(ValueError, match="portfolio_deemed_return_pct"):
+            make_config(portfolio_deemed_return_pct=-0.1)
+        with pytest.raises(ValueError, match="portfolio_deemed_return_pct"):
+            make_config(portfolio_deemed_return_pct=100.1)
+
+    def test_portfolio_drag_rate_pct_bounded(self):
+        with pytest.raises(ValueError, match="portfolio_drag_rate_pct"):
+            make_config(portfolio_drag_rate_pct=-0.1)
+        with pytest.raises(ValueError, match="portfolio_drag_rate_pct"):
+            make_config(portfolio_drag_rate_pct=100.1)
+
+    def test_netherlands_operands_are_constructible(self):
+        config = make_config(
+            portfolio_deemed_return_pct=6.0, portfolio_drag_rate_pct=36.0
+        )
+        assert config.portfolio_deemed_return_pct == 6.0
+        assert config.portfolio_drag_rate_pct == 36.0
+
+
+class TestSiblingCostFieldValidation:
+    """These five fields shipped with no validation at all (spec 6.3)."""
+
+    def test_negative_closing_cost_buyer_pct_rejected(self):
+        with pytest.raises(ValueError, match="closing_cost_buyer_pct"):
+            make_config(closing_cost_buyer_pct=-1.0)
+
+    def test_negative_closing_cost_seller_pct_rejected(self):
+        with pytest.raises(ValueError, match="closing_cost_seller_pct"):
+            make_config(closing_cost_seller_pct=-1.0)
+
+    def test_negative_property_tax_rate_rejected(self):
+        # A negative rate produced a housing subsidy, silently.
+        with pytest.raises(ValueError, match="property_tax_rate"):
+            make_config(property_tax_rate=-0.5)
+
+    def test_negative_annual_home_insurance_rejected(self):
+        with pytest.raises(ValueError, match="annual_home_insurance"):
+            make_config(annual_home_insurance=-1.0)
+
+    def test_negative_annual_maintenance_pct_rejected(self):
+        with pytest.raises(ValueError, match="annual_maintenance_pct"):
+            make_config(annual_maintenance_pct=-1.0)
+
+    def test_upper_bounds_reject_absurd_values(self):
+        with pytest.raises(ValueError, match="closing_cost_buyer_pct"):
+            make_config(closing_cost_buyer_pct=101.0)
+        with pytest.raises(ValueError, match="property_tax_rate"):
+            make_config(property_tax_rate=101.0)
+        with pytest.raises(ValueError, match="annual_home_insurance"):
+            make_config(annual_home_insurance=100_001.0)
+
+    def test_shipped_region_values_remain_constructible(self):
+        # Germany ships 12.07% buyer costs; the bound must not exclude it.
+        assert make_config(closing_cost_buyer_pct=12.07) is not None
+
+
+class TestOverflowToNanBounds:
+    """Fields that had a lower bound but no upper one.
+
+    Left open, each overflows to inf across the horizon. The resulting
+    NaN difference then reads as a confident verdict, because every NaN
+    comparison is False and api.py's ``winner`` is a bare ``> 0``.
+    """
+
+    def test_unbounded_property_price_rejected(self):
+        with pytest.raises(ValueError, match="property_price"):
+            make_config(property_price=1e308)
+
+    def test_unbounded_monthly_rent_rejected(self):
+        with pytest.raises(ValueError, match="monthly_rent"):
+            make_config(monthly_rent=1e308)
+
+    def test_unbounded_sale_cg_exempt_amount_rejected(self):
+        with pytest.raises(ValueError, match="sale_cg_exempt_amount"):
+            make_config(sale_cg_exempt_amount=1e300)
+
+    def test_unbounded_levy_deduction_cap_rejected(self):
+        with pytest.raises(ValueError, match="levy_deduction_cap"):
+            make_config(levy_deduction_cap=1e300)
+
+    def test_unbounded_sale_cg_exempt_after_years_rejected(self):
+        with pytest.raises(ValueError, match="sale_cg_exempt_after_years"):
+            make_config(sale_cg_exempt_after_years=10**12)
+
+    def test_no_reachable_config_yields_a_nan_verdict(self):
+        # The bound exists to keep the verdict finite, so assert the
+        # property rather than the bound: at every ceiling at once the
+        # difference must still be a real number.
+        results = calculate_scenarios(
+            make_config(
+                property_price=100_000_000,
+                monthly_rent=1_000_000,
+                sale_cg_exempt_amount=100_000_000,
+                sale_cg_exempt_after_years=100,
+                horizon_years=100,
+            )
+        )
+        assert math.isfinite(results.final_difference)
+
+    def test_slider_ceilings_remain_constructible(self):
+        # fields.js caps these well below the server bound; none of the
+        # reachable UI values may be rejected.
+        assert make_config(property_price=2_000_000) is not None
+        assert make_config(monthly_rent=10_000) is not None
+        assert make_config(sale_cg_exempt_amount=1_000_000) is not None
+        assert make_config(levy_deduction_cap=50_000) is not None
+        assert make_config(sale_cg_exempt_after_years=30) is not None

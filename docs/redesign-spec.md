@@ -1,6 +1,6 @@
 # Redesign Spec — Rent or Buy? as a Decision Tool
 
-Product identity: a public web app that answers one question for one person — "should I buy this home or keep renting?" Every surface serves the Verdict. Terminology in [CONTEXT.md](../CONTEXT.md); decisions recorded in [docs/adr/](./adr/) (0001–0008).
+Product identity: a public web app that answers one question for one person — "should I buy this home or keep renting?" Every surface serves the Verdict. Terminology in [CONTEXT.md](../CONTEXT.md); decisions recorded in [docs/adr/](./adr/) (0001–0009).
 
 > **Status (2026-07-18): Implemented.** The engine-truth model (§1) and the output-page narrative (§3) ship in the current app. The visual system (§4) and stack (§5) were delivered by the Streamlit → FastAPI migration ([ADR-0008](adr/0008-fastapi-static-frontend.md) / [frontend-migration-design.md](frontend-migration-design.md)), which replaced §4's light editorial theme with the GitHub-dark system. §6 (code impact) and §9 (phasing) describe the original Streamlit-era plan and are retained as a historical record — the code is the source of truth.
 
@@ -25,14 +25,14 @@ Exactly two strategies. Each month, compare renter cost (rent) vs buyer cost (mo
 Mortgage amortizes over its own term (15/20/30, default 30); the simulation truncates and liquidates at the Horizon (2–40 years, default 10). Remaining balance settles from sale proceeds.
 
 ### 1.4 Tax primitives + regions (ADR-0007)
-Engine exposes: buyer transaction %, seller transaction %, annual property levy %, interest deductibility (on/off + marginal rate; cap-on-levy-deduction as an optional field for the US), CG-at-exit rule (exempt amount | exempt after N years | fully exempt) and portfolio CG rate. Region presets fill these; SALT cap logic lives in the US preset values, not in engine branches.
+Engine exposes: buyer transaction %, seller transaction %, annual property levy %, interest deductibility (on/off + marginal rate; cap-on-levy-deduction as an optional field for the US), CG-at-exit rule (exempt amount | exempt after N years | fully exempt), portfolio CG rate, a fixed buyer-cost amount, a flat cost-indexed levy and maintenance amount, an occupier-incidence flag, and an annual portfolio drag (deemed return + rate applied to the lesser of it and the actual return). Region presets fill these; SALT cap logic lives in the US preset values, not in engine branches.
 
 ### 1.5 Monte Carlo (ADR-0003)
 Auto-runs (debounced + cached on config hash), fixed internal seed, no user knobs. Calibration owned by the app: equity σ ≈ 15%/yr, property σ ≈ 8%/yr, rent-inflation σ ≈ 1.5%/yr, property–equity ρ = 0.3 — documented in the guide. Randomizes the same Net Value series as §1.1.
 
 ## 2. Inputs (sidebar)
 
-**Visible (8):** Region · Home price · Down payment % · Mortgage rate · Mortgage term · Monthly rent · Horizon · Market-outlook preset.
+**Visible (9):** Region · First-time buyer · Home price · Down payment % · Mortgage rate · Mortgage term · Monthly rent · Horizon · Market-outlook preset.
 
 **Assumptions group (3, visible, pre-set):** property appreciation, equity CAGR, rent inflation. Outlook presets (Conservative / Historical average / Optimistic equities) set only this trio.
 
@@ -86,9 +86,11 @@ Ships as FastAPI + static ES-module frontend with Plotly.js (ADR-0008, which sup
 
 Per region — verify with citable sources, encode as data + tests: typical buyer/seller transaction %, levy basis, deductibility rules (NL), CG-at-exit rule (DE 10-year rule, FR/UK primary-residence exemption, US §121 + SALT), portfolio CG rate (DE ~26.4%, FR 30% PFU, UK CGT, US LTCG), plus credible default price/rent/rate bundles.
 
+**Status: complete (2026-07).** All five regions ship with source-verified values. The research, its corrections, and the per-region confidence ratings are recorded in `docs/multi-region-spec.md`; the shipped values carry their citations in `tests/test_regions.py`, so a wrong number fails a build rather than decaying in prose. Known gaps, simplifications and bias directions are enumerated in that spec's §8 and surfaced to users in each region's `notes`.
+
 ## 8. Non-goals
 
-Regions beyond the five · FX conversion · dark theme · PDF export · server-side storage/accounts · client-side rewrite (deferred) · changes to PyPI/CLI packaging.
+Regions beyond the five · FX conversion · light-theme variant · PDF export · server-side storage/accounts · client-side rewrite (deferred) · changes to PyPI/CLI packaging.
 
 ## 9. Suggested phasing
 

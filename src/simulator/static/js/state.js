@@ -18,6 +18,12 @@ export const DEFAULT_CONFIG = {
   annualHomeInsurance: 1200,
   annualMaintenancePct: 1.0,
   costInflationRate: 0.025,
+  annualPropertyLevy: 0,
+  levyPaidByOccupier: false,
+  annualMaintenanceAmount: 0,
+  closingCostBuyerAmount: 0,
+  portfolioDeemedReturnPct: 0,
+  portfolioDragRatePct: 0,
   interestDeductionEnabled: true,
   marginalTaxRatePct: 24.0,
   levyDeductionCap: 10000,
@@ -56,13 +62,45 @@ export function applyPreset(partial) {
 
 // --- share URL codec: only non-default values are written ---
 
+// Bumped when a value's ENCODING changes meaning, so readUrl can tell a
+// link written before the change from one written after. v2 moved the
+// levyDeductionCap "uncapped" sentinel from 0 to negative, which made 0 a
+// real value (the levy is not deductible) that four region bundles ship.
+const URL_SCHEMA_VERSION = "2";
+
+// Which region the user picked is state in its own right, NOT something
+// recoverable from the numbers. Reverse-matching a config against every
+// bundle's taxPrimitives fails the moment any one of them is edited --
+// and the Advanced drawer exists to be edited, with the bundle notes
+// actively telling users to do it. When the match failed, the currency
+// silently fell back to "$" and every modelling note vanished, so a
+// GBP simulation rendered in dollars with none of its caveats.
+//
+// Kept OUT of `config`: the config object is posted to the API verbatim
+// and api.py rejects unknown fields.
+let regionId = null;
+
+export function getRegionId() {
+  return regionId;
+}
+
+export function setRegionId(id) {
+  regionId = id;
+  writeUrl();
+}
+
 function writeUrl() {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(config)) {
     if (value !== DEFAULT_CONFIG[key]) params.set(key, value);
   }
+  if (regionId) params.set("r", regionId);
   const qs = params.toString();
-  history.replaceState(null, "", qs ? `?${qs}` : location.pathname);
+  history.replaceState(
+    null,
+    "",
+    qs ? `?${qs}&v=${URL_SCHEMA_VERSION}` : location.pathname,
+  );
 }
 
 // Per-field validation metadata derived from INPUT_DEFS (the single source
@@ -90,10 +128,27 @@ function isValidNumber(key, n) {
 
 export function readUrl() {
   const params = new URLSearchParams(location.search);
+  // A link with no version marker predates the sentinel move, so its
+  // levyDeductionCap=0 still means "uncapped". A v2 link means what it
+  // says: 0 is a real cap of zero, which FR/DE/NL/UK all ship. Without
+  // this gate the migration would rewrite every European region link and
+  // silently make that region's levy deductible.
+  const isLegacy = !params.has("v");
+  // Validated against the real bundle list by the caller, which owns
+  // the region data; an unknown id simply derives as before.
+  regionId = params.get("r");
   const restored = {};
   for (const [key, def] of Object.entries(DEFAULT_CONFIG)) {
     if (!params.has(key)) continue;
     const raw = params.get(key);
+    if (isLegacy && key === "levyDeductionCap" && Number(raw) === 0) {
+      // -1000, not -1: the slider is min -1000 / step 1000, so -1 snaps
+      // the thumb to 0 -- which under v2 means "not deductible", the
+      // exact opposite of the uncapped value being restored. -1000 is
+      // on the grid, so the thumb agrees with the config.
+      restored[key] = -1000; // uncapped, new encoding
+      continue;
+    }
     // Drop values outside the field's known range or allowed set so a
     // hand-edited share URL can't push an invalid config into the API.
     if (typeof def === "boolean") {

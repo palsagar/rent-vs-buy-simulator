@@ -50,8 +50,33 @@ class SimulationConfig:
         Annual maintenance cost as percentage of current home value.
         Default is 1.0 (1%).
     cost_inflation_rate : float, optional
-        Annual inflation rate for ongoing costs (insurance only), as a
-        decimal. Default is 0.025 (2.5%).
+        Annual inflation rate for ongoing costs (insurance, flat levy,
+        flat maintenance), as a decimal. Default is 0.025 (2.5%).
+    annual_property_levy : float, optional
+        Flat annual property levy in the region's currency, paid
+        monthly and indexed by ``cost_inflation_rate``. Additive to the
+        ad-valorem ``property_tax_rate``. Default is 0.0.
+    levy_paid_by_occupier : bool, optional
+        Whether the levy is charged to the renter as well as the buyer
+        (UK council tax; DE umlagefaehige Grundsteuer). Default is
+        False.
+    annual_maintenance_amount : float, optional
+        Flat annual maintenance cost in the region's currency,
+        cost-indexed. Additive to ``annual_maintenance_pct``. Default
+        is 0.0.
+    closing_cost_buyer_amount : float, optional
+        Fixed buyer transaction cost added to the percentage-of-price
+        term. May be negative: a transfer tax with a zero-rate band has
+        a negative intercept (UK SDLT). Default is 0.0.
+    portfolio_deemed_return_pct : float, optional
+        Assumed annual return an annual wealth tax is charged on, as a
+        percentage. The tax is assessed on the lesser of this and the
+        actual return, floored at nil (NL box 3, Wet IB 2001 art.
+        5.25). Default is 0.0.
+    portfolio_drag_rate_pct : float, optional
+        Rate applied to that deemed return each year, on portfolio
+        value rather than on realised gains, symmetrically to both
+        strategies' portfolios, as a percentage. Default is 0.0.
     interest_deduction_enabled : bool, optional
         Whether mortgage interest is tax-deductible. Default is True.
     marginal_tax_rate_pct : float, optional
@@ -117,6 +142,14 @@ class SimulationConfig:
     annual_home_insurance: float = 1200.0
     annual_maintenance_pct: float = 1.0
     cost_inflation_rate: float = 0.025
+    # Multi-region primitives (ADR-0007). All default to a value that
+    # leaves the US preset bit-identical.
+    annual_property_levy: float = 0.0
+    levy_paid_by_occupier: bool = False
+    annual_maintenance_amount: float = 0.0
+    closing_cost_buyer_amount: float = 0.0
+    portfolio_deemed_return_pct: float = 0.0
+    portfolio_drag_rate_pct: float = 0.0
     # Tax benefit parameters
     interest_deduction_enabled: bool = True
     marginal_tax_rate_pct: float = 24.0
@@ -170,11 +203,14 @@ class SimulationConfig:
                 f"(got {self.mortgage_term_years})."
             )
 
-        # Validate property_price
-        if self.property_price <= 0:
+        # Validate property_price. The upper cap is a generous sanity
+        # bound, not a market limit: an unbounded price overflows to inf
+        # through 30 years of appreciation, and the resulting NaN makes
+        # api.py report a confident "rent" verdict (NaN > 0 is False).
+        if not (0 < self.property_price <= 100_000_000):
             raise ValueError(
-                f"property_price must be positive (got {self.property_price}). "
-                "Please specify a property price greater than $0."
+                f"property_price must be between 0 and 100000000 "
+                f"(got {self.property_price})."
             )
 
         # Validate down_payment_pct (must be between 5% and 100%)
@@ -216,11 +252,11 @@ class SimulationConfig:
                 f"(got {self.equity_growth_annual})."
             )
 
-        # Validate monthly_rent
-        if self.monthly_rent <= 0:
+        # Validate monthly_rent (same overflow-to-NaN guard as
+        # property_price; rent compounds for the whole horizon).
+        if not (0 < self.monthly_rent <= 1_000_000):
             raise ValueError(
-                f"monthly_rent must be positive (got {self.monthly_rent}). "
-                "Please specify a monthly rent greater than $0."
+                f"monthly_rent must be between 0 and 1000000 (got {self.monthly_rent})."
             )
 
         # Validate rent_inflation_rate (must be between 0 and 1, i.e., 0-100%)
@@ -237,6 +273,69 @@ class SimulationConfig:
                 "For 2.5% annual inflation, use 0.025. For no inflation, use 0."
             )
 
+        # Percentage-of-price cost rates. These shipped unvalidated; a
+        # negative rate silently produced a subsidy.
+        for name in ("closing_cost_buyer_pct", "closing_cost_seller_pct"):
+            value = getattr(self, name)
+            if not (0 <= value <= 100):
+                raise ValueError(f"{name} must be between 0 and 100 (got {value}).")
+
+        if not (0 <= self.property_tax_rate <= 100):
+            raise ValueError(
+                "property_tax_rate must be between 0 and 100 "
+                f"(got {self.property_tax_rate})."
+            )
+
+        if not (0 <= self.annual_home_insurance <= 100_000):
+            raise ValueError(
+                "annual_home_insurance must be between 0 and 100000 "
+                f"(got {self.annual_home_insurance})."
+            )
+
+        if not (0 <= self.annual_maintenance_pct <= 100):
+            raise ValueError(
+                "annual_maintenance_pct must be between 0 and 100 "
+                f"(got {self.annual_maintenance_pct})."
+            )
+
+        # Multi-region primitives. Upper bounds are generous sanity caps,
+        # not statutory limits.
+        if not (0 <= self.annual_property_levy <= 100_000):
+            raise ValueError(
+                "annual_property_levy must be between 0 and 100000 "
+                f"(got {self.annual_property_levy})."
+            )
+
+        if not (0 <= self.annual_maintenance_amount <= 100_000):
+            raise ValueError(
+                "annual_maintenance_amount must be between 0 and 100000 "
+                f"(got {self.annual_maintenance_amount})."
+            )
+
+        # Negatives are legitimate: a transfer tax with a zero-rate band
+        # has a negative intercept (UK SDLT ships -6,900). The engine
+        # clamps the aggregate buyer cost at zero instead.
+        if not (-100_000 <= self.closing_cost_buyer_amount <= 100_000):
+            raise ValueError(
+                "closing_cost_buyer_amount must be between -100000 and "
+                f"100000 (got {self.closing_cost_buyer_amount})."
+            )
+
+        # Together the two 100 ceilings keep the monthly drag at or below
+        # 1.0 * 1.0 / 12 = 0.0833, so (1 + monthly growth - monthly drag)
+        # stays above -1 for every reachable growth rate.
+        if not (0 <= self.portfolio_deemed_return_pct <= 100):
+            raise ValueError(
+                "portfolio_deemed_return_pct must be between 0 and 100 "
+                f"(got {self.portfolio_deemed_return_pct})."
+            )
+
+        if not (0 <= self.portfolio_drag_rate_pct <= 100):
+            raise ValueError(
+                "portfolio_drag_rate_pct must be between 0 and 100 "
+                f"(got {self.portfolio_drag_rate_pct})."
+            )
+
         # Validate marginal_tax_rate_pct (must be between 0 and 100)
         if not (0 <= self.marginal_tax_rate_pct <= 100):
             raise ValueError(
@@ -245,14 +344,19 @@ class SimulationConfig:
                 "For no tax benefits, use 0."
             )
 
-        # Validate levy_deduction_cap (None means uncapped; else non-negative)
-        if self.levy_deduction_cap is not None and self.levy_deduction_cap < 0:
+        # Validate levy_deduction_cap (None means uncapped; else bounded)
+        if self.levy_deduction_cap is not None and not (
+            0 <= self.levy_deduction_cap <= 10_000_000
+        ):
             raise ValueError(
-                "levy_deduction_cap cannot be negative "
+                "levy_deduction_cap must be between 0 and 10000000 "
                 f"(got {self.levy_deduction_cap}). Use None for uncapped."
             )
 
         # Validate sale_cg_regime
+        # NOTE: this tuple hand-duplicates the SaleCgRegime Literal declared
+        # at the top of this module. Adding a fourth regime requires editing
+        # both or the new value is silently rejected here.
         valid_regimes = ("exempt_amount", "exempt_after_years", "fully_exempt")
         if self.sale_cg_regime not in valid_regimes:
             raise ValueError(
@@ -260,17 +364,19 @@ class SimulationConfig:
                 f"(got {self.sale_cg_regime!r})."
             )
 
-        # Validate sale_cg_exempt_amount (must be non-negative)
-        if self.sale_cg_exempt_amount < 0:
+        # Validate sale_cg_exempt_amount (bounded, same NaN guard)
+        if not (0 <= self.sale_cg_exempt_amount <= 100_000_000):
             raise ValueError(
-                "sale_cg_exempt_amount cannot be negative "
+                "sale_cg_exempt_amount must be between 0 and 100000000 "
                 f"(got {self.sale_cg_exempt_amount})."
             )
 
-        # Validate sale_cg_exempt_after_years (must be non-negative)
-        if self.sale_cg_exempt_after_years < 0:
+        # Validate sale_cg_exempt_after_years. Capped at the horizon
+        # ceiling: a longer holding period than any simulation can run
+        # is indistinguishable from "never exempt".
+        if not (0 <= self.sale_cg_exempt_after_years <= 100):
             raise ValueError(
-                "sale_cg_exempt_after_years cannot be negative "
+                "sale_cg_exempt_after_years must be between 0 and 100 "
                 f"(got {self.sale_cg_exempt_after_years})."
             )
 

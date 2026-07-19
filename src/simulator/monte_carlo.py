@@ -16,6 +16,53 @@ from .models import (
     SimulationConfig,
 )
 
+# Lower bound for the tornado's low perturbation on positive-only fields.
+# The proportional levy delta is checked against this same value, so the
+# guard and the clamp cannot drift apart.
+_LOW_PERTURBATION_FLOOR = 0.001
+
+# Relative swing applied to whichever field carries a region's property
+# levy. Calibrated so the US ad-valorem base of 1.2 keeps its historical
+# absolute delta of exactly 0.5.
+_LEVY_RELATIVE_DELTA = 0.5 / 1.2
+
+# Fraction of the verdict below which a tornado swing is float noise
+# rather than signal. Well above IEEE-754 double precision (~1e-16
+# relative) and far below any swing a user could read off the chart.
+_NEGLIGIBLE_SWING_RATIO = 1e-6
+
+
+def _is_negligible_against(swing: float, reference: float) -> bool:
+    """Whether ``swing`` is rounding noise at the scale of ``reference``.
+
+    Absolute tolerances cannot serve here: the verdict spans roughly
+    1e3 to 1e11 across the slider ranges, so a fixed epsilon is either
+    too tight at the top or meaningless at the bottom.
+
+    Parameters
+    ----------
+    swing : float
+        Difference between the high and low perturbation outcomes.
+    reference : float
+        Unperturbed verdict the swing is judged against.
+
+    Returns
+    -------
+    bool
+        True when ``swing`` is negligible at that scale.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from simulator.monte_carlo import _is_negligible_against
+
+        _is_negligible_against(6.1e-05, 2.6e11)   # True
+        _is_negligible_against(9048.0, 134799.0)  # False
+
+    """
+    return abs(swing) <= _NEGLIGIBLE_SWING_RATIO * max(1.0, abs(reference))
+
 
 def _generate_annual_draws(
     base_config: SimulationConfig,
@@ -190,15 +237,22 @@ def _simulate_single_path(
     return series["net_buy"], series["net_rent"]
 
 
-def _compute_sensitivity(
+def _compute_sensitivity(  # noqa: C901
     base_config: SimulationConfig,
 ) -> tuple[list[str], np.ndarray, np.ndarray, float]:
     """Compute one-at-a-time sensitivity for tornado chart.
 
     Uses the EXISTING deterministic ``calculate_scenarios`` engine
-    (not the MC path simulator). Perturbs 8 key parameters by +/- 1
-    standard deviation and measures the effect on the Verdict
+    (not the MC path simulator). Perturbs 9 candidate parameters by
+    +/- 1 standard deviation and measures the effect on the Verdict
     (``final_difference``, i.e. net_buy - net_rent).
+
+    Fewer than 9 bars are returned in general. The two levy fields --
+    ad-valorem ``property_tax_rate`` and flat ``annual_property_levy``
+    -- take a RELATIVE swing rather than an absolute one, and each is
+    skipped at a zero base, so a region gets whichever levy unit its
+    bundle uses and never both. A flat levy that is occupier-borne
+    cancels out of the Verdict entirely and is skipped too.
 
     Parameters
     ----------
@@ -266,6 +320,9 @@ def _compute_sensitivity(
         ("Down Payment %", "down_payment_pct", 5.0),
         ("Monthly Rent", "monthly_rent", 500),
         ("Property Tax Rate", "property_tax_rate", 0.5),
+        # Both are skipped at a zero base, so a region gets whichever one
+        # its bundle actually uses and never two levy bars at once.
+        ("Property Levy (flat)", "annual_property_levy", 0.0),
         ("Mortgage Rate", "mortgage_rate_annual", 1.0),
     ]
 
@@ -276,13 +333,34 @@ def _compute_sensitivity(
     for display_name, field, delta in perturbations:
         base_val = getattr(base_config, field)
 
+        # A levy delta must scale with its own base, and BOTH levy
+        # representations take the same relative swing: they are one
+        # economic quantity in different units -- ad-valorem for US/NL, a
+        # flat cost-indexed amount for FR/DE/UK -- so a region's measured
+        # sensitivity must not depend on which unit its bundle happens to
+        # use. An absolute delta cannot do this: +-0.5pp on NL's
+        # folded-EWF 0.2815 is a +-178% swing implying WOZ regimes it
+        # does not have. _LEVY_RELATIVE_DELTA is calibrated so the US
+        # base of 1.2 keeps its historical delta of exactly 0.5.
+        if field in ("property_tax_rate", "annual_property_levy"):
+            delta = base_val * _LEVY_RELATIVE_DELTA
+            # Skip whenever the low side would hit the floor below. That
+            # covers a region carrying its levy in the OTHER field (base
+            # 0) and also the near-zero band: a floored low side
+            # represents a HIGHER value than the base, and below
+            # 0.000706 it exceeds the high side outright, rendering the
+            # bar inverted. Reachable from the UI -- fields.js ships
+            # propertyTaxRate with step 0.0005 from a min of 0.
+            if base_val - delta < _LOW_PERTURBATION_FLOOR:
+                continue
+
         # Low perturbation (subtract delta). Growth rates may legitimately
         # go negative; floor them just above -100% so the monthly compounding
         # factor stays positive. Positive-only fields keep the 0.001 floor.
         if field in ("property_appreciation_annual", "equity_growth_annual"):
             low_override = max(base_val - delta, -99.0)
         else:
-            low_override = max(base_val - delta, 0.001)
+            low_override = max(base_val - delta, _LOW_PERTURBATION_FLOOR)
         # Clamp down_payment_pct to [5, 100]
         if field == "down_payment_pct":
             low_override = max(low_override, 5.0)
@@ -300,6 +378,24 @@ def _compute_sensitivity(
         try:
             val_low = _run_with_override(**{field: low_override})
             val_high = _run_with_override(**{field: high_override})
+            # An occupier-borne levy lands in BOTH arms and cancels out
+            # of Buy - Rent, so perturbing it moves nothing (UK, DE). The
+            # levy is the only tornado parameter that can be structurally
+            # neutral by design, and a zero-width bar reads as a broken
+            # chart rather than as "this does not matter". Drop it, but
+            # only on measured equality: with the interest deduction on,
+            # an occupier-borne levy DOES reach the verdict through the
+            # deductible base, and then the bar is real and stays.
+            #
+            # The comparison must be RELATIVE. Cancellation is algebraic,
+            # not bit-exact -- (a + levy) - (b + levy) carries rounding
+            # that scales with the verdict, which reaches 1e11 at the
+            # slider ceilings. An absolute 1e-9 leaked a zero-width bar
+            # in 86 of 324 swept configs, residual up to 6.1e-05.
+            if field == "annual_property_levy" and _is_negligible_against(
+                val_high - val_low, base_value
+            ):
+                continue
             param_names.append(display_name)
             low_vals.append(val_low)
             high_vals.append(val_high)

@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from simulator.api import (
+    _validate_value,
     config_from_dict,
     config_to_dict,
     monte_carlo_payload,
@@ -146,7 +147,7 @@ def test_monte_carlo_payload_shape_and_determinism() -> None:
     assert json.loads(json.dumps(first)) == first
 
 
-def test_regions_us_available_others_disabled() -> None:
+def test_region_availability_matches_data_presence() -> None:
     regions = {r["id"]: r for r in list_regions()}
     assert set(regions) == {"us", "fr", "de", "nl", "uk"}
 
@@ -158,10 +159,16 @@ def test_regions_us_available_others_disabled() -> None:
     assert us["taxPrimitives"]["marginalTaxRatePct"] == 24.0
     assert us["taxPrimitives"]["saleCgRegime"] == "exempt_amount"
 
+    # Availability and data presence must agree in both directions: an
+    # available region without data would crash applyPreset, and an
+    # unavailable region carrying data is a bundle someone forgot to
+    # ship. Phase 2 flips fr/de/nl/uk to available; this invariant holds
+    # throughout, which is why it replaced a hard-coded region list.
     for rid in ("fr", "de", "nl", "uk"):
-        assert regions[rid]["available"] is False
-        assert regions[rid]["typical"] is None
-        assert regions[rid]["taxPrimitives"] is None
+        region = regions[rid]
+        has_data = region["typical"] is not None
+        assert region["taxPrimitives"] is not None if has_data else True
+        assert region["available"] is has_data
 
 
 def test_get_region_unknown_raises_key_error() -> None:
@@ -232,3 +239,68 @@ def test_config_from_dict_rejects_out_of_range_growth_rate() -> None:
     payload = {**config_to_dict(make_config()), "equityGrowthAnnual": 1e6}
     with pytest.raises(ValueError, match="equity_growth_annual"):
         config_from_dict(payload)
+
+
+class TestNonScalarFallThrough:
+    def test_unsupported_annotation_raises(self):
+        # Every SimulationConfig field is scalar by design. A non-scalar
+        # field would previously arrive here and be returned unvalidated.
+        with pytest.raises(TypeError, match="unsupported field annotation"):
+            _validate_value("x", [1, 2], list[int])
+
+    def test_every_config_field_round_trips_through_the_codec(self):
+        # The invariant the guard protects: no SimulationConfig field is
+        # non-scalar, so no real field can reach the TypeError branch.
+        config = make_config()
+        assert config_from_dict(config_to_dict(config)) == config
+
+
+class TestLevyDeductionCapSentinel:
+    def test_zero_cap_means_not_deductible_not_uncapped(self):
+        # The NL levy is genuinely not deductible. Before the api.js
+        # sentinel moved off zero, this value was unreachable from the UI.
+        payload = {**config_to_dict(make_config()), "levyDeductionCap": 0.0}
+        config = config_from_dict(payload)
+        assert config.levy_deduction_cap == 0.0
+        assert config.levy_deduction_cap is not None
+
+    def test_null_cap_still_means_uncapped(self):
+        payload = {**config_to_dict(make_config()), "levyDeductionCap": None}
+        assert config_from_dict(payload).levy_deduction_cap is None
+
+    def test_zero_cap_suppresses_the_levy_deduction_entirely(self):
+        base = {**config_to_dict(make_config()), "propertyTaxRate": 1.2}
+        capped = config_from_dict({**base, "levyDeductionCap": 0.0})
+        uncapped = config_from_dict({**base, "levyDeductionCap": None})
+        assert (
+            calculate_scenarios(capped).total_tax_savings
+            < calculate_scenarios(uncapped).total_tax_savings
+        )
+
+
+class TestNewPrimitivesOnTheWire:
+    def test_negative_buyer_amount_round_trips(self):
+        payload = {
+            **config_to_dict(make_config()),
+            "closingCostBuyerAmount": -6900.0,
+        }
+        config = config_from_dict(payload)
+        assert config.closing_cost_buyer_amount == -6900.0
+        assert config_to_dict(config)["closingCostBuyerAmount"] == -6900.0
+
+    def test_non_boolean_occupier_flag_rejected(self):
+        payload = {**config_to_dict(make_config()), "levyPaidByOccupier": "yes"}
+        with pytest.raises(ValueError, match="levy_paid_by_occupier"):
+            config_from_dict(payload)
+
+    def test_all_six_primitives_serialize_with_camel_case_keys(self):
+        payload = config_to_dict(make_config())
+        for key in (
+            "annualPropertyLevy",
+            "levyPaidByOccupier",
+            "annualMaintenanceAmount",
+            "closingCostBuyerAmount",
+            "portfolioDeemedReturnPct",
+            "portfolioDragRatePct",
+        ):
+            assert key in payload
