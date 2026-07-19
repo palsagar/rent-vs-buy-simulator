@@ -72,3 +72,68 @@ def _uk_like_config(**overrides: object):
     )
     base.update(overrides)
     return taxfree_config(**base)
+
+
+class TestFlatPropertyLevy:
+    def test_flat_levy_is_one_twelfth_per_month_with_no_indexation(self):
+        cfg = taxfree_config(annual_property_levy=1200.0, cost_inflation_rate=0.0)
+        series = run_flat(cfg)
+        assert abs(series["_levy"][1] - 100.0) < 1e-9
+
+    def test_flat_levy_is_indexed_by_cost_inflation(self):
+        # cost_index(t) = (1 + cir/12) ** (t - 1); at 12% annual the
+        # month-13 charge has compounded for 12 months.
+        cfg = taxfree_config(
+            horizon_years=3, annual_property_levy=1200.0, cost_inflation_rate=0.12
+        )
+        series = run_flat(cfg)
+        assert abs(series["_levy"][13] - 100.0 * 1.01**12) < 1e-9
+
+    def test_ad_valorem_and_flat_paths_are_independently_additive(self):
+        # Proves the US ad-valorem path is untouched by the new term.
+        kwargs = dict(horizon_years=3, property_appreciation_annual=3.0)
+        both = run_flat(
+            taxfree_config(property_tax_rate=1.2, annual_property_levy=1200.0, **kwargs)
+        )
+        rate_only = run_flat(
+            taxfree_config(property_tax_rate=1.2, annual_property_levy=0.0, **kwargs)
+        )
+        amount_only = run_flat(
+            taxfree_config(property_tax_rate=0.0, annual_property_levy=1200.0, **kwargs)
+        )
+        assert np.allclose(
+            both["_levy"], rate_only["_levy"] + amount_only["_levy"], atol=1e-9
+        )
+
+
+class TestFlatMaintenanceAmount:
+    def test_flat_maintenance_is_one_twelfth_per_month(self):
+        cfg = taxfree_config(annual_maintenance_amount=1200.0, cost_inflation_rate=0.0)
+        series = run_flat(cfg)
+        assert abs(series["_maintenance"][1] - 100.0) < 1e-9
+
+    def test_flat_maintenance_is_indexed_by_cost_inflation(self):
+        cfg = taxfree_config(
+            horizon_years=3,
+            annual_maintenance_amount=1200.0,
+            cost_inflation_rate=0.12,
+        )
+        series = run_flat(cfg)
+        assert abs(series["_maintenance"][13] - 100.0 * 1.01**12) < 1e-9
+
+    def test_pct_and_amount_paths_are_independently_additive(self):
+        kwargs = dict(horizon_years=3, property_appreciation_annual=3.0)
+        both = run_flat(
+            taxfree_config(
+                annual_maintenance_pct=1.0, annual_maintenance_amount=1200.0, **kwargs
+            )
+        )
+        pct_only = run_flat(taxfree_config(annual_maintenance_pct=1.0, **kwargs))
+        amount_only = run_flat(
+            taxfree_config(annual_maintenance_amount=1200.0, **kwargs)
+        )
+        assert np.allclose(
+            both["_maintenance"],
+            pct_only["_maintenance"] + amount_only["_maintenance"],
+            atol=1e-9,
+        )

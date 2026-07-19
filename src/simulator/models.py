@@ -50,8 +50,8 @@ class SimulationConfig:
         Annual maintenance cost as percentage of current home value.
         Default is 1.0 (1%).
     cost_inflation_rate : float, optional
-        Annual inflation rate for ongoing costs (insurance only), as a
-        decimal. Default is 0.025 (2.5%).
+        Annual inflation rate for ongoing costs (insurance, flat levy,
+        flat maintenance), as a decimal. Default is 0.025 (2.5%).
     annual_property_levy : float, optional
         Flat annual property levy in the region's currency, paid
         monthly and indexed by ``cost_inflation_rate``. Additive to the

@@ -186,14 +186,24 @@ def _net_value_series(
     interest[1:] = balance[:-1] * r
 
     # --- Ongoing ownership costs paid during month m (prior-month value base)
+    # Hoisted: three cost lines are now absolute amounts sharing one index.
+    cost_index = (1 + config.cost_inflation_rate / 12) ** (t_arr[1:] - 1)
+
+    # No new region's levy base tracks market prices (FR valeur locative
+    # cadastrale, DE Grundsteuerwert, UK 1991 bands), so the flat component
+    # is cost-indexed rather than tied to the appreciating home value.
     levy = np.zeros(h + 1)
-    levy[1:] = home_value[:-1] * (config.property_tax_rate / 100) / 12
+    levy[1:] = (
+        home_value[:-1] * (config.property_tax_rate / 100) / 12
+        + (config.annual_property_levy / 12) * cost_index
+    )
     insurance = np.zeros(h + 1)
-    insurance[1:] = (config.annual_home_insurance / 12) * (
-        1 + config.cost_inflation_rate / 12
-    ) ** (t_arr[1:] - 1)
+    insurance[1:] = (config.annual_home_insurance / 12) * cost_index
     maintenance = np.zeros(h + 1)
-    maintenance[1:] = home_value[:-1] * (config.annual_maintenance_pct / 100) / 12
+    maintenance[1:] = (
+        home_value[:-1] * (config.annual_maintenance_pct / 100) / 12
+        + (config.annual_maintenance_amount / 12) * cost_index
+    )
 
     housing_cost_buy = payment + levy + insurance + maintenance
 
