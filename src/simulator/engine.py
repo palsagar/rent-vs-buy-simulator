@@ -113,8 +113,8 @@ def _net_value_series(
         ``outflow_rent``, ``cash_committed``, ``cum_tax_savings``,
         ``net_buy``, ``net_rent``, plus underscore-prefixed internals
         (``_interest``, ``_levy``, ``_insurance``, ``_maintenance``,
-        ``_basis_rent``, ``_basis_buy``, ``_monthly_payment``) consumed
-        by the tax layer.
+        ``_basis_rent``, ``_basis_buy``, ``_monthly_payment``,
+        ``_buyer_closing``) consumed by the tax layer.
 
     Examples
     --------
@@ -149,7 +149,15 @@ def _net_value_series(
     t_arr = np.arange(h + 1)
 
     down_payment = config.property_price * (config.down_payment_pct / 100)
-    buyer_closing = config.property_price * (config.closing_cost_buyer_pct / 100)
+    # A transfer tax with a zero-rate band has a negative intercept (UK
+    # SDLT ships -6,900), so the amount may be negative. Clamp the
+    # aggregate, not the term: the UK pair goes negative below a price of
+    # 138,000 and the slider floor is 50,000.
+    buyer_closing = max(
+        config.property_price * (config.closing_cost_buyer_pct / 100)
+        + config.closing_cost_buyer_amount,
+        0.0,
+    )
     initial_outlay = down_payment + buyer_closing
     loan = config.property_price - down_payment
     r = (config.mortgage_rate_annual / 100) / 12
@@ -283,6 +291,7 @@ def _net_value_series(
         "_basis_rent": basis_rent,
         "_basis_buy": basis_buy,
         "_monthly_payment": np.array([pmt]),
+        "_buyer_closing": np.array([buyer_closing]),
     }
 
 
@@ -431,8 +440,7 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
         monthly_mortgage_payment=float(series["_monthly_payment"][0]),
         monthly_cost_buy_year1=float(np.mean(series["housing_cost_buy"][1:13])),
         monthly_cost_rent_year1=float(np.mean(series["housing_cost_rent"][1:13])),
-        total_closing_costs_buyer=config.property_price
-        * (config.closing_cost_buyer_pct / 100),
+        total_closing_costs_buyer=float(series["_buyer_closing"][0]),
         total_closing_costs_seller=float(
             series["home_value"][-1] * (config.closing_cost_seller_pct / 100)
         ),
