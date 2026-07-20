@@ -14,7 +14,7 @@ import numpy as np
 from simulator.engine import calculate_scenarios
 from simulator.models import MonteCarloConfig, SimulationConfig
 from simulator.monte_carlo import (
-    _POSITIVE_FIELD_FLOOR,
+    _UI_MINIMUM,
     _compute_sensitivity,
     run_monte_carlo,
 )
@@ -137,7 +137,11 @@ class TestSensitivityReportsPerturbedInputs:
         # zero is checked at zero: a low side floored ABOVE the base
         # renders a bar labelled "lower" that shows an increase, and the
         # hover now spells that contradiction out.
-        for field in ("rent_inflation_rate", "property_appreciation_annual"):
+        for field in (
+            "rent_inflation_rate",
+            "property_appreciation_annual",
+            "equity_growth_annual",
+        ):
             config = make_config(**{field: 0.0})
             sens = _compute_sensitivity(config)
             for i, perturbed in enumerate(sens.fields):
@@ -168,15 +172,24 @@ class TestSensitivityReportsPerturbedInputs:
         i = sens.params.index("Equity Growth")
         assert sens.high_input[i] == 15.0
 
-    def test_input_reflects_the_positive_floor_rather_than_base_minus_delta(self):
-        # Monthly rent takes a fixed 500 step, so a base of exactly 500
-        # drives the low side to 0 -- a rent the engine refuses. It is
-        # floored to _POSITIVE_FIELD_FLOOR instead, and that floored
-        # value is what was simulated. Asserted as equality, not ">= 0":
-        # an unfloored 0.0 satisfies ">= 0" and would slip through.
-        sens = _compute_sensitivity(make_config(monthly_rent=500))
-        i = sens.params.index("Monthly Rent")
-        assert sens.low_input[i] == _POSITIVE_FIELD_FLOOR
+    def test_input_reflects_the_slider_floor_rather_than_base_minus_delta(self):
+        # Each of these takes a fixed absolute step, so a base at the
+        # slider minimum drives the low side below what the app can be
+        # set to. Asserted as equality against the slider minimum, not
+        # ">= 0": the old 0.001 backstop also satisfies ">= 0", and it is
+        # exactly what this replaced -- it rendered "$500 -> $0", the
+        # chart's widest bar claiming to have modelled a free house.
+        for field, bar in (
+            ("property_price", "Property Price"),
+            ("monthly_rent", "Monthly Rent"),
+            ("mortgage_rate_annual", "Mortgage Rate"),
+        ):
+            floor = _UI_MINIMUM[field]
+            sens = _compute_sensitivity(make_config(**{field: floor}))
+            i = sens.params.index(bar)
+            assert sens.low_input[i] == floor, (
+                f"{bar} floored to {sens.low_input[i]}, not the slider minimum {floor}"
+            )
 
 
 class TestPortfolioDragIsPathDependent:

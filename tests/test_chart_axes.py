@@ -177,7 +177,7 @@ class TestMinusSignPrecedesTheCurrencySymbol:
         live = _strip_comments(_source())
         for match in re.finditer(r"hovertemplate:\s*`(?P<tpl>[^`]*)`", live):
             tpl = match.group("tpl")
-            assert not re.search(r"%\{[^}]*:,\.\d f?\}|%\{[^}]*:,\.\df\}", tpl), (
+            assert not re.search(r"%\{[^}]*:,\.\df\}", tpl), (
                 f"hovertemplate formats money without a currency: {tpl}"
             )
 
@@ -229,45 +229,59 @@ class TestTornadoRangeHover:
     def test_every_payload_array_is_reversed_together(self):
         # params, fields, baseInput, lowInput, highInput and the two
         # outcome arrays all index the same bar. Reversing some and not
-        # others silently mislabels every hover.
-        body = _tornado_body()
-        for key in (
-            "params",
-            "fields",
-            "baseInput",
-            "lowInput",
-            "highInput",
-            "low",
-            "high",
-        ):
-            assert re.search(rf"\[\.\.\.tornado\.{key}\]\.reverse\(\)", body), (
+        # others silently mislabels every hover. The four range arrays
+        # are reversed together in tornadoRanges, the rest in the
+        # renderer, so both bodies are searched.
+        live = _strip_comments(_source())
+        for key in ("params", "low", "high"):
+            assert re.search(rf"\[\.\.\.tornado\.{key}\]\.reverse\(\)", live), (
                 f"tornado.{key} is not reversed with the others"
             )
+        guard = re.search(
+            r"function tornadoRanges\(tornado, count\)\s*\{(?P<body>.*?)\n\}",
+            live,
+            re.S,
+        )
+        assert guard, "tornadoRanges not found in charts.js"
+        for key in ("fields", "baseInput", "lowInput", "highInput"):
+            assert f"tornado.{key}" in guard.group("body"), (
+                f"tornado.{key} is not gathered with the other range arrays"
+            )
+        assert re.search(r"arrays\.map\(\(a\) => \[\.\.\.a\]\.reverse\(\)\)", live), (
+            "the range arrays are not all reversed together"
+        )
 
     def test_the_lower_bar_gets_the_low_range_and_the_higher_the_high(self):
         # Swapping these renders a "lower" bar whose stated range is an
         # increase -- the hover contradicting its own label.
         body = _tornado_body()
         assert re.search(
-            r"x:\s*low,.*?customdata:\s*hoverData\(lowIn,\s*low\).*?tpl\(\"lower\"\)",
+            r"x:\s*low,.*?customdata:\s*hoverData\(lowIn\).*?tpl\(\"lower\"\)",
             body,
             re.S,
-        ), "the lower bar is not paired with the low range and low impact"
+        ), "the lower bar is not paired with the low range"
         assert re.search(
-            r"x:\s*high,.*?customdata:\s*hoverData\(highIn,\s*high\).*?tpl\(\"higher\"\)",
+            r"x:\s*high,.*?customdata:\s*hoverData\(highIn\).*?tpl\(\"higher\"\)",
             body,
             re.S,
-        ), "the higher bar is not paired with the high range and high impact"
+        ), "the higher bar is not paired with the high range"
 
-    def test_the_hover_reports_impact_not_the_absolute_verdict(self):
-        # On a trace with `base`, %{x} resolves to base + size -- the
-        # absolute verdict, not the impact the axis is titled for.
+    def test_bars_are_drawn_as_impact_so_the_axis_matches_its_title(self):
+        # The axis is titled "Impact on Buy - Rent difference" and the
+        # hover reads %{x}. Both are only true while the bars carry NO
+        # trace `base`: with one, Plotly resolves %{x} to base + size and
+        # both the tick labels and the hover silently become absolute
+        # verdicts, so a bar drawn left of the zero tick can report a
+        # positive number.
         body = _tornado_body()
-        assert "%{customdata[1]:" in body, (
-            "the money line does not read the impact out of customdata"
+        assert re.search(r"\.map\(\(v\) => v - base\)", body), (
+            "bars are not drawn relative to the base"
         )
-        assert not re.search(r"%\{x:", body), (
-            "%{x} on a based bar is the absolute verdict, not the impact"
+        assert not re.search(r"\bbase,\s*marker:", body), (
+            "a trace carries `base`, which makes %{x} the absolute verdict"
+        )
+        assert re.search(r"x0:\s*0,\s*x1:\s*0", body), (
+            "the pivot line is not at zero impact"
         )
 
     def test_the_range_is_rendered_in_display_units(self):

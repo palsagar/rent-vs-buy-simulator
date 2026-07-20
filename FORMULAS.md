@@ -465,8 +465,9 @@ rates floor just above −100%, and positive-only fields at 0.001, but rent
 inflation floors at exactly **0** because a flat rent is a real setting
 its slider can reach. At a zero base the 0.001 floor put the low side
 above the base, so the bar labelled "lower" showed an *increase* — the
-same inversion the levy skip prevents, and one the perturbed-range hover
-now states out loud.
+same inversion the levy skip prevents. It surfaced as a hover reading
+"0.0% → 0.1%" on a bar labelled *lower*; at a zero base it now reads
+"0.0% → 0.0%", the honest reading that rent can only rise from flat.
 
 Two details are region-specific. Both levy fields — ad-valorem
 `property_tax_rate` and flat `annual_property_levy` — take a **relative**

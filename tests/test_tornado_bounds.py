@@ -22,9 +22,48 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from simulator.api import _camel
 from simulator.engine import calculate_scenarios
 from simulator.models import MonteCarloConfig, SimulationConfig
-from simulator.monte_carlo import _UI_MAXIMUM, _compute_sensitivity
+from simulator.monte_carlo import (
+    _UI_MAXIMUM,
+    _UI_MINIMUM,
+    _compute_sensitivity,
+)
 
 _FIELDS_JS = Path(__file__).parent.parent / "src/simulator/static/js/fields.js"
+
+# Floor for the line-oriented INPUT_DEFS parse below. A canary, not a
+# count: it only has to be high enough that a reformat that silently
+# drops entries trips it. Raise it deliberately, never to make a
+# failure pass.
+_EXPECTED_FORMATTED_FIELDS = 25
+
+
+def _slider_bounds(bound: str) -> dict[str, Fraction]:
+    """Slider ``min`` or ``max`` from fields.js, in STORED units.
+
+    Parameters
+    ----------
+    bound : str
+        Either ``"min"`` or ``"max"``.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        assert _slider_bounds("max")["equityGrowthAnnual"] == 15
+        assert _slider_bounds("min")["monthlyRent"] == 500
+
+    """
+    bounds: dict[str, Fraction] = {}
+    pattern = re.compile(
+        r'key:\s*"(?P<key>\w+)".*?\b' + bound + r":\s*(?P<val>-?[\d.]+)"
+    )
+    for line in _FIELDS_JS.read_text(encoding="utf-8").splitlines():
+        match = pattern.search(line)
+        if match:
+            scale_match = re.search(r"scale:\s*([\d.]+)", line)
+            scale = Fraction(scale_match.group(1)) if scale_match else Fraction(1)
+            bounds[match.group("key")] = Fraction(match.group("val")) / scale
+    return bounds
 
 
 def _slider_maxima() -> dict[str, Fraction]:
@@ -37,15 +76,7 @@ def _slider_maxima() -> dict[str, Fraction]:
         assert _slider_maxima()["equityGrowthAnnual"] == 15
 
     """
-    maxima: dict[str, Fraction] = {}
-    pattern = re.compile(r'key:\s*"(?P<key>\w+)".*?max:\s*(?P<max>-?[\d.]+)')
-    for line in _FIELDS_JS.read_text(encoding="utf-8").splitlines():
-        match = pattern.search(line)
-        if match:
-            scale_match = re.search(r"scale:\s*([\d.]+)", line)
-            scale = Fraction(scale_match.group(1)) if scale_match else Fraction(1)
-            maxima[match.group("key")] = Fraction(match.group("max")) / scale
-    return maxima
+    return _slider_bounds("max")
 
 
 class TestCeilingsMatchTheUi:
@@ -64,6 +95,31 @@ class TestCeilingsMatchTheUi:
                 f"{field}: ceiling {ceiling} != fields.js max "
                 f"{float(maxima[wire])} for {wire}"
             )
+
+    def test_every_floor_equals_its_slider_minimum(self):
+        # The mirror of the ceiling check. A hand-copied floor that
+        # drifts below its slider lets the tornado measure a
+        # configuration the app cannot be set to -- which is exactly the
+        # "$50k -> $0" home price this table was added to stop.
+        minima = _slider_bounds("min")
+        for field, floor in _UI_MINIMUM.items():
+            wire = _camel(field)
+            assert wire in minima, (
+                f"{wire} was not parsed out of fields.js -- is its "
+                "INPUT_DEFS entry wrapped across multiple lines?"
+            )
+            assert Fraction(str(floor)) == minima[wire], (
+                f"{field}: floor {floor} != fields.js min "
+                f"{float(minima[wire])} for {wire}"
+            )
+
+    def test_growth_rates_are_deliberately_absent_from_the_floors(self):
+        # A crash is a real outcome the model must represent. Adding
+        # either growth rate here would floor its low side at 0 and
+        # silently delete the negative-growth case that
+        # test_tornado_low_uses_negative_growth_rate pins.
+        assert "property_appreciation_annual" not in _UI_MINIMUM
+        assert "equity_growth_annual" not in _UI_MINIMUM
 
     def test_every_perturbed_field_declares_a_ceiling(self):
         # A perturbation with no ceiling silently reverts to the old
@@ -216,6 +272,14 @@ def _formatted_field_keys() -> set[str]:
         match = pattern.search(line)
         if match:
             keys.add(match.group("key"))
+    # Same fragility as _slider_bounds: this parse is line-oriented, so a
+    # Prettier run that wraps an INPUT_DEFS entry drops it silently and
+    # the caller reports a field as having no formatter when it has one.
+    assert len(keys) >= _EXPECTED_FORMATTED_FIELDS, (
+        f"only {len(keys)} INPUT_DEFS entries parsed out of fields.js "
+        f"(expected at least {_EXPECTED_FORMATTED_FIELDS}) -- are some "
+        "wrapped across multiple lines?"
+    )
     return keys
 
 

@@ -235,6 +235,25 @@ function fmtFieldValue(fieldKey, storedValue) {
   return def.fmt(storedValue * (def.scale ?? 1));
 }
 
+// The range hover needs four arrays the bars themselves do not. They are
+// a strictly additive part of the payload, so a response that predates
+// them still has everything needed to draw the chart -- but spreading a
+// missing one throws, and the throw happens AFTER the fan chart has
+// already rendered, leaving the tornado showing the previous region's
+// bars with nothing on screen saying they are stale. Reachable during a
+// rolling deploy (new bundle, old container) or from a cached API
+// response. Degrade to the bar-only hover instead of stranding the chart.
+function tornadoRanges(tornado, count) {
+  const arrays = [
+    tornado.fields,
+    tornado.baseInput,
+    tornado.lowInput,
+    tornado.highInput,
+  ];
+  if (arrays.some((a) => !Array.isArray(a) || a.length !== count)) return null;
+  return arrays.map((a) => [...a].reverse());
+}
+
 export function renderTornadoChart(el, tornado) {
   const params = [...tornado.params].reverse();
   const base = tornado.base;
@@ -244,32 +263,32 @@ export function renderTornadoChart(el, tornado) {
   // changed, and the width of the three stochastic bars additionally
   // varies with the horizon (the delta is a standard error). Both are
   // invisible without stating the assumption's own before/after.
-  const fields = [...tornado.fields].reverse();
-  const baseIn = [...tornado.baseInput].reverse();
-  const lowIn = [...tornado.lowInput].reverse();
-  const highIn = [...tornado.highInput].reverse();
-  // customdata carries [range, impact]. The impact cannot come from
-  // %{x}: on a trace with a `base`, Plotly resolves %{x} to base + size,
-  // i.e. the absolute post-perturbation verdict -- while the axis these
-  // bars sit on is titled "Impact on Buy - Rent difference". The two
-  // read alike in isolation and differ by the whole base.
-  const hoverData = (values, impacts) =>
-    fields.map((f, i) => [
-      `${fmtFieldValue(f, baseIn[i])} → ${fmtFieldValue(f, values[i])}`,
-      impacts[i],
-    ]);
+  const ranges = tornadoRanges(tornado, params.length);
+  const [fields, baseIn, lowIn, highIn] = ranges ?? [[], [], [], []];
+  // Bars are drawn as IMPACT (verdict - base) around a zero pivot, NOT
+  // as absolute verdicts around a `base` pivot. Both render identically
+  // -- same widths, same pivot position -- but only one agrees with the
+  // axis title, and the difference is visible the moment a number is
+  // read off. With a trace `base`, Plotly resolves %{x} to base + size,
+  // so the tick labels and the hover reported the absolute verdict on an
+  // axis titled "Impact": a bar sitting well left of the zero tick could
+  // hover as a positive number, the two disagreeing by the whole base.
+  const hoverData = (values) =>
+    fields.map((f, i) => `${fmtFieldValue(f, baseIn[i])} → ${fmtFieldValue(f, values[i])}`);
   const tpl = (side) =>
-    `%{y} ${side}<br>%{customdata[0]}<br>%{customdata[1]:${MONEY_HOVER}}<extra></extra>`;
+    ranges === null
+      ? `%{y} ${side}<br>%{x:${MONEY_HOVER}}<extra></extra>`
+      : `%{y} ${side}<br>%{customdata}<br>%{x:${MONEY_HOVER}}<extra></extra>`;
   const traces = [
-    { type: "bar", orientation: "h", y: params, x: low, base, marker: { color: MUTED }, customdata: hoverData(lowIn, low), hovertemplate: tpl("lower") },
-    { type: "bar", orientation: "h", y: params, x: high, base, marker: { color: RENT }, customdata: hoverData(highIn, high), hovertemplate: tpl("higher") },
+    { type: "bar", orientation: "h", y: params, x: low, marker: { color: MUTED }, customdata: hoverData(lowIn), hovertemplate: tpl("lower") },
+    { type: "bar", orientation: "h", y: params, x: high, marker: { color: RENT }, customdata: hoverData(highIn), hovertemplate: tpl("higher") },
   ];
   const layout = baseLayout("Impact on Buy − Rent difference");
   moveCurrencyToXAxis(layout);
   layout.barmode = "overlay";
   layout.yaxis.automargin = true; // grow the left margin to fit parameter labels
   layout.shapes = [
-    { type: "line", x0: base, x1: base, yref: "paper", y0: 0, y1: 1, line: { color: "#e6edf3", width: 1 } },
+    { type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1, line: { color: "#e6edf3", width: 1 } },
   ];
   Plotly.react(el, traces, layout, PLOT_CONFIG);
 }

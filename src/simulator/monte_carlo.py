@@ -19,11 +19,15 @@ from .models import (
     SimulationConfig,
 )
 
-# Smallest value a positive-only field may be perturbed to. A NUMERIC
-# safety floor, unrelated to _UI_MAXIMUM below, which is a per-field UI
-# policy -- the names are not an antonym pair. The proportional levy
-# delta is checked against this same value so guard and clamp cannot
-# drift apart.
+# Numeric safety floor for the levy fields, which have no _UI_MINIMUM
+# entry: their sliders start at 0, so the slider minimum is not a usable
+# floor and the near-zero band is skipped outright instead. The
+# proportional levy delta is checked against this same value so guard and
+# clamp cannot drift apart.
+#
+# Every other positive-only field floors at its _UI_MINIMUM. This is a
+# NUMERIC backstop, not a UI policy -- it is not the antonym of
+# _UI_MAXIMUM.
 _POSITIVE_FIELD_FLOOR = 0.001
 
 # Relative swing applied to whichever field carries a region's property
@@ -68,11 +72,6 @@ _STOCHASTIC_FIELDS = frozenset(
 # beyond the slider maximum, which the engine accepts (down payment is
 # valid to 100, the slider stops at 50) and the API will hand over.
 #
-# The LOW side is deliberately NOT capped at the slider minimum. A crash
-# is a real outcome the model must be able to represent even though the
-# UI will not let you type a negative growth rate -- see
-# test_tornado_low_uses_negative_growth_rate, which pins that.
-#
 # Mirrors fields.js. Kept honest by tests/test_tornado_bounds.py, which
 # parses the slider maxima out of it rather than trusting this copy.
 _UI_MAXIMUM = {
@@ -85,6 +84,29 @@ _UI_MAXIMUM = {
     "mortgage_rate_annual": 10.0,
     "property_tax_rate": 5.0,
     "annual_property_levy": 10_000.0,
+}
+
+# Lowest value the UI lets a user set, for the fields where the slider
+# minimum is a real floor rather than a UI convenience.
+#
+# The growth rates are deliberately ABSENT. A crash is a real outcome the
+# model must represent even though the UI will not let you type a
+# negative growth rate -- see test_tornado_low_uses_negative_growth_rate,
+# which pins that. Their floor is -99.0, just above where the monthly
+# compounding factor would turn non-positive.
+#
+# The quantities below have no such reading. property_price takes a fixed
+# 100k step, so every home price in the 50k-100k band drove its low side
+# to _POSITIVE_FIELD_FLOOR -- and since price is usually the widest bar,
+# the top bar of the chart claimed to have modelled a free house. The
+# perturbed-range hover states that outright ("$50k -> $0"), which is how
+# it was found. Flooring here keeps the tornado inside the configuration
+# space the app can actually be set to, symmetrically with the ceiling.
+_UI_MINIMUM = {
+    "property_price": 50_000.0,
+    "down_payment_pct": 5.0,
+    "monthly_rent": 500.0,
+    "mortgage_rate_annual": 1.0,
 }
 
 
@@ -421,25 +443,26 @@ def _compute_sensitivity(  # noqa: C901
             if base_val - delta < _POSITIVE_FIELD_FLOOR:
                 continue
 
-        # Low perturbation (subtract delta). Growth rates may legitimately
-        # go negative; floor them just above -100% so the monthly compounding
-        # factor stays positive. Positive-only fields keep the 0.001 floor.
+        # Low perturbation (subtract delta), floored by whichever rule the
+        # field lives under. Growth rates may legitimately go negative;
+        # floor them just above -100% so the monthly compounding factor
+        # stays positive.
         if field in ("property_appreciation_annual", "equity_growth_annual"):
             low_override = max(base_val - delta, -99.0)
         elif field == "rent_inflation_rate":
             # Floors AT zero, not at the positive-only floor. Flat rents
             # are a real setting -- fields.js ships this slider from a
-            # min of 0 -- and at a zero base the 0.001 floor lands the
-            # low side ABOVE the base, so the bar labelled "lower" shows
-            # an INCREASE. That is the same inversion the levy skip
-            # above exists to prevent, and the perturbed-range hover now
-            # states it in words ("0.0% -> 0.1%").
+            # min of 0 -- and at a zero base the 0.001 floor would land
+            # the low side ABOVE the base, so the bar labelled "lower"
+            # would show an INCREASE. That is the same inversion the levy
+            # skip above exists to prevent.
             low_override = max(base_val - delta, 0.0)
         else:
-            low_override = max(base_val - delta, _POSITIVE_FIELD_FLOOR)
-        # Clamp down_payment_pct to [5, 100]
-        if field == "down_payment_pct":
-            low_override = max(low_override, 5.0)
+            # _POSITIVE_FIELD_FLOOR is the numeric backstop for the levy
+            # fields, which have no _UI_MINIMUM entry (their sliders start
+            # at 0 and the near-zero band is skipped outright above).
+            floor = _UI_MINIMUM.get(field, _POSITIVE_FIELD_FLOOR)
+            low_override = max(base_val - delta, floor)
 
         # High perturbation (add delta), never past what the UI can set.
         #

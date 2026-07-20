@@ -1,7 +1,23 @@
 // Input field definitions: bounds, allowed values, and display metadata.
 // Extracted into its own module (a leaf that imports only format.js) so
-// both inputs.js (rendering) and state.js (share-URL validation) can read
-// the field bounds without forming an import cycle.
+// its consumers can read the field metadata without forming an import
+// cycle: inputs.js (rendering), state.js (share-URL validation) and
+// charts.js (the tornado's perturbed-range hover).
+//
+// Two properties are load-bearing beyond the slider that declares them:
+//
+//   scale  converts STORED units to DISPLAYED ones. rent_inflation_rate
+//          is stored as 0.03 and shown as "3.0%", so a consumer renders
+//          `stored * scale` and validates `displayed / scale`. Fields
+//          without it are stored in display units.
+//   fmt    is the only formatter for that field anywhere in the app.
+//          Changing it changes the slider readout AND the tornado hover.
+//
+// min/max are additionally mirrored in Python: _UI_MAXIMUM and
+// _UI_MINIMUM in monte_carlo.py bound the tornado's perturbations to what
+// these sliders can express. tests/test_tornado_bounds.py parses this
+// file to keep those copies honest, as tests/test_regions.py does for
+// region values -- so a value here is a contract, not a local default.
 
 import { fmtCompact, fmtMoney, fmtPct } from "./format.js";
 

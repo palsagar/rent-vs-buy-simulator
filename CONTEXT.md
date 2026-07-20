@@ -20,7 +20,7 @@ The number of years the person expects to stay before exiting the strategy.
 _Avoid_: Duration, simulation period
 
 **Buy strategy**:
-Purchase the home with a mortgage. Monthly cost is mortgage + property tax + insurance + maintenance. When buying is the cheaper side in a given month, the surplus is invested in equities within this strategy.
+Purchase the home with a mortgage. Monthly cost is mortgage + property levy + insurance + maintenance. When buying is the cheaper side in a given month, the surplus is invested in equities within this strategy.
 _Avoid_: Scenario A
 
 **Rent strategy**:

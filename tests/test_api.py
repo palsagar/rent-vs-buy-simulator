@@ -1,5 +1,7 @@
 import itertools
 import json
+import re
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,6 +20,13 @@ from simulator.server import app
 from tests.test_models import make_config
 
 client = TestClient(app)
+
+# INPUT_DEFS keys, parsed from fields.js -- there is no JS harness, and a
+# hardcoded copy here would drift from the sliders it is meant to track.
+_FIELDS_JS = Path(__file__).parent.parent / "src/simulator/static/js/fields.js"
+_INPUT_DEFS_KEYS = set(
+    re.findall(r'key:\s*"(\w+)"', _FIELDS_JS.read_text(encoding="utf-8"))
+)
 
 
 def test_health() -> None:
@@ -304,3 +313,66 @@ class TestNewPrimitivesOnTheWire:
             "portfolioDragRatePct",
         ):
             assert key in payload
+
+
+# The keys charts.js reads out of the tornado payload. Spelled here as
+# literals rather than derived, because deriving them from the producer
+# is what let the contract drift: the test would rename in lockstep with
+# the bug. tests/test_chart_axes.py pins the consumer half.
+_TORNADO_WIRE_KEYS = {
+    "params",
+    "fields",
+    "low",
+    "high",
+    "baseInput",
+    "lowInput",
+    "highInput",
+    "base",
+}
+
+
+class TestTornadoWireContract:
+    """The Python->JS tornado contract, which nothing else covers.
+
+    charts.js spreads ``tornado.fields`` / ``baseInput`` / ``lowInput`` /
+    ``highInput`` and looks each field up in INPUT_DEFS. A renamed key
+    leaves the chart blank; a key that stops being camelCase leaves every
+    hover reading a bare arrow with no numbers. Both are invisible to the
+    engine tests, which never cross the wire.
+    """
+
+    def test_payload_carries_exactly_the_keys_the_chart_reads(self):
+        tornado = monte_carlo_payload(
+            make_config(), MonteCarloConfig(n_simulations=10, seed=1)
+        )["tornado"]
+        assert set(tornado) == _TORNADO_WIRE_KEYS
+
+    def test_every_parallel_array_has_one_entry_per_bar(self):
+        tornado = monte_carlo_payload(
+            make_config(), MonteCarloConfig(n_simulations=10, seed=1)
+        )["tornado"]
+        n = len(tornado["params"])
+        assert n > 0, "no bars produced; the check would be vacuous"
+        for key in ("fields", "low", "high", "baseInput", "lowInput", "highInput"):
+            assert len(tornado[key]) == n, (
+                f"tornado['{key}'] has {len(tornado[key])} entries for {n} bars"
+            )
+
+    def test_fields_are_camel_case_so_input_defs_lookups_resolve(self):
+        # charts.js keys INPUT_DEFS by camelCase. Shipping the snake_case
+        # config name instead resolves to nothing, fmtFieldValue returns
+        # "", and every hover degrades to " -> " with no numbers.
+        tornado = monte_carlo_payload(
+            make_config(), MonteCarloConfig(n_simulations=10, seed=1)
+        )["tornado"]
+        for wire in tornado["fields"]:
+            assert "_" not in wire, f"{wire} is not camelCase"
+            assert wire in _INPUT_DEFS_KEYS, f"{wire} has no INPUT_DEFS entry"
+
+    def test_inputs_are_json_finite_numbers(self):
+        # NaN/inf survive json.dumps by default but are invalid JSON and
+        # arrive at the browser as a parse error, killing the section.
+        payload = monte_carlo_payload(
+            make_config(), MonteCarloConfig(n_simulations=10, seed=1)
+        )
+        json.dumps(payload, allow_nan=False)
