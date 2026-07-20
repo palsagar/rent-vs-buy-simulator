@@ -149,37 +149,34 @@ class TestMinusSignPrecedesTheCurrencySymbol:
             "PLOT_CONFIG does not point Plotly at CURRENCY_LOCALE"
         )
 
-    def test_hover_money_uses_the_same_currency_type_as_the_axes(self):
-        # Hovers are the other money surface, and a hand-built
-        # `${getCurrencySymbol()}%{x:,.0f}` prefix reproduces the exact
-        # defect there: the tornado read "EUR-3,986,681" while its own
-        # axis read "-EUR150k". d3 honours the locale in hovertemplates
-        # too, so both surfaces can share one convention.
+    def test_no_hovertemplate_formats_its_own_money(self):
+        # Every money hover is pre-formatted by fmtMoney and carried in
+        # customdata. A d3 format spec in a template is the regression:
+        # `%{x:,.0f}` drops the currency, `%{x:$,.0f}` restores it but
+        # reintroduces d3's ASCII hyphen next to a U+2212 axis tick, and
+        # a hand-built `${getCurrencySymbol()}` prefix puts the symbol
+        # before the sign.
         live = _strip_comments(_source())
         for match in re.finditer(r"hovertemplate:\s*`(?P<tpl>[^`]*)`", live):
             tpl = match.group("tpl")
             assert "getCurrencySymbol()" not in tpl, (
                 f"hovertemplate hand-prefixes the currency: {tpl}"
             )
-            assert "${cur}" not in tpl, (
-                f"hovertemplate hand-prefixes the currency: {tpl}"
+            assert not re.search(r"%\{[^}]*:[^}]*\}", tpl), (
+                f"hovertemplate formats money itself instead of using "
+                f"fmtMoney via customdata: {tpl}"
             )
-        assert re.search(r'MONEY_HOVER\s*=\s*"\$,\.0f"', live), (
-            "no d3 currency hover format found"
-        )
 
-    def test_no_hovertemplate_formats_money_without_the_currency(self):
-        # Guards the constant being defined but only half-adopted,
-        # WITHOUT hardcoding a template count: a future non-money hover
-        # (a percentage, a year) must not be forced to adopt MONEY_HOVER
-        # just to keep a tally happy. What is banned is the bare
-        # thousands format, which is money stripped of its currency.
+    def test_hover_money_is_formatted_by_the_shared_helper(self):
+        # One helper, so the symbol position and the sign glyph cannot
+        # drift between hovers and the rest of the app.
         live = _strip_comments(_source())
-        for match in re.finditer(r"hovertemplate:\s*`(?P<tpl>[^`]*)`", live):
-            tpl = match.group("tpl")
-            assert not re.search(r"%\{[^}]*:,\.\df\}", tpl), (
-                f"hovertemplate formats money without a currency: {tpl}"
-            )
+        assert re.search(r"function moneyHover\(values\)", live), (
+            "moneyHover helper not found"
+        )
+        assert re.search(r"Array\.from\(values,\s*fmtMoney\)", live), (
+            "moneyHover does not delegate to fmtMoney"
+        )
 
     def test_hand_formatted_ticks_use_plotlys_minus_glyph(self):
         # Plotly emits U+2212; an ASCII hyphen here would render a
@@ -193,8 +190,8 @@ class TestMinusSignPrecedesTheCurrencySymbol:
         assert "-" not in match.group("body"), (
             "fmtTick builds its sign from an ASCII hyphen, not U+2212"
         )
-        assert re.search(r'MINUS\s*=\s*"−"', _strip_comments(_source())), (
-            "no U+2212 MINUS constant found"
+        assert re.search(r"\bMINUS\b", _strip_comments(_source())), (
+            "fmtTick does not use the shared MINUS constant"
         )
 
 
@@ -256,12 +253,12 @@ class TestTornadoRangeHover:
         # increase -- the hover contradicting its own label.
         body = _tornado_body()
         assert re.search(
-            r"x:\s*low,.*?customdata:\s*hoverData\(lowIn\).*?tpl\(\"lower\"\)",
+            r"x:\s*low,.*?customdata:\s*hoverData\(lowIn,\s*low\).*?tpl\(\"lower\"\)",
             body,
             re.S,
         ), "the lower bar is not paired with the low range"
         assert re.search(
-            r"x:\s*high,.*?customdata:\s*hoverData\(highIn\).*?tpl\(\"higher\"\)",
+            r"x:\s*high,.*?customdata:\s*hoverData\(highIn,\s*high\).*?tpl\(\"higher\"\)",
             body,
             re.S,
         ), "the higher bar is not paired with the high range"
@@ -332,6 +329,61 @@ class TestHorizontalBarHoversReadTheMoneyAxis:
         )
         assert match, "renderBreakdownChart not found in charts.js"
         body = match.group(0)
-        assert re.search(r"hovertemplate:\s*`%\{y\}:\s*%\{x:", body), (
-            "the breakdown hover does not label from y and read money from x"
+        assert re.search(r"customdata:\s*moneyHover\(revValues\)", body), (
+            "the breakdown hover does not format its own x values"
+        )
+        assert re.search(r"hovertemplate:\s*`%\{y\}:\s*%\{customdata\}", body), (
+            "the breakdown hover does not label from y"
+        )
+
+
+_FORMAT_JS = Path(__file__).parent.parent / "src/simulator/static/js/format.js"
+_MAIN_JS = Path(__file__).parent.parent / "src/simulator/static/js/main.js"
+
+
+class TestOneMinusGlyphAcrossTheApp:
+    """Money signs are U+2212 everywhere, not a mix of two dashes.
+
+    Plotly emits U+2212 on axis ticks and gives no way to change it --
+    the locale's ``minus`` key reaches ticks only, verified on 2.35.2.
+    So the rest of the app matches Plotly rather than the other way
+    round, and that means every hand-built sign comes from one constant.
+    """
+
+    def test_format_js_declares_the_shared_minus(self):
+        src = _FORMAT_JS.read_text(encoding="utf-8")
+        assert re.search(r'export const MINUS = "\\u2212"', src), (
+            "format.js does not export a U+2212 MINUS constant"
+        )
+
+    def test_no_module_builds_a_money_sign_from_an_ascii_hyphen(self):
+        # `v < 0 ? "-" : ""` is the shape that put a hyphen in a slider
+        # readout and a minus on the axis directly above it.
+        for path in (_FORMAT_JS, _CHARTS_JS):
+            live = _strip_comments(path.read_text(encoding="utf-8"))
+            assert not re.search(r'<\s*0\s*\?\s*"-"', live), (
+                f"{path.name} builds a money sign from an ASCII hyphen"
+            )
+
+    def test_charts_uses_the_shared_constant_rather_than_its_own(self):
+        live = _strip_comments(_source())
+        assert re.search(
+            r"import \{[^}]*\bMINUS\b[^}]*\} from \"\./format\.js\"", live
+        ), "charts.js does not import MINUS from format.js"
+        assert not re.search(r"const MINUS\s*=", live), (
+            "charts.js redeclares MINUS instead of importing it"
+        )
+
+
+class TestRegionFallbackCarriesACurrency:
+    def test_the_offline_fallback_region_declares_a_currency_symbol(self):
+        # setCurrency(undefined) propagates into fmtMoney, fmtTick AND
+        # the Plotly locale registration, rendering "undefined500k" on
+        # every axis. The fallback is only reached when /api/regions
+        # fails, so nothing else catches it.
+        live = _strip_comments(_MAIN_JS.read_text(encoding="utf-8"))
+        match = re.search(r"regions = \[(?P<body>.*?)\];", live, re.S)
+        assert match, "the region fallback literal was not found in main.js"
+        assert re.search(r'currencySymbol:\s*"\S+"', match.group("body")), (
+            "the offline fallback region has no currencySymbol"
         )

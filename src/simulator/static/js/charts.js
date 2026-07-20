@@ -2,7 +2,7 @@
 // Rent #58a6ff; bands/neutrals muted; direct line labels, no legends.
 
 import { INPUT_DEFS } from "./fields.js";
-import { getCurrencySymbol } from "./format.js";
+import { MINUS, fmtMoney, getCurrencySymbol } from "./format.js";
 
 const BUY = "#f0883e";
 const RENT = "#58a6ff";
@@ -27,23 +27,26 @@ function currencyTickformat() {
     moduleType: "locale",
     name: CURRENCY_LOCALE,
     dictionary: {},
-    format: { currency: [getCurrencySymbol(), ""] },
+    format: { currency: [getCurrencySymbol(), ""], minus: MINUS },
   });
   return "$~s";
 }
 
-// Hover money, same reasoning as the axes: a hand-built `${symbol}%{x}`
-// prefix renders "EUR-3,986,681" for the same reason tickprefix did.
-// The d3 currency type honours the registered locale here too, so the
-// SYMBOL sits after the sign on both surfaces.
+// Hover money is formatted in JS and carried in customdata, NOT by a d3
+// format spec in the template. Two reasons, both verified on 2.35.2:
 //
-// The GLYPH still differs and cannot be fixed from here: Plotly rewrites
-// the hyphen to U+2212 only on the tick path (`_numFormat(...).replace`),
-// while hovertemplates go straight through d3-format, whose minus is a
-// hard-coded ASCII hyphen. So ticks read "−EUR30M" and hovers
-// "-EUR3,986,681". They never render adjacent, and the ordering -- the
-// part that made "EUR-30M" read as a currency code -- is now consistent.
-const MONEY_HOVER = "$,.0f";
+//   - a hand-built `${symbol}%{x}` prefix renders "EUR-3,986,681", for
+//     the same reason tickprefix renders "EUR-30M";
+//   - the d3 currency type fixes that ordering, but its minus is a
+//     hard-coded ASCII hyphen. Plotly rewrites the sign to U+2212 on the
+//     TICK path only, and the locale's own `minus` key does not reach
+//     hovers either -- so the hover would spell the sign differently
+//     from the axis tick sitting directly behind it.
+//
+// fmtMoney settles both: one symbol position, one glyph, everywhere.
+function moneyHover(values) {
+  return Array.from(values, fmtMoney);
+}
 
 const PLOT_CONFIG = { displayModeBar: false, responsive: true, locale: CURRENCY_LOCALE };
 
@@ -89,8 +92,8 @@ function strategyTraces(x, buyY, rentY, fwd) {
   const mk = (yRaw, color, name) => {
     const base = { x, mode: "lines", line: { color, width: 2 }, name };
     return fwd
-      ? { ...base, y: yRaw.map(fwd), customdata: yRaw, hovertemplate: `${name} %{customdata:${MONEY_HOVER}}<extra></extra>` }
-      : { ...base, y: yRaw, hovertemplate: `${name} %{y:${MONEY_HOVER}}<extra></extra>` };
+      ? { ...base, y: yRaw.map(fwd), customdata: moneyHover(yRaw), hovertemplate: `${name} %{customdata}<extra></extra>` }
+      : { ...base, y: yRaw, customdata: moneyHover(yRaw), hovertemplate: `${name} %{customdata}<extra></extra>` };
   };
   return [mk(buyY, BUY, "Buy"), mk(rentY, RENT, "Rent")];
 }
@@ -128,11 +131,8 @@ function outcomesDisparate(buyY, rentY) {
 // fmtCompact but compacts down to 1k so a symlog axis never mixes
 // "1,000" with "10k".
 //
-// The sign is U+2212 MINUS, not an ASCII hyphen, because these labels
-// share a page with linear axes that Plotly formats itself -- and Plotly
-// emits U+2212. A hyphen here renders visibly shorter and higher than
-// the minus one chart across.
-const MINUS = "−";
+// Signs come from MINUS, the same glyph the registered locale gives
+// Plotly, so hand-formatted and Plotly-formatted labels agree.
 function fmtTick(v) {
   const sign = v < 0 ? MINUS : "";
   const cur = getCurrencySymbol();
@@ -213,7 +213,7 @@ export function renderFanChart(el, mc) {
     { x, y: row[5], mode: "lines", line: { width: 0 }, fill: "tonexty", fillcolor: "rgba(139,148,158,0.14)", hoverinfo: "skip", showlegend: false },
     { x, y: row[75], mode: "lines", line: { width: 0 }, hoverinfo: "skip", showlegend: false },
     { x, y: row[25], mode: "lines", line: { width: 0 }, fill: "tonexty", fillcolor: "rgba(139,148,158,0.24)", hoverinfo: "skip", showlegend: false },
-    { x, y: row[50], mode: "lines", line: { color: "#e6edf3", width: 1.5 }, name: "Median", hovertemplate: `Median %{y:${MONEY_HOVER}}<extra></extra>`, showlegend: false },
+    { x, y: row[50], mode: "lines", line: { color: "#e6edf3", width: 1.5 }, name: "Median", customdata: moneyHover(row[50]), hovertemplate: `Median %{customdata}<extra></extra>`, showlegend: false },
   ];
   const layout = baseLayout("Years");
   layout.yaxis.title = { text: "Buy − Rent" };
@@ -273,15 +273,24 @@ export function renderTornadoChart(el, tornado) {
   // so the tick labels and the hover reported the absolute verdict on an
   // axis titled "Impact": a bar sitting well left of the zero tick could
   // hover as a positive number, the two disagreeing by the whole base.
-  const hoverData = (values) =>
-    fields.map((f, i) => `${fmtFieldValue(f, baseIn[i])} → ${fmtFieldValue(f, values[i])}`);
+  // customdata is [range, impact] per bar. The impact is pre-formatted
+  // like every other hover; the range is empty when the payload predates
+  // it, and the template then omits that line entirely.
+  const hoverData = (values, impacts) => {
+    const money = moneyHover(impacts);
+    return money.map((m, i) =>
+      ranges === null
+        ? ["", m]
+        : [`${fmtFieldValue(fields[i], baseIn[i])} → ${fmtFieldValue(fields[i], values[i])}`, m],
+    );
+  };
   const tpl = (side) =>
     ranges === null
-      ? `%{y} ${side}<br>%{x:${MONEY_HOVER}}<extra></extra>`
-      : `%{y} ${side}<br>%{customdata}<br>%{x:${MONEY_HOVER}}<extra></extra>`;
+      ? `%{y} ${side}<br>%{customdata[1]}<extra></extra>`
+      : `%{y} ${side}<br>%{customdata[0]}<br>%{customdata[1]}<extra></extra>`;
   const traces = [
-    { type: "bar", orientation: "h", y: params, x: low, marker: { color: MUTED }, customdata: hoverData(lowIn), hovertemplate: tpl("lower") },
-    { type: "bar", orientation: "h", y: params, x: high, marker: { color: RENT }, customdata: hoverData(highIn), hovertemplate: tpl("higher") },
+    { type: "bar", orientation: "h", y: params, x: low, marker: { color: MUTED }, customdata: hoverData(lowIn, low), hovertemplate: tpl("lower") },
+    { type: "bar", orientation: "h", y: params, x: high, marker: { color: RENT }, customdata: hoverData(highIn, high), hovertemplate: tpl("higher") },
   ];
   const layout = baseLayout("Impact on Buy − Rent difference");
   moveCurrencyToXAxis(layout);
@@ -322,7 +331,8 @@ export function renderBreakdownChart(el, payload, cfg) {
       type: "bar", orientation: "h",
       y: revLabels, x: revValues,
       marker: { color: revValues.map((v) => (v < 0 ? "#7ee787" : MUTED)) },
-      hovertemplate: `%{y}: %{x:${MONEY_HOVER}}<extra></extra>`,
+      customdata: moneyHover(revValues),
+      hovertemplate: `%{y}: %{customdata}<extra></extra>`,
     },
   ];
   const layout = baseLayout(`Total over ${cfg.horizonYears} years`);

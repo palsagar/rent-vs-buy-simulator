@@ -116,7 +116,21 @@ async function init() {
     regions = await getRegions();
   } catch (err) {
     showError(`Could not load regions: ${err.message}`);
-    regions = [{ id: "us", label: "United States", available: true, typical: {}, taxPrimitives: {} }];
+    // currencySymbol is not optional: it reaches setCurrency, and from
+    // there every money label in the app -- including the Plotly locale
+    // the charts register. Omitting it rendered axis ticks as
+    // "undefined500k". It must match regions.py's US symbol, since this
+    // stands in for that region.
+    regions = [
+      {
+        id: "us",
+        label: "United States",
+        available: true,
+        currencySymbol: "$",
+        typical: {},
+        taxPrimitives: {},
+      },
+    ];
   }
   initInputs(regions);
   syncInputs();
