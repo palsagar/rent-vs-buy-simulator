@@ -376,7 +376,7 @@ def _compute_sensitivity(  # noqa: C901
         ("Property Price", "property_price", 100000),
         ("Down Payment %", "down_payment_pct", 5.0),
         ("Monthly Rent", "monthly_rent", 500),
-        ("Property Tax Rate", "property_tax_rate", 0.5),
+        ("Property Levy (% of value)", "property_tax_rate", 0.5),
         # Both are skipped at a zero base, so a region gets whichever one
         # its bundle actually uses and never two levy bars at once.
         ("Property Levy (flat)", "annual_property_levy", 0.0),

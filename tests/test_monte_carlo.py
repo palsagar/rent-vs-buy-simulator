@@ -231,7 +231,7 @@ class TestTornadoLevyDelta:
         # 0.0; see test_near_zero_levy_does_not_invert_the_bar.
         sens = _compute_sensitivity(make_config(property_tax_rate=0.0))
         names = sens.params
-        assert "Property Tax Rate" not in names
+        assert "Property Levy (% of value)" not in names
         assert len(names) == 7
 
     def test_near_zero_levy_does_not_invert_the_bar(self):
@@ -245,7 +245,7 @@ class TestTornadoLevyDelta:
         for rate in (0.0005, 0.001, 0.0015):
             sens = _compute_sensitivity(make_config(property_tax_rate=rate))
             names = sens.params
-            assert "Property Tax Rate" not in names, (
+            assert "Property Levy (% of value)" not in names, (
                 f"base {rate} kept a bar whose low side is floor-clamped"
             )
 
@@ -255,7 +255,7 @@ class TestTornadoLevyDelta:
         names = sens.params
         low = sens.low
         high = sens.high
-        i = names.index("Property Tax Rate")
+        i = names.index("Property Levy (% of value)")
         assert high[i] < low[i]
 
     def test_flat_levy_region_gets_its_own_bar(self):
@@ -283,7 +283,9 @@ class TestTornadoLevyDelta:
             )
             names = sens.params
             levy_bars = [
-                n for n in names if n in ("Property Tax Rate", "Property Levy (flat)")
+                n
+                for n in names
+                if n in ("Property Levy (% of value)", "Property Levy (flat)")
             ]
             assert len(levy_bars) == 1, levy_bars
 
@@ -362,8 +364,8 @@ class TestTornadoLevyDelta:
         names = sens.params
         low = sens.low
         high = sens.high
-        assert "Property Tax Rate" in names
-        idx = names.index("Property Tax Rate")
+        assert "Property Levy (% of value)" in names
+        idx = names.index("Property Levy (% of value)")
         expected_delta = base_rate * (0.5 / 1.2)
         lo = _rerun(base_rate - expected_delta)
         hi = _rerun(base_rate + expected_delta)

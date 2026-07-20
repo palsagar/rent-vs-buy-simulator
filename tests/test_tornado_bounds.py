@@ -134,7 +134,7 @@ class TestHighSideIsBounded:
             label = {
                 "down_payment_pct": "Down Payment %",
                 "equity_growth_annual": "Equity Growth",
-                "property_tax_rate": "Property Tax Rate",
+                "property_tax_rate": "Property Levy (% of value)",
             }[field]
             if label not in names:
                 continue

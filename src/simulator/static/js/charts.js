@@ -237,7 +237,7 @@ export function renderBreakdownChart(el, payload, cfg) {
   const t = payload.totals;
   const items = [
     ["Mortgage interest", t.interestPaid],
-    ["Property tax", t.propertyTaxPaid],
+    ["Property levy", t.propertyTaxPaid],
     ["Maintenance", t.maintenancePaid],
     ["Insurance", t.insurancePaid],
     ["Buyer closing", t.closingCostsBuyer],

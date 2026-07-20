@@ -64,8 +64,8 @@ GOLDENS = {
 #   - the three stochastic bars move on BOTH sides, because the delta
 #     itself shrank: Equity Growth, Property Appreciation, Rent Inflation
 #   - the five fixed-step bars are bit-identical on both sides: Monthly
-#     Rent, Property Price, Mortgage Rate, Property Tax Rate, Down
-#     Payment % -- their deltas are absolute steps, not standard
+#     Rent, Property Price, Mortgage Rate, Property Levy (% of value),
+#     Down Payment % -- their deltas are absolute steps, not standard
 #     deviations, so sqrt(horizon) does not apply
 #   - the summary GOLDENS block above is untouched
 #
@@ -79,7 +79,7 @@ TORNADO_NAMES = [
     "Monthly Rent",
     "Property Price",
     "Mortgage Rate",
-    "Property Tax Rate",
+    "Property Levy (% of value)",
     "Rent Inflation",
     "Down Payment %",
 ]
