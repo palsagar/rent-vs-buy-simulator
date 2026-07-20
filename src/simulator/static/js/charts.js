@@ -34,8 +34,15 @@ function currencyTickformat() {
 
 // Hover money, same reasoning as the axes: a hand-built `${symbol}%{x}`
 // prefix renders "EUR-3,986,681" for the same reason tickprefix did.
-// The d3 currency type honours the registered locale here too, so
-// hovers and ticks share one convention instead of one each.
+// The d3 currency type honours the registered locale here too, so the
+// SYMBOL sits after the sign on both surfaces.
+//
+// The GLYPH still differs and cannot be fixed from here: Plotly rewrites
+// the hyphen to U+2212 only on the tick path (`_numFormat(...).replace`),
+// while hovertemplates go straight through d3-format, whose minus is a
+// hard-coded ASCII hyphen. So ticks read "−EUR30M" and hovers
+// "-EUR3,986,681". They never render adjacent, and the ordering -- the
+// part that made "EUR-30M" read as a currency code -- is now consistent.
 const MONEY_HOVER = "$,.0f";
 
 const PLOT_CONFIG = { displayModeBar: false, responsive: true, locale: CURRENCY_LOCALE };
@@ -241,11 +248,21 @@ export function renderTornadoChart(el, tornado) {
   const baseIn = [...tornado.baseInput].reverse();
   const lowIn = [...tornado.lowInput].reverse();
   const highIn = [...tornado.highInput].reverse();
-  const rangeTo = (values) =>
-    fields.map((f, i) => `${fmtFieldValue(f, baseIn[i])} → ${fmtFieldValue(f, values[i])}`);
+  // customdata carries [range, impact]. The impact cannot come from
+  // %{x}: on a trace with a `base`, Plotly resolves %{x} to base + size,
+  // i.e. the absolute post-perturbation verdict -- while the axis these
+  // bars sit on is titled "Impact on Buy - Rent difference". The two
+  // read alike in isolation and differ by the whole base.
+  const hoverData = (values, impacts) =>
+    fields.map((f, i) => [
+      `${fmtFieldValue(f, baseIn[i])} → ${fmtFieldValue(f, values[i])}`,
+      impacts[i],
+    ]);
+  const tpl = (side) =>
+    `%{y} ${side}<br>%{customdata[0]}<br>%{customdata[1]:${MONEY_HOVER}}<extra></extra>`;
   const traces = [
-    { type: "bar", orientation: "h", y: params, x: low, base, marker: { color: MUTED }, customdata: rangeTo(lowIn), hovertemplate: `%{y} lower<br>%{customdata}<br>%{x:${MONEY_HOVER}}<extra></extra>` },
-    { type: "bar", orientation: "h", y: params, x: high, base, marker: { color: RENT }, customdata: rangeTo(highIn), hovertemplate: `%{y} higher<br>%{customdata}<br>%{x:${MONEY_HOVER}}<extra></extra>` },
+    { type: "bar", orientation: "h", y: params, x: low, base, marker: { color: MUTED }, customdata: hoverData(lowIn, low), hovertemplate: tpl("lower") },
+    { type: "bar", orientation: "h", y: params, x: high, base, marker: { color: RENT }, customdata: hoverData(highIn, high), hovertemplate: tpl("higher") },
   ];
   const layout = baseLayout("Impact on Buy − Rent difference");
   moveCurrencyToXAxis(layout);

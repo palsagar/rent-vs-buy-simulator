@@ -106,13 +106,17 @@ class TestHorizontalBarMoneyAxis:
 
 
 class TestMinusSignPrecedesTheCurrencySymbol:
-    """One convention for negative money on every axis: -EUR30M.
+    """The symbol follows the sign everywhere: -EUR30M, not EUR-30M.
 
     Plotly's ``tickprefix`` renders before the sign, so a prefixed axis
-    reads "EUR-30M" while the hand-formatted symlog axis reads
-    "-EUR10k". The fix is to let d3-format place the symbol, which it
-    does after the sign, and to match Plotly's own minus glyph in the
+    read "EUR-30M" while the hand-formatted symlog axis read "-EUR10k".
+    The fix is to let d3-format place the symbol, which it does after
+    the sign, and to match Plotly's own minus glyph in the
     hand-formatted labels.
+
+    ORDERING is what is unified here, not the glyph. Ticks carry U+2212
+    and hovers an ASCII hyphen, because Plotly rewrites the sign only on
+    the tick path; see the MONEY_HOVER comment in charts.js.
     """
 
     def test_money_axes_use_the_d3_currency_type_not_a_prefix(self):
@@ -164,15 +168,18 @@ class TestMinusSignPrecedesTheCurrencySymbol:
             "no d3 currency hover format found"
         )
 
-    def test_every_money_hovertemplate_actually_uses_it(self):
-        # Guards the constant being defined but only half-adopted.
+    def test_no_hovertemplate_formats_money_without_the_currency(self):
+        # Guards the constant being defined but only half-adopted,
+        # WITHOUT hardcoding a template count: a future non-money hover
+        # (a percentage, a year) must not be forced to adopt MONEY_HOVER
+        # just to keep a tally happy. What is banned is the bare
+        # thousands format, which is money stripped of its currency.
         live = _strip_comments(_source())
-        templates = re.findall(r"hovertemplate:\s*`(?P<tpl>[^`]*)`", live)
-        assert len(templates) == 6, f"expected 6 hovertemplates, found {len(templates)}"
-        money = [t for t in templates if "MONEY_HOVER" in t]
-        assert len(money) == 6, (
-            f"{6 - len(money)} hovertemplate(s) do not use MONEY_HOVER"
-        )
+        for match in re.finditer(r"hovertemplate:\s*`(?P<tpl>[^`]*)`", live):
+            tpl = match.group("tpl")
+            assert not re.search(r"%\{[^}]*:,\.\d f?\}|%\{[^}]*:,\.\df\}", tpl), (
+                f"hovertemplate formats money without a currency: {tpl}"
+            )
 
     def test_hand_formatted_ticks_use_plotlys_minus_glyph(self):
         # Plotly emits U+2212; an ASCII hyphen here would render a
@@ -188,4 +195,129 @@ class TestMinusSignPrecedesTheCurrencySymbol:
         )
         assert re.search(r'MINUS\s*=\s*"−"', _strip_comments(_source())), (
             "no U+2212 MINUS constant found"
+        )
+
+
+def _tornado_body() -> str:
+    """Body of renderTornadoChart, comments stripped.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        assert "customdata" in _tornado_body()
+
+    """
+    match = re.search(
+        r"export function renderTornadoChart\(el, tornado\)\s*\{(?P<body>.*?)\n\}",
+        _strip_comments(_source()),
+        re.S,
+    )
+    assert match, "renderTornadoChart not found in charts.js"
+    return match.group("body")
+
+
+class TestTornadoRangeHover:
+    """Each bar's hover states the assumption's own before and after.
+
+    The payload arrives sorted by descending impact and is drawn
+    bottom-up, so every array is reversed. A single missed reverse
+    attaches one bar's range to another bar's outcome -- both still
+    render, and nothing else fails.
+    """
+
+    def test_every_payload_array_is_reversed_together(self):
+        # params, fields, baseInput, lowInput, highInput and the two
+        # outcome arrays all index the same bar. Reversing some and not
+        # others silently mislabels every hover.
+        body = _tornado_body()
+        for key in (
+            "params",
+            "fields",
+            "baseInput",
+            "lowInput",
+            "highInput",
+            "low",
+            "high",
+        ):
+            assert re.search(rf"\[\.\.\.tornado\.{key}\]\.reverse\(\)", body), (
+                f"tornado.{key} is not reversed with the others"
+            )
+
+    def test_the_lower_bar_gets_the_low_range_and_the_higher_the_high(self):
+        # Swapping these renders a "lower" bar whose stated range is an
+        # increase -- the hover contradicting its own label.
+        body = _tornado_body()
+        assert re.search(
+            r"x:\s*low,.*?customdata:\s*hoverData\(lowIn,\s*low\).*?tpl\(\"lower\"\)",
+            body,
+            re.S,
+        ), "the lower bar is not paired with the low range and low impact"
+        assert re.search(
+            r"x:\s*high,.*?customdata:\s*hoverData\(highIn,\s*high\).*?tpl\(\"higher\"\)",
+            body,
+            re.S,
+        ), "the higher bar is not paired with the high range and high impact"
+
+    def test_the_hover_reports_impact_not_the_absolute_verdict(self):
+        # On a trace with `base`, %{x} resolves to base + size -- the
+        # absolute verdict, not the impact the axis is titled for.
+        body = _tornado_body()
+        assert "%{customdata[1]:" in body, (
+            "the money line does not read the impact out of customdata"
+        )
+        assert not re.search(r"%\{x:", body), (
+            "%{x} on a based bar is the absolute verdict, not the impact"
+        )
+
+    def test_the_range_is_rendered_in_display_units(self):
+        # INPUT_DEFS min/max are display units and `scale` converts
+        # stored -> display, so the stored value is MULTIPLIED. Dividing
+        # renders rent inflation (stored 0.03, scale 100) as "0.0%".
+        match = re.search(
+            r"function fmtFieldValue\(fieldKey, storedValue\)\s*\{(?P<body>.*?)\n\}",
+            _strip_comments(_source()),
+            re.S,
+        )
+        assert match, "fmtFieldValue not found in charts.js"
+        assert re.search(
+            r"storedValue\s*\*\s*\(def\.scale\s*\?\?\s*1\)", match.group("body")
+        ), "fmtFieldValue does not scale stored -> display by multiplying"
+
+
+class TestSymlogTickSign:
+    def test_the_minus_is_applied_to_negative_values(self):
+        # `v > 0 ? MINUS : ""` still contains no ASCII hyphen and still
+        # references the constant, so the glyph tests above pass while
+        # every positive tick gains a minus sign.
+        match = re.search(
+            r"function fmtTick\(v\)\s*\{(?P<body>.*?)\n\}",
+            _strip_comments(_source()),
+            re.S,
+        )
+        assert match, "fmtTick not found in charts.js"
+        assert re.search(r"v\s*<\s*0\s*\?\s*MINUS", match.group("body")), (
+            "fmtTick does not sign strictly-negative values"
+        )
+
+
+class TestHorizontalBarHoversReadTheMoneyAxis:
+    """A horizontal bar's money is on X; Y holds the category label.
+
+    ``%{y}: %{y:$,.0f}`` is well-formed, uses the currency format and
+    passes every check above -- it just formats a category name as
+    money. The pairing has to be asserted per chart, because on the line
+    charts money genuinely IS on Y.
+    """
+
+    def test_breakdown_labels_from_y_and_formats_money_from_x(self):
+        match = re.search(
+            r"export function renderBreakdownChart\(.*?\n\}",
+            _strip_comments(_source()),
+            re.S,
+        )
+        assert match, "renderBreakdownChart not found in charts.js"
+        body = match.group(0)
+        assert re.search(r"hovertemplate:\s*`%\{y\}:\s*%\{x:", body), (
+            "the breakdown hover does not label from y and read money from x"
         )

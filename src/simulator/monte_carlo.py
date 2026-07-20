@@ -426,14 +426,20 @@ def _compute_sensitivity(  # noqa: C901
         # factor stays positive. Positive-only fields keep the 0.001 floor.
         if field in ("property_appreciation_annual", "equity_growth_annual"):
             low_override = max(base_val - delta, -99.0)
+        elif field == "rent_inflation_rate":
+            # Floors AT zero, not at the positive-only floor. Flat rents
+            # are a real setting -- fields.js ships this slider from a
+            # min of 0 -- and at a zero base the 0.001 floor lands the
+            # low side ABOVE the base, so the bar labelled "lower" shows
+            # an INCREASE. That is the same inversion the levy skip
+            # above exists to prevent, and the perturbed-range hover now
+            # states it in words ("0.0% -> 0.1%").
+            low_override = max(base_val - delta, 0.0)
         else:
             low_override = max(base_val - delta, _POSITIVE_FIELD_FLOOR)
         # Clamp down_payment_pct to [5, 100]
         if field == "down_payment_pct":
             low_override = max(low_override, 5.0)
-        # Clamp rent_inflation_rate to [0, 1]
-        if field == "rent_inflation_rate":
-            low_override = max(low_override, 0.0)
 
         # High perturbation (add delta), never past what the UI can set.
         #

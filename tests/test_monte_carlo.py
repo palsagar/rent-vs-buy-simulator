@@ -111,6 +111,16 @@ class TestSensitivityReportsPerturbedInputs:
         valid = {f.name for f in dataclass_fields(SimulationConfig)}
         assert set(sens.fields) <= valid
 
+    def test_base_input_is_the_unperturbed_config_value(self):
+        # The left-hand side of every hover string. If it drifted to a
+        # perturbed value the hover would read "2.3% -> 2.3%" and the
+        # bracket test below would still pass, since it reads the base
+        # from the config rather than from base_input.
+        config = make_config()
+        sens = _compute_sensitivity(config)
+        for i, field in enumerate(sens.fields):
+            assert sens.base_input[i] == getattr(config, field)
+
     def test_inputs_bracket_the_base_value(self):
         config = make_config()
         sens = _compute_sensitivity(config)
@@ -119,6 +129,23 @@ class TestSensitivityReportsPerturbedInputs:
             assert sens.low_input[i] <= base_val <= sens.high_input[i], (
                 f"{sens.params[i]} does not bracket its base {base_val}"
             )
+
+    def test_a_zero_base_never_inverts_a_bar(self):
+        # The floors are what can break bracketing, and they only bite
+        # at the bottom of a slider's range -- which the default config
+        # never visits. Every perturbed field that fields.js lets reach
+        # zero is checked at zero: a low side floored ABOVE the base
+        # renders a bar labelled "lower" that shows an increase, and the
+        # hover now spells that contradiction out.
+        for field in ("rent_inflation_rate", "property_appreciation_annual"):
+            config = make_config(**{field: 0.0})
+            sens = _compute_sensitivity(config)
+            for i, perturbed in enumerate(sens.fields):
+                base_val = getattr(config, perturbed)
+                assert sens.low_input[i] <= base_val <= sens.high_input[i], (
+                    f"{sens.params[i]} inverts at {field}=0: "
+                    f"{sens.low_input[i]} -> {base_val} -> {sens.high_input[i]}"
+                )
 
     def test_stochastic_input_is_one_standard_error_from_base(self):
         # The documented rule for the three stochastic drivers is
