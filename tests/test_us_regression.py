@@ -64,8 +64,8 @@ GOLDENS = {
 #   - the three stochastic bars move on BOTH sides, because the delta
 #     itself shrank: Equity Growth, Property Appreciation, Rent Inflation
 #   - the five fixed-step bars are bit-identical on both sides: Monthly
-#     Rent, Property Price, Mortgage Rate, Property Tax Rate, Down
-#     Payment % -- their deltas are absolute steps, not standard
+#     Rent, Property Price, Mortgage Rate, Property Levy (% of value),
+#     Down Payment % -- their deltas are absolute steps, not standard
 #     deviations, so sqrt(horizon) does not apply
 #   - the summary GOLDENS block above is untouched
 #
@@ -79,7 +79,7 @@ TORNADO_NAMES = [
     "Monthly Rent",
     "Property Price",
     "Mortgage Rate",
-    "Property Tax Rate",
+    "Property Levy (% of value)",
     "Rent Inflation",
     "Down Payment %",
 ]
@@ -133,11 +133,15 @@ class TestUsTornadoUnchanged:
     base of 1.2, so these hold bit-for-bit (plan ambiguity A7)."""
 
     def test_names_and_order(self):
-        names, _, _, _ = _compute_sensitivity(SimulationConfig(**US_PRESET))
+        sens = _compute_sensitivity(SimulationConfig(**US_PRESET))
+        names = sens.params
         assert names == TORNADO_NAMES
 
     def test_values_match_goldens_exactly(self):
-        _, low, high, base = _compute_sensitivity(SimulationConfig(**US_PRESET))
+        sens = _compute_sensitivity(SimulationConfig(**US_PRESET))
+        low = sens.low
+        high = sens.high
+        base = sens.base
         assert list(low) == TORNADO_LOW
         assert list(high) == TORNADO_HIGH
         assert base == TORNADO_BASE

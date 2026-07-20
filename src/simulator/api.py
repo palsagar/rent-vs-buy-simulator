@@ -282,10 +282,18 @@ def monte_carlo_payload(
         "percentileLevels": results.percentile_levels,
         "differencePercentiles": results.difference_percentiles.tolist(),
         "tornado": {
-            "params": results.sensitivity_params,
-            "low": results.sensitivity_low.tolist(),
-            "high": results.sensitivity_high.tolist(),
-            "base": float(results.sensitivity_base),
+            "params": results.sensitivity.params,
+            # camelCase so the frontend can look each one up directly in
+            # INPUT_DEFS and reuse that field's own formatter -- a rate
+            # and a price render differently, and only the field knows
+            # which it is.
+            "fields": [_camel(f) for f in results.sensitivity.fields],
+            "low": results.sensitivity.low.tolist(),
+            "high": results.sensitivity.high.tolist(),
+            "baseInput": results.sensitivity.base_input.tolist(),
+            "lowInput": results.sensitivity.low_input.tolist(),
+            "highInput": results.sensitivity.high_input.tolist(),
+            "base": float(results.sensitivity.base),
         },
         "nSimulations": results.n_simulations,
     }

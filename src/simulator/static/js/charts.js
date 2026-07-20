@@ -1,14 +1,54 @@
 // Plotly.js builders — one shared GitHub-dark theme. Buy #f0883e,
 // Rent #58a6ff; bands/neutrals muted; direct line labels, no legends.
 
-import { getCurrencySymbol } from "./format.js";
+import { INPUT_DEFS } from "./fields.js";
+import { MINUS, fmtMoney, getCurrencySymbol } from "./format.js";
 
 const BUY = "#f0883e";
 const RENT = "#58a6ff";
 const MUTED = "#8b949e";
 const GRID = "rgba(48,54,61,0.6)";
 
-const PLOT_CONFIG = { displayModeBar: false, responsive: true };
+// Plotly's tickprefix renders before EVERYTHING, minus sign included, so
+// a prefixed axis reads "EUR-30M". d3-format's currency type puts the
+// symbol after the sign instead -- "-EUR30M", how money is normally
+// written, and what fmtTick already produces on the symlog axis. Plotly
+// takes the symbol from a registered locale rather than from the format
+// string, hence the registration below.
+const CURRENCY_LOCALE = "app-currency";
+
+// Registration is per layout build, not once at load: the active
+// currency changes with the region, and re-registering an existing name
+// does take effect. An unregistered name falls back to "$" SILENTLY, so
+// this must stay next to the getCurrencySymbol() read rather than drift
+// into module scope where it would run once with whatever loaded first.
+function currencyTickformat() {
+  Plotly.register({
+    moduleType: "locale",
+    name: CURRENCY_LOCALE,
+    dictionary: {},
+    format: { currency: [getCurrencySymbol(), ""], minus: MINUS },
+  });
+  return "$~s";
+}
+
+// Hover money is formatted in JS and carried in customdata, NOT by a d3
+// format spec in the template. Two reasons, both verified on 2.35.2:
+//
+//   - a hand-built `${symbol}%{x}` prefix renders "EUR-3,986,681", for
+//     the same reason tickprefix renders "EUR-30M";
+//   - the d3 currency type fixes that ordering, but its minus is a
+//     hard-coded ASCII hyphen. Plotly rewrites the sign to U+2212 on the
+//     TICK path only, and the locale's own `minus` key does not reach
+//     hovers either -- so the hover would spell the sign differently
+//     from the axis tick sitting directly behind it.
+//
+// fmtMoney settles both: one symbol position, one glyph, everywhere.
+function moneyHover(values) {
+  return Array.from(values, fmtMoney);
+}
+
+const PLOT_CONFIG = { displayModeBar: false, responsive: true, locale: CURRENCY_LOCALE };
 
 function baseLayout(xTitle) {
   return {
@@ -22,8 +62,7 @@ function baseLayout(xTitle) {
     yaxis: {
       gridcolor: GRID,
       zerolinecolor: "#30363d",
-      tickprefix: getCurrencySymbol(),
-      tickformat: "~s",
+      tickformat: currencyTickformat(),
     },
   };
 }
@@ -34,17 +73,16 @@ function baseLayout(xTitle) {
 // compaction at all -- the tornado read "-0.5M" where every other chart
 // reads "-EUR500k".
 //
-// It cannot simply be set on both: Plotly ignores a tickformat on a
-// category axis but honours a tickprefix, so a prefix left on Y labels
-// every category "<symbol>Rent Inflation".
+// Plotly ignores a tickformat on a category axis, so leaving the Y copy
+// in place would be harmless to render -- it is deleted anyway so the
+// layout says what it means, and so the guard below has something
+// unambiguous to test.
 // Not idempotent by construction, so it refuses to run twice: a second
-// call would read the already-deleted y-axis keys and assign undefined,
+// call would read the already-deleted y-axis key and assign undefined,
 // silently wiping the currency it just installed.
 function moveCurrencyToXAxis(layout) {
-  if (layout.yaxis.tickprefix === undefined) return;
-  layout.xaxis.tickprefix = layout.yaxis.tickprefix;
+  if (layout.yaxis.tickformat === undefined) return;
   layout.xaxis.tickformat = layout.yaxis.tickformat;
-  delete layout.yaxis.tickprefix;
   delete layout.yaxis.tickformat;
 }
 
@@ -54,8 +92,8 @@ function strategyTraces(x, buyY, rentY, fwd) {
   const mk = (yRaw, color, name) => {
     const base = { x, mode: "lines", line: { color, width: 2 }, name };
     return fwd
-      ? { ...base, y: yRaw.map(fwd), customdata: yRaw, hovertemplate: `${name} ${getCurrencySymbol()}%{customdata:,.0f}<extra></extra>` }
-      : { ...base, y: yRaw, hovertemplate: `${name} ${getCurrencySymbol()}%{y:,.0f}<extra></extra>` };
+      ? { ...base, y: yRaw.map(fwd), customdata: moneyHover(yRaw), hovertemplate: `${name} %{customdata}<extra></extra>` }
+      : { ...base, y: yRaw, customdata: moneyHover(yRaw), hovertemplate: `${name} %{customdata}<extra></extra>` };
   };
   return [mk(buyY, BUY, "Buy"), mk(rentY, RENT, "Rent")];
 }
@@ -92,8 +130,11 @@ function outcomesDisparate(buyY, rentY) {
 // Compact tick label (1k / 30k / 1.0M in the active currency). Like
 // fmtCompact but compacts down to 1k so a symlog axis never mixes
 // "1,000" with "10k".
+//
+// Signs come from MINUS, the same glyph the registered locale gives
+// Plotly, so hand-formatted and Plotly-formatted labels agree.
 function fmtTick(v) {
-  const sign = v < 0 ? "-" : "";
+  const sign = v < 0 ? MINUS : "";
   const cur = getCurrencySymbol();
   const a = Math.abs(v);
   if (a >= 1e6) return `${sign}${cur}${(a / 1e6).toFixed(1)}M`;
@@ -172,7 +213,7 @@ export function renderFanChart(el, mc) {
     { x, y: row[5], mode: "lines", line: { width: 0 }, fill: "tonexty", fillcolor: "rgba(139,148,158,0.14)", hoverinfo: "skip", showlegend: false },
     { x, y: row[75], mode: "lines", line: { width: 0 }, hoverinfo: "skip", showlegend: false },
     { x, y: row[25], mode: "lines", line: { width: 0 }, fill: "tonexty", fillcolor: "rgba(139,148,158,0.24)", hoverinfo: "skip", showlegend: false },
-    { x, y: row[50], mode: "lines", line: { color: "#e6edf3", width: 1.5 }, name: "Median", hovertemplate: `Median ${getCurrencySymbol()}%{y:,.0f}<extra></extra>`, showlegend: false },
+    { x, y: row[50], mode: "lines", line: { color: "#e6edf3", width: 1.5 }, name: "Median", customdata: moneyHover(row[50]), hovertemplate: `Median %{customdata}<extra></extra>`, showlegend: false },
   ];
   const layout = baseLayout("Years");
   layout.yaxis.title = { text: "Buy − Rent" };
@@ -182,21 +223,81 @@ export function renderFanChart(el, mc) {
   Plotly.react(el, traces, layout, PLOT_CONFIG);
 }
 
+// Render a perturbed input the way its own slider would. INPUT_DEFS is
+// the single source of truth for both halves of that: the scale (rent
+// inflation is STORED as 0.03 but shown as "3.0%") and the formatter (a
+// rate, a price and a flat levy do not share one format string). The
+// payload ships the config field name precisely so the tornado can look
+// the field up rather than infer it from a prose bar label.
+function fmtFieldValue(fieldKey, storedValue) {
+  const def = INPUT_DEFS.find((d) => d.key === fieldKey);
+  if (def === undefined) return "";
+  return def.fmt(storedValue * (def.scale ?? 1));
+}
+
+// The range hover needs four arrays the bars themselves do not. They are
+// a strictly additive part of the payload, so a response that predates
+// them still has everything needed to draw the chart -- but spreading a
+// missing one throws, and the throw happens AFTER the fan chart has
+// already rendered, leaving the tornado showing the previous region's
+// bars with nothing on screen saying they are stale. Reachable during a
+// rolling deploy (new bundle, old container) or from a cached API
+// response. Degrade to the bar-only hover instead of stranding the chart.
+function tornadoRanges(tornado, count) {
+  const arrays = [
+    tornado.fields,
+    tornado.baseInput,
+    tornado.lowInput,
+    tornado.highInput,
+  ];
+  if (arrays.some((a) => !Array.isArray(a) || a.length !== count)) return null;
+  return arrays.map((a) => [...a].reverse());
+}
+
 export function renderTornadoChart(el, tornado) {
   const params = [...tornado.params].reverse();
   const base = tornado.base;
   const low = [...tornado.low].reverse().map((v) => v - base);
   const high = [...tornado.high].reverse().map((v) => v - base);
+  // A bar's width says how much the outcome moves but never what was
+  // changed, and the width of the three stochastic bars additionally
+  // varies with the horizon (the delta is a standard error). Both are
+  // invisible without stating the assumption's own before/after.
+  const ranges = tornadoRanges(tornado, params.length);
+  const [fields, baseIn, lowIn, highIn] = ranges ?? [[], [], [], []];
+  // Bars are drawn as IMPACT (verdict - base) around a zero pivot, NOT
+  // as absolute verdicts around a `base` pivot. Both render identically
+  // -- same widths, same pivot position -- but only one agrees with the
+  // axis title, and the difference is visible the moment a number is
+  // read off. With a trace `base`, Plotly resolves %{x} to base + size,
+  // so the tick labels and the hover reported the absolute verdict on an
+  // axis titled "Impact": a bar sitting well left of the zero tick could
+  // hover as a positive number, the two disagreeing by the whole base.
+  // customdata is [range, impact] per bar. The impact is pre-formatted
+  // like every other hover; the range is empty when the payload predates
+  // it, and the template then omits that line entirely.
+  const hoverData = (values, impacts) => {
+    const money = moneyHover(impacts);
+    return money.map((m, i) =>
+      ranges === null
+        ? ["", m]
+        : [`${fmtFieldValue(fields[i], baseIn[i])} → ${fmtFieldValue(fields[i], values[i])}`, m],
+    );
+  };
+  const tpl = (side) =>
+    ranges === null
+      ? `%{y} ${side}<br>%{customdata[1]}<extra></extra>`
+      : `%{y} ${side}<br>%{customdata[0]}<br>%{customdata[1]}<extra></extra>`;
   const traces = [
-    { type: "bar", orientation: "h", y: params, x: low, base, marker: { color: MUTED }, hovertemplate: `%{y} lower: ${getCurrencySymbol()}%{x:,.0f}<extra></extra>` },
-    { type: "bar", orientation: "h", y: params, x: high, base, marker: { color: RENT }, hovertemplate: `%{y} higher: ${getCurrencySymbol()}%{x:,.0f}<extra></extra>` },
+    { type: "bar", orientation: "h", y: params, x: low, marker: { color: MUTED }, customdata: hoverData(lowIn, low), hovertemplate: tpl("lower") },
+    { type: "bar", orientation: "h", y: params, x: high, marker: { color: RENT }, customdata: hoverData(highIn, high), hovertemplate: tpl("higher") },
   ];
   const layout = baseLayout("Impact on Buy − Rent difference");
   moveCurrencyToXAxis(layout);
   layout.barmode = "overlay";
   layout.yaxis.automargin = true; // grow the left margin to fit parameter labels
   layout.shapes = [
-    { type: "line", x0: base, x1: base, yref: "paper", y0: 0, y1: 1, line: { color: "#e6edf3", width: 1 } },
+    { type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1, line: { color: "#e6edf3", width: 1 } },
   ];
   Plotly.react(el, traces, layout, PLOT_CONFIG);
 }
@@ -213,7 +314,7 @@ export function renderBreakdownChart(el, payload, cfg) {
   const t = payload.totals;
   const items = [
     ["Mortgage interest", t.interestPaid],
-    ["Property tax", t.propertyTaxPaid],
+    ["Property levy", t.propertyTaxPaid],
     ["Maintenance", t.maintenancePaid],
     ["Insurance", t.insurancePaid],
     ["Buyer closing", t.closingCostsBuyer],
@@ -230,7 +331,8 @@ export function renderBreakdownChart(el, payload, cfg) {
       type: "bar", orientation: "h",
       y: revLabels, x: revValues,
       marker: { color: revValues.map((v) => (v < 0 ? "#7ee787" : MUTED)) },
-      hovertemplate: `%{y}: ${getCurrencySymbol()}%{x:,.0f}<extra></extra>`,
+      customdata: moneyHover(revValues),
+      hovertemplate: `%{y}: %{customdata}<extra></extra>`,
     },
   ];
   const layout = baseLayout(`Total over ${cfg.horizonYears} years`);

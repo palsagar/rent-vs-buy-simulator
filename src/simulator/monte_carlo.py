@@ -15,14 +15,19 @@ from .engine import _net_value_series
 from .models import (
     MonteCarloConfig,
     MonteCarloResults,
+    SensitivityResult,
     SimulationConfig,
 )
 
-# Smallest value a positive-only field may be perturbed to. A NUMERIC
-# safety floor, unrelated to _UI_MAXIMUM below, which is a per-field UI
-# policy -- the names are not an antonym pair. The proportional levy
-# delta is checked against this same value so guard and clamp cannot
-# drift apart.
+# Numeric safety floor for the levy fields, which have no _UI_MINIMUM
+# entry: their sliders start at 0, so the slider minimum is not a usable
+# floor and the near-zero band is skipped outright instead. The
+# proportional levy delta is checked against this same value so guard and
+# clamp cannot drift apart.
+#
+# Every other positive-only field floors at its _UI_MINIMUM. This is a
+# NUMERIC backstop, not a UI policy -- it is not the antonym of
+# _UI_MAXIMUM.
 _POSITIVE_FIELD_FLOOR = 0.001
 
 # Relative swing applied to whichever field carries a region's property
@@ -67,11 +72,6 @@ _STOCHASTIC_FIELDS = frozenset(
 # beyond the slider maximum, which the engine accepts (down payment is
 # valid to 100, the slider stops at 50) and the API will hand over.
 #
-# The LOW side is deliberately NOT capped at the slider minimum. A crash
-# is a real outcome the model must be able to represent even though the
-# UI will not let you type a negative growth rate -- see
-# test_tornado_low_uses_negative_growth_rate, which pins that.
-#
 # Mirrors fields.js. Kept honest by tests/test_tornado_bounds.py, which
 # parses the slider maxima out of it rather than trusting this copy.
 _UI_MAXIMUM = {
@@ -84,6 +84,29 @@ _UI_MAXIMUM = {
     "mortgage_rate_annual": 10.0,
     "property_tax_rate": 5.0,
     "annual_property_levy": 10_000.0,
+}
+
+# Lowest value the UI lets a user set, for the fields where the slider
+# minimum is a real floor rather than a UI convenience.
+#
+# The growth rates are deliberately ABSENT. A crash is a real outcome the
+# model must represent even though the UI will not let you type a
+# negative growth rate -- see test_tornado_low_uses_negative_growth_rate,
+# which pins that. Their floor is -99.0, just above where the monthly
+# compounding factor would turn non-positive.
+#
+# The quantities below have no such reading. property_price takes a fixed
+# 100k step, so every home price in the 50k-100k band drove its low side
+# to _POSITIVE_FIELD_FLOOR -- and since price is usually the widest bar,
+# the top bar of the chart claimed to have modelled a free house. The
+# perturbed-range hover states that outright ("$50k -> $0"), which is how
+# it was found. Flooring here keeps the tornado inside the configuration
+# space the app can actually be set to, symmetrically with the ceiling.
+_UI_MINIMUM = {
+    "property_price": 50_000.0,
+    "down_payment_pct": 5.0,
+    "monthly_rent": 500.0,
+    "mortgage_rate_annual": 1.0,
 }
 
 
@@ -294,7 +317,7 @@ def _simulate_single_path(
 
 def _compute_sensitivity(  # noqa: C901
     base_config: SimulationConfig,
-) -> tuple[list[str], np.ndarray, np.ndarray, float]:
+) -> SensitivityResult:
     """Compute one-at-a-time sensitivity for tornado chart.
 
     Uses the EXISTING deterministic ``calculate_scenarios`` engine
@@ -316,9 +339,10 @@ def _compute_sensitivity(  # noqa: C901
 
     Returns
     -------
-    tuple[list[str], np.ndarray, np.ndarray, float]
-        ``(param_names, low_values, high_values, base_value)`` sorted
-        by descending impact range ``abs(high - low)``.
+    SensitivityResult
+        Parallel arrays of names, perturbed fields, perturbed inputs
+        and resulting verdicts, sorted by descending impact range
+        ``abs(high - low)``.
 
     Examples
     --------
@@ -335,8 +359,8 @@ def _compute_sensitivity(  # noqa: C901
             property_appreciation_annual=3.0,
             equity_growth_annual=7.0, monthly_rent=2000,
         )
-        params, low, high, base = _compute_sensitivity(config)
-        for p, lo, hi in zip(params, low, high):
+        sens = _compute_sensitivity(config)
+        for p, lo, hi in zip(sens.params, sens.low, sens.high):
             print(f"{p}: [{lo:,.0f}, {hi:,.0f}]")
 
     """
@@ -374,7 +398,7 @@ def _compute_sensitivity(  # noqa: C901
         ("Property Price", "property_price", 100000),
         ("Down Payment %", "down_payment_pct", 5.0),
         ("Monthly Rent", "monthly_rent", 500),
-        ("Property Tax Rate", "property_tax_rate", 0.5),
+        ("Property Levy (% of value)", "property_tax_rate", 0.5),
         # Both are skipped at a zero base, so a region gets whichever one
         # its bundle actually uses and never two levy bars at once.
         ("Property Levy (flat)", "annual_property_levy", 0.0),
@@ -382,8 +406,12 @@ def _compute_sensitivity(  # noqa: C901
     ]
 
     param_names: list[str] = []
+    param_fields: list[str] = []
     low_vals: list[float] = []
     high_vals: list[float] = []
+    base_inputs: list[float] = []
+    low_inputs: list[float] = []
+    high_inputs: list[float] = []
 
     for display_name, field, delta in perturbations:
         base_val = getattr(base_config, field)
@@ -415,19 +443,26 @@ def _compute_sensitivity(  # noqa: C901
             if base_val - delta < _POSITIVE_FIELD_FLOOR:
                 continue
 
-        # Low perturbation (subtract delta). Growth rates may legitimately
-        # go negative; floor them just above -100% so the monthly compounding
-        # factor stays positive. Positive-only fields keep the 0.001 floor.
+        # Low perturbation (subtract delta), floored by whichever rule the
+        # field lives under. Growth rates may legitimately go negative;
+        # floor them just above -100% so the monthly compounding factor
+        # stays positive.
         if field in ("property_appreciation_annual", "equity_growth_annual"):
             low_override = max(base_val - delta, -99.0)
+        elif field == "rent_inflation_rate":
+            # Floors AT zero, not at the positive-only floor. Flat rents
+            # are a real setting -- fields.js ships this slider from a
+            # min of 0 -- and at a zero base the 0.001 floor would land
+            # the low side ABOVE the base, so the bar labelled "lower"
+            # would show an INCREASE. That is the same inversion the levy
+            # skip above exists to prevent.
+            low_override = max(base_val - delta, 0.0)
         else:
-            low_override = max(base_val - delta, _POSITIVE_FIELD_FLOOR)
-        # Clamp down_payment_pct to [5, 100]
-        if field == "down_payment_pct":
-            low_override = max(low_override, 5.0)
-        # Clamp rent_inflation_rate to [0, 1]
-        if field == "rent_inflation_rate":
-            low_override = max(low_override, 0.0)
+            # _POSITIVE_FIELD_FLOOR is the numeric backstop for the levy
+            # fields, which have no _UI_MINIMUM entry (their sliders start
+            # at 0 and the near-zero band is skipped outright above).
+            floor = _UI_MINIMUM.get(field, _POSITIVE_FIELD_FLOOR)
+            low_override = max(base_val - delta, floor)
 
         # High perturbation (add delta), never past what the UI can set.
         #
@@ -472,8 +507,16 @@ def _compute_sensitivity(  # noqa: C901
             ):
                 continue
             param_names.append(display_name)
+            param_fields.append(field)
             low_vals.append(val_low)
             high_vals.append(val_high)
+            # The perturbed inputs are recorded AFTER every clamp and
+            # skip above, so what the chart reports is what the engine
+            # was actually run at -- not base +/- delta, which the
+            # floors and the UI ceiling routinely override.
+            base_inputs.append(base_val)
+            low_inputs.append(low_override)
+            high_inputs.append(high_override)
         except ValueError:
             # Skip if perturbation produces invalid config
             continue
@@ -484,11 +527,18 @@ def _compute_sensitivity(  # noqa: C901
     impact_range = np.abs(high_arr - low_arr)
     sort_idx = np.argsort(-impact_range)
 
-    sorted_names = [param_names[i] for i in sort_idx]
-    sorted_low = low_arr[sort_idx]
-    sorted_high = high_arr[sort_idx]
-
-    return sorted_names, sorted_low, sorted_high, base_value
+    # Every array is reordered by the SAME index, so a bar's name,
+    # field and perturbed inputs stay attached to its outcome.
+    return SensitivityResult(
+        params=[param_names[i] for i in sort_idx],
+        fields=[param_fields[i] for i in sort_idx],
+        low=low_arr[sort_idx],
+        high=high_arr[sort_idx],
+        base_input=np.array(base_inputs)[sort_idx],
+        low_input=np.array(low_inputs)[sort_idx],
+        high_input=np.array(high_inputs)[sort_idx],
+        base=base_value,
+    )
 
 
 def run_monte_carlo(
@@ -579,7 +629,7 @@ def run_monte_carlo(
     p95_diff = float(np.percentile(final_diffs, 95))
 
     # Sensitivity analysis (uses deterministic engine, not MC)
-    sens_params, sens_low, sens_high, sens_base = _compute_sensitivity(base_config)
+    sens = _compute_sensitivity(base_config)
 
     return MonteCarloResults(
         final_net_buy=all_net_buy[:, -1],
@@ -595,10 +645,7 @@ def run_monte_carlo(
         median_difference=median_diff,
         p5_difference=p5_diff,
         p95_difference=p95_diff,
-        sensitivity_params=sens_params,
-        sensitivity_low=sens_low,
-        sensitivity_high=sens_high,
-        sensitivity_base=sens_base,
+        sensitivity=sens,
         base_config=base_config,
         mc_config=mc_config,
         n_simulations=n_sims,
