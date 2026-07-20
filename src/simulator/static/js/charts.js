@@ -32,6 +32,12 @@ function currencyTickformat() {
   return "$~s";
 }
 
+// Hover money, same reasoning as the axes: a hand-built `${symbol}%{x}`
+// prefix renders "EUR-3,986,681" for the same reason tickprefix did.
+// The d3 currency type honours the registered locale here too, so
+// hovers and ticks share one convention instead of one each.
+const MONEY_HOVER = "$,.0f";
+
 const PLOT_CONFIG = { displayModeBar: false, responsive: true, locale: CURRENCY_LOCALE };
 
 function baseLayout(xTitle) {
@@ -76,8 +82,8 @@ function strategyTraces(x, buyY, rentY, fwd) {
   const mk = (yRaw, color, name) => {
     const base = { x, mode: "lines", line: { color, width: 2 }, name };
     return fwd
-      ? { ...base, y: yRaw.map(fwd), customdata: yRaw, hovertemplate: `${name} ${getCurrencySymbol()}%{customdata:,.0f}<extra></extra>` }
-      : { ...base, y: yRaw, hovertemplate: `${name} ${getCurrencySymbol()}%{y:,.0f}<extra></extra>` };
+      ? { ...base, y: yRaw.map(fwd), customdata: yRaw, hovertemplate: `${name} %{customdata:${MONEY_HOVER}}<extra></extra>` }
+      : { ...base, y: yRaw, hovertemplate: `${name} %{y:${MONEY_HOVER}}<extra></extra>` };
   };
   return [mk(buyY, BUY, "Buy"), mk(rentY, RENT, "Rent")];
 }
@@ -200,7 +206,7 @@ export function renderFanChart(el, mc) {
     { x, y: row[5], mode: "lines", line: { width: 0 }, fill: "tonexty", fillcolor: "rgba(139,148,158,0.14)", hoverinfo: "skip", showlegend: false },
     { x, y: row[75], mode: "lines", line: { width: 0 }, hoverinfo: "skip", showlegend: false },
     { x, y: row[25], mode: "lines", line: { width: 0 }, fill: "tonexty", fillcolor: "rgba(139,148,158,0.24)", hoverinfo: "skip", showlegend: false },
-    { x, y: row[50], mode: "lines", line: { color: "#e6edf3", width: 1.5 }, name: "Median", hovertemplate: `Median ${getCurrencySymbol()}%{y:,.0f}<extra></extra>`, showlegend: false },
+    { x, y: row[50], mode: "lines", line: { color: "#e6edf3", width: 1.5 }, name: "Median", hovertemplate: `Median %{y:${MONEY_HOVER}}<extra></extra>`, showlegend: false },
   ];
   const layout = baseLayout("Years");
   layout.yaxis.title = { text: "Buy − Rent" };
@@ -237,10 +243,9 @@ export function renderTornadoChart(el, tornado) {
   const highIn = [...tornado.highInput].reverse();
   const rangeTo = (values) =>
     fields.map((f, i) => `${fmtFieldValue(f, baseIn[i])} → ${fmtFieldValue(f, values[i])}`);
-  const cur = getCurrencySymbol();
   const traces = [
-    { type: "bar", orientation: "h", y: params, x: low, base, marker: { color: MUTED }, customdata: rangeTo(lowIn), hovertemplate: `%{y} lower<br>%{customdata}<br>${cur}%{x:,.0f}<extra></extra>` },
-    { type: "bar", orientation: "h", y: params, x: high, base, marker: { color: RENT }, customdata: rangeTo(highIn), hovertemplate: `%{y} higher<br>%{customdata}<br>${cur}%{x:,.0f}<extra></extra>` },
+    { type: "bar", orientation: "h", y: params, x: low, base, marker: { color: MUTED }, customdata: rangeTo(lowIn), hovertemplate: `%{y} lower<br>%{customdata}<br>%{x:${MONEY_HOVER}}<extra></extra>` },
+    { type: "bar", orientation: "h", y: params, x: high, base, marker: { color: RENT }, customdata: rangeTo(highIn), hovertemplate: `%{y} higher<br>%{customdata}<br>%{x:${MONEY_HOVER}}<extra></extra>` },
   ];
   const layout = baseLayout("Impact on Buy − Rent difference");
   moveCurrencyToXAxis(layout);
@@ -281,7 +286,7 @@ export function renderBreakdownChart(el, payload, cfg) {
       type: "bar", orientation: "h",
       y: revLabels, x: revValues,
       marker: { color: revValues.map((v) => (v < 0 ? "#7ee787" : MUTED)) },
-      hovertemplate: `%{y}: ${getCurrencySymbol()}%{x:,.0f}<extra></extra>`,
+      hovertemplate: `%{y}: %{x:${MONEY_HOVER}}<extra></extra>`,
     },
   ];
   const layout = baseLayout(`Total over ${cfg.horizonYears} years`);

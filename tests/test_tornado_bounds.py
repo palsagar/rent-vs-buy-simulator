@@ -198,3 +198,73 @@ class TestHighSideIsBounded:
         # bit-identical by construction and exact equality is the
         # assertion -- approx would hide a floor being applied.
         assert low[names.index("Equity Growth")] == expected
+
+
+def _formatted_field_keys() -> set[str]:
+    """INPUT_DEFS keys that declare a formatter.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        assert "equityGrowthAnnual" in _formatted_field_keys()
+
+    """
+    keys: set[str] = set()
+    pattern = re.compile(r'key:\s*"(?P<key>\w+)".*?fmt:')
+    for line in _FIELDS_JS.read_text(encoding="utf-8").splitlines():
+        match = pattern.search(line)
+        if match:
+            keys.add(match.group("key"))
+    return keys
+
+
+class TestEveryBarCanBeFormatted:
+    """The tornado reports each bar's perturbed range on hover.
+
+    charts.js looks the value's format up in INPUT_DEFS by the config
+    field the payload ships. A perturbed field with no INPUT_DEFS entry
+    has no formatter to borrow, and ``fmtFieldValue`` returns an empty
+    string -- the hover then reads a bare arrow with no numbers, on the
+    one bar a user was trying to understand. Nothing else fails.
+    """
+
+    def test_every_perturbed_field_has_a_formatter_in_fields_js(self):
+        formatted = _formatted_field_keys()
+        # Drive this off the perturbation table itself, so a bar added
+        # without a matching slider is caught here rather than in the UI.
+        config = SimulationConfig(
+            horizon_years=10,
+            property_price=500_000,
+            down_payment_pct=20,
+            mortgage_rate_annual=6.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2400,
+            property_tax_rate=1.2,
+        )
+        perturbed = {_camel(f) for f in _compute_sensitivity(config).fields}
+        assert perturbed, "no bars produced; the check would be vacuous"
+        missing = perturbed - formatted
+        assert not missing, (
+            f"perturbed but absent from INPUT_DEFS (or missing fmt): {missing}"
+        )
+
+    def test_the_flat_levy_bar_is_covered_too(self):
+        # It never coexists with the ad-valorem bar, so the config above
+        # cannot reach it -- it needs a region that carries the levy flat
+        # and does not pass it to the occupier.
+        config = SimulationConfig(
+            horizon_years=10,
+            property_price=500_000,
+            down_payment_pct=20,
+            mortgage_rate_annual=6.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2400,
+            property_tax_rate=0.0,
+            annual_property_levy=1220.0,
+        )
+        sens = _compute_sensitivity(config)
+        assert "Property Levy (flat)" in sens.params
+        assert {_camel(f) for f in sens.fields} <= _formatted_field_keys()

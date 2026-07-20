@@ -145,6 +145,35 @@ class TestMinusSignPrecedesTheCurrencySymbol:
             "PLOT_CONFIG does not point Plotly at CURRENCY_LOCALE"
         )
 
+    def test_hover_money_uses_the_same_currency_type_as_the_axes(self):
+        # Hovers are the other money surface, and a hand-built
+        # `${getCurrencySymbol()}%{x:,.0f}` prefix reproduces the exact
+        # defect there: the tornado read "EUR-3,986,681" while its own
+        # axis read "-EUR150k". d3 honours the locale in hovertemplates
+        # too, so both surfaces can share one convention.
+        live = _strip_comments(_source())
+        for match in re.finditer(r"hovertemplate:\s*`(?P<tpl>[^`]*)`", live):
+            tpl = match.group("tpl")
+            assert "getCurrencySymbol()" not in tpl, (
+                f"hovertemplate hand-prefixes the currency: {tpl}"
+            )
+            assert "${cur}" not in tpl, (
+                f"hovertemplate hand-prefixes the currency: {tpl}"
+            )
+        assert re.search(r'MONEY_HOVER\s*=\s*"\$,\.0f"', live), (
+            "no d3 currency hover format found"
+        )
+
+    def test_every_money_hovertemplate_actually_uses_it(self):
+        # Guards the constant being defined but only half-adopted.
+        live = _strip_comments(_source())
+        templates = re.findall(r"hovertemplate:\s*`(?P<tpl>[^`]*)`", live)
+        assert len(templates) == 6, f"expected 6 hovertemplates, found {len(templates)}"
+        money = [t for t in templates if "MONEY_HOVER" in t]
+        assert len(money) == 6, (
+            f"{6 - len(money)} hovertemplate(s) do not use MONEY_HOVER"
+        )
+
     def test_hand_formatted_ticks_use_plotlys_minus_glyph(self):
         # Plotly emits U+2212; an ASCII hyphen here would render a
         # visibly different dash one chart across.
