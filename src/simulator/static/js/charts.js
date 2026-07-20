@@ -9,7 +9,30 @@ const RENT = "#58a6ff";
 const MUTED = "#8b949e";
 const GRID = "rgba(48,54,61,0.6)";
 
-const PLOT_CONFIG = { displayModeBar: false, responsive: true };
+// Plotly's tickprefix renders before EVERYTHING, minus sign included, so
+// a prefixed axis reads "EUR-30M". d3-format's currency type puts the
+// symbol after the sign instead -- "-EUR30M", how money is normally
+// written, and what fmtTick already produces on the symlog axis. Plotly
+// takes the symbol from a registered locale rather than from the format
+// string, hence the registration below.
+const CURRENCY_LOCALE = "app-currency";
+
+// Registration is per layout build, not once at load: the active
+// currency changes with the region, and re-registering an existing name
+// does take effect. An unregistered name falls back to "$" SILENTLY, so
+// this must stay next to the getCurrencySymbol() read rather than drift
+// into module scope where it would run once with whatever loaded first.
+function currencyTickformat() {
+  Plotly.register({
+    moduleType: "locale",
+    name: CURRENCY_LOCALE,
+    dictionary: {},
+    format: { currency: [getCurrencySymbol(), ""] },
+  });
+  return "$~s";
+}
+
+const PLOT_CONFIG = { displayModeBar: false, responsive: true, locale: CURRENCY_LOCALE };
 
 function baseLayout(xTitle) {
   return {
@@ -23,8 +46,7 @@ function baseLayout(xTitle) {
     yaxis: {
       gridcolor: GRID,
       zerolinecolor: "#30363d",
-      tickprefix: getCurrencySymbol(),
-      tickformat: "~s",
+      tickformat: currencyTickformat(),
     },
   };
 }
@@ -35,17 +57,16 @@ function baseLayout(xTitle) {
 // compaction at all -- the tornado read "-0.5M" where every other chart
 // reads "-EUR500k".
 //
-// It cannot simply be set on both: Plotly ignores a tickformat on a
-// category axis but honours a tickprefix, so a prefix left on Y labels
-// every category "<symbol>Rent Inflation".
+// Plotly ignores a tickformat on a category axis, so leaving the Y copy
+// in place would be harmless to render -- it is deleted anyway so the
+// layout says what it means, and so the guard below has something
+// unambiguous to test.
 // Not idempotent by construction, so it refuses to run twice: a second
-// call would read the already-deleted y-axis keys and assign undefined,
+// call would read the already-deleted y-axis key and assign undefined,
 // silently wiping the currency it just installed.
 function moveCurrencyToXAxis(layout) {
-  if (layout.yaxis.tickprefix === undefined) return;
-  layout.xaxis.tickprefix = layout.yaxis.tickprefix;
+  if (layout.yaxis.tickformat === undefined) return;
   layout.xaxis.tickformat = layout.yaxis.tickformat;
-  delete layout.yaxis.tickprefix;
   delete layout.yaxis.tickformat;
 }
 
@@ -93,8 +114,14 @@ function outcomesDisparate(buyY, rentY) {
 // Compact tick label (1k / 30k / 1.0M in the active currency). Like
 // fmtCompact but compacts down to 1k so a symlog axis never mixes
 // "1,000" with "10k".
+//
+// The sign is U+2212 MINUS, not an ASCII hyphen, because these labels
+// share a page with linear axes that Plotly formats itself -- and Plotly
+// emits U+2212. A hyphen here renders visibly shorter and higher than
+// the minus one chart across.
+const MINUS = "−";
 function fmtTick(v) {
-  const sign = v < 0 ? "-" : "";
+  const sign = v < 0 ? MINUS : "";
   const cur = getCurrencySymbol();
   const a = Math.abs(v);
   if (a >= 1e6) return `${sign}${cur}${(a / 1e6).toFixed(1)}M`;
