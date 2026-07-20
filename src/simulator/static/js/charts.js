@@ -1,6 +1,7 @@
 // Plotly.js builders — one shared GitHub-dark theme. Buy #f0883e,
 // Rent #58a6ff; bands/neutrals muted; direct line labels, no legends.
 
+import { INPUT_DEFS } from "./fields.js";
 import { getCurrencySymbol } from "./format.js";
 
 const BUY = "#f0883e";
@@ -182,14 +183,37 @@ export function renderFanChart(el, mc) {
   Plotly.react(el, traces, layout, PLOT_CONFIG);
 }
 
+// Render a perturbed input the way its own slider would. INPUT_DEFS is
+// the single source of truth for both halves of that: the scale (rent
+// inflation is STORED as 0.03 but shown as "3.0%") and the formatter (a
+// rate, a price and a flat levy do not share one format string). The
+// payload ships the config field name precisely so the tornado can look
+// the field up rather than infer it from a prose bar label.
+function fmtFieldValue(fieldKey, storedValue) {
+  const def = INPUT_DEFS.find((d) => d.key === fieldKey);
+  if (def === undefined) return "";
+  return def.fmt(storedValue * (def.scale ?? 1));
+}
+
 export function renderTornadoChart(el, tornado) {
   const params = [...tornado.params].reverse();
   const base = tornado.base;
   const low = [...tornado.low].reverse().map((v) => v - base);
   const high = [...tornado.high].reverse().map((v) => v - base);
+  // A bar's width says how much the outcome moves but never what was
+  // changed, and the width of the three stochastic bars additionally
+  // varies with the horizon (the delta is a standard error). Both are
+  // invisible without stating the assumption's own before/after.
+  const fields = [...tornado.fields].reverse();
+  const baseIn = [...tornado.baseInput].reverse();
+  const lowIn = [...tornado.lowInput].reverse();
+  const highIn = [...tornado.highInput].reverse();
+  const rangeTo = (values) =>
+    fields.map((f, i) => `${fmtFieldValue(f, baseIn[i])} → ${fmtFieldValue(f, values[i])}`);
+  const cur = getCurrencySymbol();
   const traces = [
-    { type: "bar", orientation: "h", y: params, x: low, base, marker: { color: MUTED }, hovertemplate: `%{y} lower: ${getCurrencySymbol()}%{x:,.0f}<extra></extra>` },
-    { type: "bar", orientation: "h", y: params, x: high, base, marker: { color: RENT }, hovertemplate: `%{y} higher: ${getCurrencySymbol()}%{x:,.0f}<extra></extra>` },
+    { type: "bar", orientation: "h", y: params, x: low, base, marker: { color: MUTED }, customdata: rangeTo(lowIn), hovertemplate: `%{y} lower<br>%{customdata}<br>${cur}%{x:,.0f}<extra></extra>` },
+    { type: "bar", orientation: "h", y: params, x: high, base, marker: { color: RENT }, customdata: rangeTo(highIn), hovertemplate: `%{y} higher<br>%{customdata}<br>${cur}%{x:,.0f}<extra></extra>` },
   ];
   const layout = baseLayout("Impact on Buy − Rent difference");
   moveCurrencyToXAxis(layout);

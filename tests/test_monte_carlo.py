@@ -7,12 +7,17 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import itertools
 import math
+from dataclasses import fields as dataclass_fields
 
 import numpy as np
 
 from simulator.engine import calculate_scenarios
 from simulator.models import MonteCarloConfig, SimulationConfig
-from simulator.monte_carlo import _compute_sensitivity, run_monte_carlo
+from simulator.monte_carlo import (
+    _POSITIVE_FIELD_FLOOR,
+    _compute_sensitivity,
+    run_monte_carlo,
+)
 from tests.test_models import make_config
 from tests.test_us_regression import (
     TORNADO_BASE,
@@ -66,9 +71,9 @@ class TestSensitivity:
         cfg = make_config(horizon_years=5)
         res = run_monte_carlo(cfg, MonteCarloConfig(n_simulations=10))
         det = calculate_scenarios(cfg)
-        assert abs(res.sensitivity_base - det.final_difference) < 1e-6
-        assert len(res.sensitivity_params) > 0
-        assert len(res.sensitivity_low) == len(res.sensitivity_params)
+        assert abs(res.sensitivity.base - det.final_difference) < 1e-6
+        assert len(res.sensitivity.params) > 0
+        assert len(res.sensitivity.low) == len(res.sensitivity.params)
 
     def test_tornado_low_uses_negative_growth_rate(self):
         # Equity Growth low perturbation must reflect the true negative rate,
@@ -79,12 +84,72 @@ class TestSensitivity:
         # which the perturbation still goes negative, because a negative
         # target is what proves nothing floors it at zero.
         base_cfg = make_config(horizon_years=1, equity_growth_annual=7.0)
-        names, low, _high, _base = _compute_sensitivity(base_cfg)
+        sens = _compute_sensitivity(base_cfg)
+        names = sens.params
+        low = sens.low
         idx = names.index("Equity Growth")
         expected_low = calculate_scenarios(
             make_config(horizon_years=1, equity_growth_annual=-8.0)
         ).final_difference
         assert abs(low[idx] - expected_low) < 1e-6
+
+
+class TestSensitivityReportsPerturbedInputs:
+    """The chart states what each bar CHANGED, not just by how much.
+
+    These pin the reported inputs to the values the engine was actually
+    run at. Reporting ``base +/- delta`` instead would agree with them
+    everywhere except exactly where the clamps bite -- which is where a
+    user is most likely to be confused by the bar.
+    """
+
+    def test_fields_are_parallel_and_name_real_config_fields(self):
+        # The frontend keys its formatter off `fields`, so a desync
+        # would silently render a rate with a currency formatter.
+        sens = _compute_sensitivity(make_config())
+        assert len(sens.fields) == len(sens.params)
+        valid = {f.name for f in dataclass_fields(SimulationConfig)}
+        assert set(sens.fields) <= valid
+
+    def test_inputs_bracket_the_base_value(self):
+        config = make_config()
+        sens = _compute_sensitivity(config)
+        for i, field in enumerate(sens.fields):
+            base_val = getattr(config, field)
+            assert sens.low_input[i] <= base_val <= sens.high_input[i], (
+                f"{sens.params[i]} does not bracket its base {base_val}"
+            )
+
+    def test_stochastic_input_is_one_standard_error_from_base(self):
+        # The documented rule for the three stochastic drivers is
+        # sigma/sqrt(horizon) (FORMULAS.md). At 25 years equity growth
+        # takes 15/5 = 3.0, so 7.0 -> [4.0, 10.0]. A test against a
+        # 1-year horizon would pass even if the sqrt were dropped.
+        config = make_config(horizon_years=25, equity_growth_annual=7.0)
+        sens = _compute_sensitivity(config)
+        i = sens.params.index("Equity Growth")
+        assert math.isclose(sens.low_input[i], 4.0, rel_tol=1e-12)
+        assert math.isclose(sens.high_input[i], 10.0, rel_tol=1e-12)
+
+    def test_input_reflects_the_ui_ceiling_rather_than_base_plus_delta(self):
+        # equity_growth_annual is capped at 15.0. From a base of 14.0 at
+        # a 1-year horizon the raw delta is the full std of 15, so the
+        # high side would be 29.0 -- a rate the app cannot be set to and
+        # was never simulated. The reported input must be the ceiling.
+        config = make_config(horizon_years=1, equity_growth_annual=14.0)
+        sens = _compute_sensitivity(config)
+        i = sens.params.index("Equity Growth")
+        assert sens.high_input[i] == 15.0
+
+    def test_input_reflects_the_positive_floor_rather_than_base_minus_delta(self):
+        # Monthly rent takes a fixed 500 step, so a base of exactly 500
+        # drives the low side to 0 -- a rent the engine refuses. It is
+        # floored to _POSITIVE_FIELD_FLOOR instead, and that floored
+        # value is what was simulated. Asserted as equality, not ">= 0":
+        # an unfloored 0.0 satisfies ">= 0" and would slip through.
+        sens = _compute_sensitivity(make_config(monthly_rent=500))
+        i = sens.params.index("Monthly Rent")
+        assert sens.low_input[i] == _POSITIVE_FIELD_FLOOR
 
 
 class TestPortfolioDragIsPathDependent:
@@ -128,11 +193,15 @@ class TestPortfolioDragIsPathDependent:
 
 class TestTornadoLevyDelta:
     def test_us_tornado_names_and_order_are_preserved(self):
-        names, _, _, _ = _compute_sensitivity(SimulationConfig(**US_PRESET))
+        sens = _compute_sensitivity(SimulationConfig(**US_PRESET))
+        names = sens.params
         assert names == TORNADO_NAMES
 
     def test_us_tornado_values_match_within_tolerance(self):
-        _, low, high, base = _compute_sensitivity(SimulationConfig(**US_PRESET))
+        sens = _compute_sensitivity(SimulationConfig(**US_PRESET))
+        low = sens.low
+        high = sens.high
+        base = sens.base
         for actual, golden in zip(low, TORNADO_LOW, strict=True):
             assert math.isclose(actual, golden, rel_tol=1e-12)
         for actual, golden in zip(high, TORNADO_HIGH, strict=True):
@@ -146,7 +215,9 @@ class TestTornadoLevyDelta:
         # someone decides deliberately rather than inheriting a silent
         # allowance. The test above covers the same goldens at a
         # tolerance; this one is deliberately stricter.
-        _, low, high, _ = _compute_sensitivity(SimulationConfig(**US_PRESET))
+        sens = _compute_sensitivity(SimulationConfig(**US_PRESET))
+        low = sens.low
+        high = sens.high
         assert list(low) == TORNADO_LOW
         assert list(high) == TORNADO_HIGH
 
@@ -158,7 +229,8 @@ class TestTornadoLevyDelta:
         # bar. Hence the skip is kept alongside the proportional delta.
         # The guard covers the whole near-zero band, not just an exact
         # 0.0; see test_near_zero_levy_does_not_invert_the_bar.
-        names, _, _, _ = _compute_sensitivity(make_config(property_tax_rate=0.0))
+        sens = _compute_sensitivity(make_config(property_tax_rate=0.0))
+        names = sens.params
         assert "Property Tax Rate" not in names
         assert len(names) == 7
 
@@ -171,14 +243,18 @@ class TestTornadoLevyDelta:
         # is skipped, so no reachable slider value produces a bar that
         # contradicts its own direction.
         for rate in (0.0005, 0.001, 0.0015):
-            names, _, _, _ = _compute_sensitivity(make_config(property_tax_rate=rate))
+            sens = _compute_sensitivity(make_config(property_tax_rate=rate))
+            names = sens.params
             assert "Property Tax Rate" not in names, (
                 f"base {rate} kept a bar whose low side is floor-clamped"
             )
 
         # Just above the band the bar returns, and it points the right
         # way: a higher levy must lower Buy - Rent.
-        names, low, high, _ = _compute_sensitivity(make_config(property_tax_rate=0.01))
+        sens = _compute_sensitivity(make_config(property_tax_rate=0.01))
+        names = sens.params
+        low = sens.low
+        high = sens.high
         i = names.index("Property Tax Rate")
         assert high[i] < low[i]
 
@@ -187,9 +263,12 @@ class TestTornadoLevyDelta:
         # existed the tornado was blind to the largest ownership cost
         # after the mortgage. FR is the case that matters: its levy is
         # owner-borne, so it genuinely moves Buy - Rent.
-        names, low, high, _ = _compute_sensitivity(
+        sens = _compute_sensitivity(
             make_config(property_tax_rate=0.0, annual_property_levy=1220.0)
         )
+        names = sens.params
+        low = sens.low
+        high = sens.high
         assert "Property Levy (flat)" in names
         i = names.index("Property Levy (flat)")
         # A higher levy must lower Buy - Rent.
@@ -199,9 +278,10 @@ class TestTornadoLevyDelta:
         # Both fields are skipped at a zero base, so each region shows
         # whichever representation its bundle actually uses.
         for tax_rate, flat in ((1.2, 0.0), (0.0, 1220.0)):
-            names, _, _, _ = _compute_sensitivity(
+            sens = _compute_sensitivity(
                 make_config(property_tax_rate=tax_rate, annual_property_levy=flat)
             )
+            names = sens.params
             levy_bars = [
                 n for n in names if n in ("Property Tax Rate", "Property Levy (flat)")
             ]
@@ -220,7 +300,8 @@ class TestTornadoLevyDelta:
             interest_deduction_enabled=False,
             marginal_tax_rate_pct=0.0,
         )
-        names, _, _, _ = _compute_sensitivity(cancels)
+        sens = _compute_sensitivity(cancels)
+        names = sens.params
         assert "Property Levy (flat)" not in names
 
         deductible = make_config(
@@ -231,7 +312,10 @@ class TestTornadoLevyDelta:
             marginal_tax_rate_pct=40.0,
             levy_deduction_cap=None,
         )
-        names, low, high, _ = _compute_sensitivity(deductible)
+        sens = _compute_sensitivity(deductible)
+        names = sens.params
+        low = sens.low
+        high = sens.high
         assert "Property Levy (flat)" in names
         i = names.index("Property Levy (flat)")
         assert not math.isclose(low[i], high[i], rel_tol=1e-12)
@@ -261,7 +345,8 @@ class TestTornadoLevyDelta:
                 interest_deduction_enabled=False,
                 marginal_tax_rate_pct=0.0,
             )
-            names, _, _, _ = _compute_sensitivity(cfg)
+            sens = _compute_sensitivity(cfg)
+            names = sens.params
             if "Property Levy (flat)" in names:
                 leaked.append((price, rent, horizon, levy, rate))
         assert not leaked, (
@@ -273,9 +358,10 @@ class TestTornadoLevyDelta:
         # +178%; the proportional delta is 0.2815 * (0.5/1.2) = 0.1173,
         # i.e. +-41.7%, the same relative swing the US gets.
         base_rate = 0.2815
-        names, low, high, _ = _compute_sensitivity(
-            make_config(property_tax_rate=base_rate)
-        )
+        sens = _compute_sensitivity(make_config(property_tax_rate=base_rate))
+        names = sens.params
+        low = sens.low
+        high = sens.high
         assert "Property Tax Rate" in names
         idx = names.index("Property Tax Rate")
         expected_delta = base_rate * (0.5 / 1.2)
@@ -289,9 +375,10 @@ class TestTornadoLevyDelta:
         # when a flat-levy region got no levy bar at all, and must still
         # hold now that it gets one of its own. Kept as an exact set so
         # the guarantee stays as strong as it was.
-        names, _, _, _ = _compute_sensitivity(
+        sens = _compute_sensitivity(
             make_config(property_tax_rate=0.0, annual_property_levy=2392.0)
         )
+        names = sens.params
         assert set(names) == {
             "Property Appreciation",
             "Equity Growth",

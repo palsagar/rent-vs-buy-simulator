@@ -133,11 +133,15 @@ class TestUsTornadoUnchanged:
     base of 1.2, so these hold bit-for-bit (plan ambiguity A7)."""
 
     def test_names_and_order(self):
-        names, _, _, _ = _compute_sensitivity(SimulationConfig(**US_PRESET))
+        sens = _compute_sensitivity(SimulationConfig(**US_PRESET))
+        names = sens.params
         assert names == TORNADO_NAMES
 
     def test_values_match_goldens_exactly(self):
-        _, low, high, base = _compute_sensitivity(SimulationConfig(**US_PRESET))
+        sens = _compute_sensitivity(SimulationConfig(**US_PRESET))
+        low = sens.low
+        high = sens.high
+        base = sens.base
         assert list(low) == TORNADO_LOW
         assert list(high) == TORNADO_HIGH
         assert base == TORNADO_BASE

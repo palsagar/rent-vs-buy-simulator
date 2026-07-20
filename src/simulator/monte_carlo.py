@@ -15,6 +15,7 @@ from .engine import _net_value_series
 from .models import (
     MonteCarloConfig,
     MonteCarloResults,
+    SensitivityResult,
     SimulationConfig,
 )
 
@@ -294,7 +295,7 @@ def _simulate_single_path(
 
 def _compute_sensitivity(  # noqa: C901
     base_config: SimulationConfig,
-) -> tuple[list[str], np.ndarray, np.ndarray, float]:
+) -> SensitivityResult:
     """Compute one-at-a-time sensitivity for tornado chart.
 
     Uses the EXISTING deterministic ``calculate_scenarios`` engine
@@ -316,9 +317,10 @@ def _compute_sensitivity(  # noqa: C901
 
     Returns
     -------
-    tuple[list[str], np.ndarray, np.ndarray, float]
-        ``(param_names, low_values, high_values, base_value)`` sorted
-        by descending impact range ``abs(high - low)``.
+    SensitivityResult
+        Parallel arrays of names, perturbed fields, perturbed inputs
+        and resulting verdicts, sorted by descending impact range
+        ``abs(high - low)``.
 
     Examples
     --------
@@ -335,8 +337,8 @@ def _compute_sensitivity(  # noqa: C901
             property_appreciation_annual=3.0,
             equity_growth_annual=7.0, monthly_rent=2000,
         )
-        params, low, high, base = _compute_sensitivity(config)
-        for p, lo, hi in zip(params, low, high):
+        sens = _compute_sensitivity(config)
+        for p, lo, hi in zip(sens.params, sens.low, sens.high):
             print(f"{p}: [{lo:,.0f}, {hi:,.0f}]")
 
     """
@@ -382,8 +384,12 @@ def _compute_sensitivity(  # noqa: C901
     ]
 
     param_names: list[str] = []
+    param_fields: list[str] = []
     low_vals: list[float] = []
     high_vals: list[float] = []
+    base_inputs: list[float] = []
+    low_inputs: list[float] = []
+    high_inputs: list[float] = []
 
     for display_name, field, delta in perturbations:
         base_val = getattr(base_config, field)
@@ -472,8 +478,16 @@ def _compute_sensitivity(  # noqa: C901
             ):
                 continue
             param_names.append(display_name)
+            param_fields.append(field)
             low_vals.append(val_low)
             high_vals.append(val_high)
+            # The perturbed inputs are recorded AFTER every clamp and
+            # skip above, so what the chart reports is what the engine
+            # was actually run at -- not base +/- delta, which the
+            # floors and the UI ceiling routinely override.
+            base_inputs.append(base_val)
+            low_inputs.append(low_override)
+            high_inputs.append(high_override)
         except ValueError:
             # Skip if perturbation produces invalid config
             continue
@@ -484,11 +498,18 @@ def _compute_sensitivity(  # noqa: C901
     impact_range = np.abs(high_arr - low_arr)
     sort_idx = np.argsort(-impact_range)
 
-    sorted_names = [param_names[i] for i in sort_idx]
-    sorted_low = low_arr[sort_idx]
-    sorted_high = high_arr[sort_idx]
-
-    return sorted_names, sorted_low, sorted_high, base_value
+    # Every array is reordered by the SAME index, so a bar's name,
+    # field and perturbed inputs stay attached to its outcome.
+    return SensitivityResult(
+        params=[param_names[i] for i in sort_idx],
+        fields=[param_fields[i] for i in sort_idx],
+        low=low_arr[sort_idx],
+        high=high_arr[sort_idx],
+        base_input=np.array(base_inputs)[sort_idx],
+        low_input=np.array(low_inputs)[sort_idx],
+        high_input=np.array(high_inputs)[sort_idx],
+        base=base_value,
+    )
 
 
 def run_monte_carlo(
@@ -579,7 +600,7 @@ def run_monte_carlo(
     p95_diff = float(np.percentile(final_diffs, 95))
 
     # Sensitivity analysis (uses deterministic engine, not MC)
-    sens_params, sens_low, sens_high, sens_base = _compute_sensitivity(base_config)
+    sens = _compute_sensitivity(base_config)
 
     return MonteCarloResults(
         final_net_buy=all_net_buy[:, -1],
@@ -595,10 +616,7 @@ def run_monte_carlo(
         median_difference=median_diff,
         p5_difference=p5_diff,
         p95_difference=p95_diff,
-        sensitivity_params=sens_params,
-        sensitivity_low=sens_low,
-        sensitivity_high=sens_high,
-        sensitivity_base=sens_base,
+        sensitivity=sens,
         base_config=base_config,
         mc_config=mc_config,
         n_simulations=n_sims,

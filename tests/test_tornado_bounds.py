@@ -92,7 +92,10 @@ class TestHighSideIsBounded:
             equity_growth_annual=9.0,
             monthly_rent=2200,
         )
-        names, low, high, _ = _compute_sensitivity(config)
+        sens = _compute_sensitivity(config)
+        names = sens.params
+        low = sens.low
+        high = sens.high
         spans = {n: abs(high[i] - low[i]) for i, n in enumerate(names)}
         widest = max(spans.values())
         # Unbounded, equity spanned ~33.7M against a ~0.5M median bar.
@@ -123,7 +126,11 @@ class TestHighSideIsBounded:
                 "monthly_rent": 2400,
                 field: value,
             }
-            names, low, high, base = _compute_sensitivity(SimulationConfig(**kwargs))
+            sens = _compute_sensitivity(SimulationConfig(**kwargs))
+            names = sens.params
+            low = sens.low
+            high = sens.high
+            base = sens.base
             label = {
                 "down_payment_pct": "Down Payment %",
                 "equity_growth_annual": "Equity Growth",
@@ -155,7 +162,8 @@ class TestHighSideIsBounded:
                 property_tax_rate=0.0,
                 annual_property_levy=levy,
             )
-            names, _, _, _ = _compute_sensitivity(config)
+            sens = _compute_sensitivity(config)
+            names = sens.params
             assert "Property Levy (flat)" in names, (
                 f"levy {levy:,.2f}: a real, owner-borne cost lost its bar"
             )
@@ -180,7 +188,9 @@ class TestHighSideIsBounded:
             monthly_rent=2400,
         )
         assert base - std < 0, "test presumes the low perturbation goes negative"
-        names, low, _high, _ = _compute_sensitivity(config)
+        sens = _compute_sensitivity(config)
+        names = sens.params
+        low = sens.low
         expected = calculate_scenarios(
             dataclasses.replace(config, equity_growth_annual=base - std)
         ).final_difference

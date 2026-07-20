@@ -596,6 +596,72 @@ class MonteCarloConfig:
 
 
 @dataclass
+class SensitivityResult:
+    """One-at-a-time sensitivity data behind the tornado chart.
+
+    Every list/array is parallel and shares one ordering: descending
+    impact range. A plain tuple carried this until it needed to report
+    the perturbed INPUTS as well as the outcomes, at which point seven
+    positional returns stopped being readable.
+
+    ``fields`` is what makes the inputs presentable. The chart labels
+    bars with ``params`` (prose), but formatting an input needs the
+    config field it came from -- a rate renders as a percentage, a
+    price as currency -- so the field name travels alongside rather
+    than being reverse-engineered from the label.
+
+    Attributes
+    ----------
+    params : list[str]
+        Display names for the bars, e.g. ``"Equity Growth"``.
+    fields : list[str]
+        The ``SimulationConfig`` field each bar perturbs, e.g.
+        ``"equity_growth_annual"``. Parallel to ``params``.
+    low : np.ndarray
+        Verdict when each parameter takes its low perturbation.
+    high : np.ndarray
+        Verdict when each parameter takes its high perturbation.
+    base_input : np.ndarray
+        The unperturbed input value, in the field's own stored units.
+    low_input : np.ndarray
+        The perturbed input value itself on the low side, same units.
+    high_input : np.ndarray
+        The perturbed input value on the high side, same units.
+    base : float
+        Unperturbed verdict, the pivot the bars are drawn around.
+
+    Examples
+    --------
+    Read a bar's perturbed range alongside its outcome:
+
+    .. code-block:: python
+
+        from simulator.monte_carlo import _compute_sensitivity
+        from simulator.models import SimulationConfig
+
+        config = SimulationConfig(
+            horizon_years=10, property_price=500000,
+            down_payment_pct=20, mortgage_rate_annual=4.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0, monthly_rent=2000,
+        )
+        sens = _compute_sensitivity(config)
+        for i, name in enumerate(sens.params):
+            print(f"{name}: {sens.low_input[i]} -> {sens.high_input[i]}")
+
+    """
+
+    params: list[str]
+    fields: list[str]
+    low: np.ndarray
+    high: np.ndarray
+    base_input: np.ndarray
+    low_input: np.ndarray
+    high_input: np.ndarray
+    base: float
+
+
+@dataclass
 class MonteCarloResults:
     """Results from Monte Carlo uncertainty analysis.
 
@@ -633,14 +699,8 @@ class MonteCarloResults:
         5th percentile of final differences.
     p95_difference : float
         95th percentile of final differences.
-    sensitivity_params : list[str]
-        Parameter names for tornado chart.
-    sensitivity_low : np.ndarray
-        Final difference when each param is set to mean - 1 std.
-    sensitivity_high : np.ndarray
-        Final difference when each param is set to mean + 1 std.
-    sensitivity_base : float
-        Base-case final difference (deterministic).
+    sensitivity : SensitivityResult
+        One-at-a-time sensitivity data behind the tornado chart.
     base_config : SimulationConfig
         The base configuration used.
     mc_config : MonteCarloConfig
@@ -682,10 +742,7 @@ class MonteCarloResults:
     median_difference: float
     p5_difference: float
     p95_difference: float
-    sensitivity_params: list[str]
-    sensitivity_low: np.ndarray
-    sensitivity_high: np.ndarray
-    sensitivity_base: float
+    sensitivity: SensitivityResult
     base_config: SimulationConfig
     mc_config: MonteCarloConfig
     n_simulations: int
