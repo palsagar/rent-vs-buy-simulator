@@ -14,6 +14,7 @@ import {
   readUrl,
   setCached,
 } from "./state.js";
+import { Tour, STEPS } from "./tour.js";
 import { hideError, initUi, setLoading, showError } from "./ui.js";
 
 let simAbort = null;
@@ -56,7 +57,12 @@ async function runSimulate() {
       errors.simulate = null;
       syncBanner();
     } catch (err) {
-      if (err.name !== "AbortError" && simAbort === controller) {
+      // A superseded/aborted request must never surface as the error banner:
+      // the abort can reject as AbortError, but under a connection teardown
+      // the same abort can surface as a generic TypeErrors, so gate on the
+      // controller's own signal rather than the error's name. A genuinely
+      // failed (non-aborted) request still shows the banner.
+      if (!controller.signal.aborted && simAbort === controller) {
         errors.simulate = `Simulation failed: ${err.message}`;
         syncBanner();
       }
@@ -98,7 +104,7 @@ async function runMonteCarlo() {
       if (lastWinnerHash === hash) renderMonteCarlo(data, lastWinner);
     }
   } catch (err) {
-    if (err.name !== "AbortError" && mcAbort === controller) {
+    if (!controller.signal.aborted && mcAbort === controller) {
       errors.monteCarlo = `Monte Carlo failed: ${err.message}`;
       syncBanner();
     }
@@ -110,7 +116,8 @@ const scheduleMonteCarlo = debounce(runMonteCarlo, 600);
 
 async function init() {
   readUrl();
-  initUi();
+  const tour = new Tour({ steps: STEPS });
+  window.__rvb = { tour }; // test handle for browser-driven verification
   let regions;
   try {
     regions = await getRegions();
@@ -133,6 +140,7 @@ async function init() {
     ];
   }
   initInputs(regions);
+  initUi(tour);
   syncInputs();
   onConfigChange(() => {
     scheduleSimulate();

@@ -14,72 +14,24 @@
 
 <div id="app">
 
-  <div id="welcome-overlay" class="overlay">
-    <div class="modal">
+  <div id="welcome-overlay" class="overlay hidden">
+    <div class="modal welcome-modal">
       <button class="modal-close" id="welcome-close" aria-label="Close">✕</button>
-      <div style="text-align: center; margin-bottom: 20px;">
-    <div style="font-size: 3rem; margin-bottom: 8px;">🏠</div>
-    <h2 style="color: #fafafa; margin: 0 0 6px; font-size: 1.5rem;">
-        Buy vs. Rent Financial Simulator
-    </h2>
-    <p style="color: #888; font-size: 1rem; margin: 0;">
-        Compare capital allocation strategies over time
-    </p>
-</div>
-<p style="color: #ccc; font-size: 1rem; line-height: 1.7; margin-bottom: 24px;">
-    Should you buy a home or rent and invest the difference? This simulator
-    models <strong style="color: #fff;">two financial strategies</strong>
-    side-by-side so you can compare outcomes with your own numbers.
-</p>
-
-<h3 style="color: #e2e8f0; font-size: 1rem; margin: 0 0 12px;
-    letter-spacing: 0.05em; text-transform: uppercase;">
-    The Two Strategies
-</h3>
-<div class="explainer-card explainer-card--a">
-    <span class="explainer-badge explainer-badge--a">A</span>
-    <div>
-        <strong style="color: #f0883e; font-size: 1rem;">Buy</strong>
-        <p>Purchase property with a mortgage. Your asset is the home value;
-        outflows include mortgage payments, taxes, insurance, and
-        maintenance.</p>
-    </div>
-</div>
-<div class="explainer-card explainer-card--b">
-    <span class="explainer-badge explainer-badge--b">B</span>
-    <div>
-        <strong style="color: #58a6ff; font-size: 1rem;">Rent + Invest</strong>
-        <p>Rent and invest what buying would have cost: the down payment
-        and closing costs up front, plus the monthly difference whenever
-        renting is cheaper.</p>
-    </div>
-</div>
-
-<h3 style="color: #e2e8f0; font-size: 1rem; margin: 24px 0 12px;
-    letter-spacing: 0.05em; text-transform: uppercase;">
-    How sure is this?
-</h3>
-<div class="explainer-card explainer-card--mc">
-    <span class="explainer-badge explainer-badge--mc">🎲</span>
-    <div>
-        <strong style="color: #f59e0b; font-size: 1rem;">
-            Monte Carlo Simulation</strong>
-        <p>Nobody can predict 30 years of returns. The
-        <em>How sure is this?</em> section runs hundreds of simulations
-        with randomized year-by-year returns to show how often buying
-        wins and the range of possible outcomes.</p>
-    </div>
-</div>
-
-<div class="explainer-tip">
-    <p><strong style="color: #e2e8f0;">Tip:</strong> Adjust parameters in
-    the input panel and watch the charts update. On small screens it
-    collapses to the Inputs drawer. The <strong
-    style="color: #e2e8f0;">Net Value</strong> chart is the key decision
-    metric. For a probabilistic view, try the
-    <strong style="color: #e2e8f0;">How sure is this?</strong> section.</p>
-</div>
-      <button id="welcome-start" class="btn-primary">Start exploring</button>
+      <div class="welcome-scroll">
+        <div class="welcome-hero">
+          <div class="welcome-hero-emoji">🏠</div>
+          <h1>Buy vs. Rent Financial Simulator</h1>
+          <p class="welcome-hero-sub">Compare capital allocation strategies over time</p>
+        </div>
+        <p class="welcome-intro">Should you buy a home or rent and invest the difference?
+          This simulator models <strong>two financial strategies</strong> side-by-side so
+          you can compare outcomes with your own numbers.</p>
+      </div>
+      <div class="welcome-actions">
+        <button id="start-tour-btn" class="btn-primary">Take the Tour</button>
+        <button id="start-sim-btn" class="btn">Skip to Simulator</button>
+      </div>
+      <p class="welcome-guide-link">New here? <a id="open-guide-from-welcome" href="#">Read the Guide</a></p>
     </div>
   </div>
 
@@ -88,8 +40,8 @@
       <button class="modal-close" aria-label="Close">✕</button>
       <h1>How this works</h1>
       <div class="guide-section">
-        <div class="guide-section-header"><span class="guide-chevron">▸</span><span class="guide-section-title">The two strategies</span></div>
-        <div class="guide-section-body"><div class="explainer-card explainer-card--a">
+        <div class="guide-section-header" id="guide-h-strategies" role="button" tabindex="0" aria-expanded="false" aria-controls="guide-b-strategies"><span class="guide-chevron">▸</span><span class="guide-section-title">The two strategies</span></div>
+        <div class="guide-section-body" id="guide-b-strategies"><div class="explainer-card explainer-card--a">
     <span class="explainer-badge explainer-badge--a">A</span>
     <div>
         <strong style="color: #f0883e;">Buy</strong>
@@ -109,8 +61,8 @@
 </div></div>
       </div>
       <div class="guide-section">
-        <div class="guide-section-header"><span class="guide-chevron">▸</span><span class="guide-section-title">Net Value</span></div>
-        <div class="guide-section-body"><p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+        <div class="guide-section-header" id="guide-h-netvalue" role="button" tabindex="0" aria-expanded="false" aria-controls="guide-b-netvalue"><span class="guide-chevron">▸</span><span class="guide-section-title">Net Value</span></div>
+        <div class="guide-section-body" id="guide-b-netvalue"><p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
     A home appreciating in value looks great — but you're also paying
     mortgage interest, property levy, insurance, and maintenance.
     <strong style="color: #e2e8f0;">Net Value</strong> captures the full
@@ -126,8 +78,8 @@
 </p></div>
       </div>
       <div class="guide-section">
-        <div class="guide-section-header"><span class="guide-chevron">▸</span><span class="guide-section-title">Breakeven</span></div>
-        <div class="guide-section-body"><p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+        <div class="guide-section-header" id="guide-h-breakeven" role="button" tabindex="0" aria-expanded="false" aria-controls="guide-b-breakeven"><span class="guide-chevron">▸</span><span class="guide-section-title">Breakeven</span></div>
+        <div class="guide-section-body" id="guide-b-breakeven"><p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
     The breakeven point is the year when
     <strong style="color: #f0883e;">buying</strong> overtakes
     <strong style="color: #58a6ff;">renting + investing</strong> in net
@@ -141,8 +93,8 @@
 </p></div>
       </div>
       <div class="guide-section">
-        <div class="guide-section-header"><span class="guide-chevron">▸</span><span class="guide-section-title">Monte Carlo confidence</span></div>
-        <div class="guide-section-body"><p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+        <div class="guide-section-header" id="guide-h-montecarlo" role="button" tabindex="0" aria-expanded="false" aria-controls="guide-b-montecarlo"><span class="guide-chevron">▸</span><span class="guide-section-title">Monte Carlo confidence</span></div>
+        <div class="guide-section-body" id="guide-b-montecarlo"><p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
     The main charts assume growth rates play out exactly as configured.
     But nobody can predict 30 years of returns. The
     <strong style="color: #e2e8f0;">How sure is this?</strong> section
@@ -158,6 +110,9 @@
     possible outcomes, and the tornado chart reveals which parameters
     matter most.
 </p></div>
+      </div>
+      <div class="guide-footer">
+        <button id="btn-replay-tour" class="btn">Replay the Tour</button>
       </div>
     </div>
   </div>
@@ -234,7 +189,7 @@
       </details>
 
       <footer>
-        🔒 <strong>Privacy:</strong> This app does not track any user data, use cookies, or perform any analytics. Self-hosted on a tiny VPS via <a href="https://coolify.io/" target="_blank" rel="noopener">Coolify</a>.<br>
+        🔒 <strong>Privacy:</strong> Cookie-less, privacy-friendly analytics via self-hosted <a href="https://umami.is" target="_blank" rel="noopener">Umami</a> — no personal data, no cross-site tracking. Hosted on a tiny VPS via <a href="https://coolify.io/" target="_blank" rel="noopener">Coolify</a>.<br>
         Calculations use monthly granularity; Net Value prices a full exit at every year (selling costs and capital-gains tax on both sides). Tax defaults follow the selected region. Source: <a href="https://github.com/palsagar/rent-vs-buy-simulator" target="_blank" rel="noopener">GitHub</a>.
         <div id="region-notes"></div>
       </footer>
@@ -250,5 +205,6 @@
 </div>
 
 <script type="module" src="js/main.js"></script>
+<div id="drawer-scrim" class="hidden"></div>
 </body>
 </html>

@@ -21,6 +21,11 @@ RUN useradd --create-home --uid 10001 app && chown -R app:app /app
 USER app
 
 ENV PORT=8501
+
+# Umami analytics — runtime env vars set in Coolify; empty default = inert.
+ENV UMAMI_DOMAIN="" \
+    UMAMI_ID=""
+
 EXPOSE 8501
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s \
