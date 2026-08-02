@@ -57,7 +57,12 @@ async function runSimulate() {
       errors.simulate = null;
       syncBanner();
     } catch (err) {
-      if (err.name !== "AbortError" && simAbort === controller) {
+      // A superseded/aborted request must never surface as the error banner:
+      // the abort can reject as AbortError, but under a connection teardown
+      // the same abort can surface as a generic TypeErrors, so gate on the
+      // controller's own signal rather than the error's name. A genuinely
+      // failed (non-aborted) request still shows the banner.
+      if (!controller.signal.aborted && simAbort === controller) {
         errors.simulate = `Simulation failed: ${err.message}`;
         syncBanner();
       }
@@ -99,7 +104,7 @@ async function runMonteCarlo() {
       if (lastWinnerHash === hash) renderMonteCarlo(data, lastWinner);
     }
   } catch (err) {
-    if (err.name !== "AbortError" && mcAbort === controller) {
+    if (!controller.signal.aborted && mcAbort === controller) {
       errors.monteCarlo = `Monte Carlo failed: ${err.message}`;
       syncBanner();
     }

@@ -1,105 +1,58 @@
-# Rent vs. Buy Simulator
+<div align="center">
 
-[![Tests](https://github.com/palsagar/rent-vs-buy-simulator/actions/workflows/test.yml/badge.svg)](https://github.com/palsagar/rent-vs-buy-simulator/actions/workflows/test.yml)
-[![Coverage](https://img.shields.io/codecov/c/github/palsagar/rent-vs-buy-simulator)](https://codecov.io/gh/palsagar/rent-vs-buy-simulator)
-[![Linting](https://github.com/palsagar/rent-vs-buy-simulator/actions/workflows/lint.yml/badge.svg)](https://github.com/palsagar/rent-vs-buy-simulator/actions/workflows/lint.yml)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+# 🏠 Rent or Buy?
 
-**[Try the Live App](https://rent-or-buy-sim.com/)**
+**The buy-vs-rent decision simulator — which strategy leaves you wealthier, and how sure can you be.**
 
-A financial simulation tool that compares two capital allocation strategies over time:
+</div>
 
-- **Buy** — Purchase property with a mortgage
-- **Rent & Invest** — Rent and invest the down payment (and any monthly surplus) in equities
+![Rent or Buy? verdict — which strategy wins at your horizon, by how much, and with what Monte Carlo confidence](src/simulator/static/screenshots/verdict.png)
 
-## Features
-
-- Mortgage amortization, property appreciation, equity growth, closing costs, property levy, insurance, and maintenance
-- Tax primitives: mortgage-interest and property-levy deductibility (with a configurable levy cap), a selectable home-sale capital-gains regime, a flat cost-indexed levy and maintenance amount, a fixed buyer-cost component (negative where a transfer tax has a zero-rate band), an occupier-borne-levy flag, and an annual portfolio drag on the lesser of a deemed and actual return
-- Interactive Plotly.js charts in a dark GitHub-style UI — Net Value decision chart, uncertainty fan, sensitivity tornado, and cash-flow views
-- Market-outlook presets and region-based tax defaults — US, France (Lyon), Germany (Köln), Netherlands and the UK (England & NI), each rendered in its own currency, with a first-time-buyer toggle that withdraws itself above each region's statutory price cap
-- Liquidation-based Net Value — a single wealth series, at every year, that drives every chart, the verdict, and Monte Carlo alike (see [FORMULAS.md](FORMULAS.md))
-- Cash-flow matching — whichever side is cheaper each month invests the difference in equities
-- Independent horizon (when you'd sell) and mortgage term, instead of one combined duration
-- Auto-calibrated Monte Carlo uncertainty analysis — no manual parameter tuning required
-- Vectorized NumPy engine — no Python loops
-
-## Installation
-
-### From PyPI
+## Run it
 
 ```bash
-# As a CLI tool (recommended)
-uv tool install rent-vs-buy-simulator
-rent-vs-buy
-# Open http://localhost:8501
-
-# Or as a library
-uv pip install rent-vs-buy-simulator
+uv run uvicorn simulator.server:app --port 8000
 ```
 
-### From Source
+Open http://localhost:8000.
 
-```bash
-git clone https://github.com/palsagar/rent-vs-buy-simulator.git
-cd rent-vs-buy-simulator
-uv sync
-uv run uvicorn simulator.server:app --reload --port 8501
-# Open http://localhost:8501
-```
+## Using Rent or Buy?
 
-### Docker
+- A **12-step tour** walks you through every feature on first visit; replay it anytime via **Replay the Tour** in the guide.
+- The **`?` button** opens the in-app guide — the concepts behind the verdict, one click away.
+- **Region presets** — United States, France (Lyon), Germany (Köln), Netherlands, United Kingdom (England & NI) — fill in tax rules, buyer costs and typical prices, rendered in each market's currency.
+- **First-time-buyer relief** where a region enacts it — on by default, withdrawing itself above the statutory price cap.
+- **Market outlook** — conservative, historical, or optimistic growth and inflation assumptions.
+- **Advanced drawer** — tax deductibility, capital gains, levies, maintenance; every default follows the selected region.
 
-```bash
-# Local development
-docker compose up --build
-# Open http://localhost:8501
+Every slider input updates the charts live, and the address bar is always a shareable link to your exact scenario.
 
-# Production
-docker build -t rent-vs-buy-simulator .
-docker run -p 8501:8501 rent-vs-buy-simulator
-```
+![Rent or Buy? guide — built-in documentation with the Replay the Tour entry point](src/simulator/static/screenshots/guide.png)
 
-The app listens on port **8501** everywhere — matching the prior Streamlit deployment, so an existing Coolify/Traefik route serves the new image without reconfiguration.
+## Understanding & hacking Rent or Buy?
 
-In production, run the app behind a reverse proxy (e.g. Coolify/Traefik) that enforces per-IP rate limiting; the app's built-in limits (request body-size cap, bounded Monte Carlo concurrency) are only a dependency-free backstop.
+- [docs/README.md](docs/README.md) — full annotated index
+- [docs/architecture.md](docs/architecture.md) — system + module map
+- [docs/formulas.md](docs/formulas.md) — the math behind the engine (Net Value, Monte Carlo, tax primitives)
+- [docs/adr/README.md](docs/adr/README.md) — 9 design decisions
+- [CONTEXT.md](CONTEXT.md) — project vocabulary
+- [DEPLOYMENT.md](DEPLOYMENT.md) — Docker + analytics wiring
 
-## Library Usage
+## Numbers
 
-```python
-from simulator import SimulationConfig, calculate_scenarios
+Verified from source, not asserted:
 
-config = SimulationConfig(
-    horizon_years=10,
-    mortgage_term_years=30,
-    property_price=500000,
-    down_payment_pct=20,
-    mortgage_rate_annual=4.5,
-    property_appreciation_annual=3.0,
-    equity_growth_annual=7.0,
-    monthly_rent=2000,
-    rent_inflation_rate=0.03,
-)
+- **12 tour steps** (`src/simulator/static/js/tour.js`) — welcome → region presets → first-time-buyer relief → outlook → situation → verdict → decision chart → fan/tornado → advanced → numbers → guide → all set.
+- **5 region bundles** (`src/simulator/regions.py`) — United States, France (Lyon), Germany (Köln), Netherlands, United Kingdom (England & NI); **United States** is the shipped default on a fresh load.
+- **Monte Carlo defaults** (`src/simulator/models.py`, `MonteCarloConfig`) — **500** simulations, seed **42**, property-appreciation σ **8.0 pp**, equity-growth σ **15.0 pp**, rent-inflation σ **1.5 pp**, correlation ρ **0.3**.
+- **12 pytest files** (`tests/test_*.py`), **5 Playwright spec files** (`tests/*.spec.js`): `tour`, `welcome`, `analytics`, `a11y`, `restore`.
+- Package **rent-vs-buy-simulator v1.0.0** (`pyproject.toml`).
 
-results = calculate_scenarios(config)
-print(f"Buy: ${results.final_net_buy:,.0f}")
-print(f"Rent & Invest: ${results.final_net_rent:,.0f}")
-print(f"Difference: ${results.final_difference:,.0f}")
-```
+## Develop
 
-## Contributing
+- No build step — a vanilla ES-module frontend served straight from `static/`.
+- `uv run pytest tests/ -q` — engine, API, region, Monte Carlo, and Umami tests.
+- `npx playwright test` — headless E2E (the config leaves Playwright's default headless mode) over the welcome modal, 12-step tour, analytics contract, a11y, and share/restore specs.
+- `Dockerfile` for deploy (FastAPI + static files, `PORT` selects the listen port).
 
-Contributions welcome! Fork the repo, create a feature branch, and open a PR against `main`.
-
-```bash
-uv sync
-uv run pytest tests/ --cov --cov-report=term   # 80% coverage minimum
-uv run ruff check src/ tests/
-```
-
-See [FORMULAS.md](FORMULAS.md) for the mathematical reference.
-
-## License
-
-MIT License. See [LICENSE](LICENSE) for details.
+See [docs/formulas.md](docs/formulas.md) for the mathematical reference and [CONTEXT.md](CONTEXT.md) for the vocabulary.

@@ -1,5 +1,7 @@
 # Rent-vs-Buy Simulator
 
+Hub: [README.md](README.md) · Index: [docs/README.md](docs/README.md) · Math: [docs/formulas.md](docs/formulas.md)
+
 A public web app that answers one question for one person: "should I buy this home or keep renting?" It is a decision tool, not a simulation workbench — every surface serves the verdict.
 
 ## Language

@@ -165,6 +165,9 @@ docs/superpowers/
 test-results/
 output/
 
+# Generated QA logs
+test-logs/
+
 # Browser automation scratch
 .playwright-mcp/
 

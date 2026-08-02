@@ -1,5 +1,7 @@
 # Deployment
 
+Hub: [README.md](README.md) · Index: [docs/README.md](docs/README.md)
+
 Rent or Buy? ships as a single Docker container (FastAPI + static files). `PORT`
 selects the listen port (default `8501`); `/api/health` backs the Docker
 HEALTHCHECK.
