@@ -167,3 +167,7 @@ output/
 
 # Browser automation scratch
 .playwright-mcp/
+
+# Node / Playwright
+node_modules/
+playwright-report/

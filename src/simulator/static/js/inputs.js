@@ -3,6 +3,7 @@
 // stored value and the displayed one (decimal rates display ×100).
 
 import { INPUT_DEFS } from "./fields.js";
+import { trackEvent } from "./analytics.js";
 import { fmtMoney, setCurrency } from "./format.js";
 import {
   applyPreset,
@@ -25,6 +26,7 @@ const SECTION_CONTAINERS = {
 };
 
 const widgets = []; // { def, refresh() } — refresh re-reads state into the widget
+let regionsList = [];
 
 function buildSlider(def, container) {
   const scale = def.scale ?? 1;
@@ -315,12 +317,13 @@ function buildPresetPills(regions) {
       btn.disabled = true;
       btn.title = "Coming in a follow-up — values pending research";
     } else {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", (e) => {
         selectedRegion = region;
         setRegionId(region.id);
         selectRegionPill(regionPills, regions, region);
         applySelectedRegion();
         refreshFtbPill();
+        if (e.isTrusted) trackEvent("region-changed", { region: region.id });
       });
     }
     regionPills.appendChild(btn);
@@ -329,10 +332,11 @@ function buildPresetPills(regions) {
   ftbBtn = document.createElement("button");
   ftbBtn.className = "preset-btn";
   ftbBtn.textContent = "First-time buyer";
-  ftbBtn.addEventListener("click", () => {
+  ftbBtn.addEventListener("click", (e) => {
     ftbOn = !ftbOn;
     applyFtb(selectedRegion, ftbOn);
     refreshFtbPill();
+    if (e.isTrusted) trackEvent("ftb-toggled", { on: ftbOn });
   });
   document.getElementById("ftb-pill").appendChild(ftbBtn);
 
@@ -362,17 +366,19 @@ function buildPresetPills(regions) {
     const btn = document.createElement("button");
     btn.className = "preset-btn";
     btn.textContent = name[0].toUpperCase() + name.slice(1);
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", (e) => {
       for (const el of outlookPills.querySelectorAll(".preset-btn")) el.classList.remove("active");
       btn.classList.add("active");
       applyPreset(preset);
       syncInputs();
+      if (e.isTrusted) trackEvent("outlook-changed", { outlook: name });
     });
     outlookPills.appendChild(btn);
   }
 }
 
 export function initInputs(regions) {
+  regionsList = regions;
   for (const def of INPUT_DEFS) {
     const container = document.getElementById(SECTION_CONTAINERS[def.section]);
     if (def.type === "segmented") buildSegmented(def, container);
@@ -386,4 +392,40 @@ export function initInputs(regions) {
 
 export function syncInputs() {
   for (const widget of widgets) widget.refresh();
+}
+
+/**
+ * Capture the settings a tour may disturb, for restore on exit.
+ * Includes `ftbOn` (user intent), not just the config, so restoring can
+ * re-enable a relief that was priced out during the tour.
+ */
+export function snapshotSettings() {
+  return { config: getConfig(), regionId: getRegionId(), ftbOn };
+}
+
+/**
+ * Restore a snapshotSettings() snapshot: config, region pill, FTB pill,
+ * currency, and region notes. A null regionId (legacy custom link) restores
+ * to no active pill and the neutral "$" currency.
+ */
+export function restoreSettings(snapshot) {
+  const region =
+    regionsList.find((r) => r.available && r.id === snapshot.regionId) ?? null;
+  selectedRegion = region;
+  setCurrency(region ? region.currencySymbol : "$");
+  // Restores every config key, including any FTB override values.
+  applyPreset(snapshot.config);
+  setRegionId(snapshot.regionId);
+  ftbOn = snapshot.ftbOn ?? (hasRelief(region) ? ftbMatchesConfig(region) : true);
+  selectRegionPill(document.getElementById("region-pills"), regionsList, region);
+  // Outlook pills have no authoritative match after restore; clear the chrome
+  // rather than leave a stale highlight (the app already tolerates this
+  // drift when sliders are dragged after picking an outlook).
+  document
+    .querySelectorAll("#outlook-pills .preset-btn")
+    .forEach((b) => b.classList.remove("active"));
+  syncInputs();
+  syncFtbToPrice();
+  refreshFtbPill();
+  renderRegionNotes(region);
 }

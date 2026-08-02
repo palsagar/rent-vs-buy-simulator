@@ -14,6 +14,7 @@ import {
   readUrl,
   setCached,
 } from "./state.js";
+import { Tour, STEPS } from "./tour.js";
 import { hideError, initUi, setLoading, showError } from "./ui.js";
 
 let simAbort = null;
@@ -110,7 +111,8 @@ const scheduleMonteCarlo = debounce(runMonteCarlo, 600);
 
 async function init() {
   readUrl();
-  initUi();
+  const tour = new Tour({ steps: STEPS });
+  window.__rvb = { tour }; // test handle for browser-driven verification
   let regions;
   try {
     regions = await getRegions();
@@ -133,6 +135,7 @@ async function init() {
     ];
   }
   initInputs(regions);
+  initUi(tour);
   syncInputs();
   onConfigChange(() => {
     scheduleSimulate();

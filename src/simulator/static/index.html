@@ -14,7 +14,7 @@
 
 <div id="app">
 
-  <div id="welcome-overlay" class="overlay">
+  <div id="welcome-overlay" class="overlay hidden">
     <div class="modal">
       <button class="modal-close" id="welcome-close" aria-label="Close">✕</button>
       <div style="text-align: center; margin-bottom: 20px;">
@@ -79,7 +79,11 @@
     metric. For a probabilistic view, try the
     <strong style="color: #e2e8f0;">How sure is this?</strong> section.</p>
 </div>
-      <button id="welcome-start" class="btn-primary">Start exploring</button>
+      <div class="welcome-actions">
+        <button id="start-tour-btn" class="btn-primary">Take the Tour</button>
+        <button id="start-sim-btn" class="btn">Skip to Simulator</button>
+      </div>
+      <p class="welcome-guide-link">New here? <a id="open-guide-from-welcome" href="#">Read the Guide</a></p>
     </div>
   </div>
 
@@ -159,6 +163,9 @@
     matter most.
 </p></div>
       </div>
+      <div class="guide-footer">
+        <button id="btn-replay-tour" class="btn">Replay the Tour</button>
+      </div>
     </div>
   </div>
 
@@ -234,7 +241,7 @@
       </details>
 
       <footer>
-        🔒 <strong>Privacy:</strong> This app does not track any user data, use cookies, or perform any analytics. Self-hosted on a tiny VPS via <a href="https://coolify.io/" target="_blank" rel="noopener">Coolify</a>.<br>
+        🔒 <strong>Privacy:</strong> Cookie-less, privacy-friendly analytics via self-hosted <a href="https://umami.is" target="_blank" rel="noopener">Umami</a> — no personal data, no cross-site tracking. Hosted on a tiny VPS via <a href="https://coolify.io/" target="_blank" rel="noopener">Coolify</a>.<br>
         Calculations use monthly granularity; Net Value prices a full exit at every year (selling costs and capital-gains tax on both sides). Tax defaults follow the selected region. Source: <a href="https://github.com/palsagar/rent-vs-buy-simulator" target="_blank" rel="noopener">GitHub</a>.
         <div id="region-notes"></div>
       </footer>

@@ -7,10 +7,13 @@ endpoint, no-cache middleware for static assets during development).
 Run with: uv run uvicorn simulator.server:app --reload
 """
 
+import logging
 import os
+import re
 import threading
 from pathlib import Path
 from typing import Annotated, Any
+from urllib.parse import urlsplit
 
 from fastapi import Body, FastAPI, HTTPException
 from fastapi.responses import JSONResponse
@@ -22,15 +25,60 @@ from starlette.responses import Response
 from .api import config_from_dict, monte_carlo_payload, simulate_payload
 from .regions import list_regions
 
+_logger = logging.getLogger(__name__)
+
+
+def _umami_config() -> tuple[str, str]:
+    """Read and validate the Umami env vars; malformed values are inert."""
+    domain = os.environ.get("UMAMI_DOMAIN", "").rstrip("/")
+    website_id = os.environ.get("UMAMI_ID", "")
+    if not (domain and website_id):
+        return "", ""
+    try:
+        parts = urlsplit(domain)
+        if (
+            parts.scheme != "https"
+            or parts.username is not None
+            or parts.password is not None
+            or parts.path != ""
+            or parts.query != ""
+            or parts.fragment != ""
+            or parts.netloc.endswith(":")
+            or parts.hostname is None
+            or not (parts.port is None or 1 <= parts.port <= 65535)
+            or not all(32 < ord(c) < 127 for c in parts.hostname)
+            or ";" in parts.hostname
+        ):
+            raise ValueError
+    except ValueError:
+        _logger.warning("Umami env vars are set but malformed — analytics disabled")
+        return "", ""
+    if not re.fullmatch(
+        r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
+        website_id,
+    ):
+        _logger.warning("Umami env vars are set but malformed — analytics disabled")
+        return "", ""
+    return domain, website_id
+
+
+UMAMI_DOMAIN, UMAMI_ID = _umami_config()
+
 # Content-Security-Policy: same-origin by default, plus the Plotly CDN for
-# scripts and inline styles for the HTML's style="..." attributes. frame
-# ancestors and object embedding are denied outright.
+# scripts and inline styles for the HTML's style="..." attributes. The Umami
+# origin joins script-src AND connect-src (the tag's script.js beacons to the
+# same origin) only when analytics is configured; otherwise the CSP is unchanged.
+_script_src = "script-src 'self' https://cdn.plot.ly"
+_connect_src = "connect-src 'self'"
+if UMAMI_DOMAIN:
+    _script_src += f" {UMAMI_DOMAIN}"
+    _connect_src += f" {UMAMI_DOMAIN}"
 _CSP = (
     "default-src 'self'; "
-    "script-src 'self' https://cdn.plot.ly; "
+    f"{_script_src}; "
     "style-src 'self' 'unsafe-inline'; "
     "img-src 'self' data:; "
-    "connect-src 'self'; "
+    f"{_connect_src}; "
     "base-uri 'self'; "
     "frame-ancestors 'none'; "
     "object-src 'none'"
@@ -76,8 +124,45 @@ class NoCacheMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class UmamiInjectionMiddleware(BaseHTTPMiddleware):
+    """Inject the Umami analytics tag into HTML responses when configured."""
+
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
+        """Splice the tag before </body> on GET 200 text/html; else pass through."""
+        response = await call_next(request)
+        if not (UMAMI_DOMAIN and UMAMI_ID):
+            return response
+        # HEAD passes through untouched: StaticFiles sends no body for HEAD,
+        # so rebuilding would zero Content-Length.
+        if request.method != "GET":
+            return response
+        if response.status_code != 200:
+            return response
+        if "text/html" not in response.headers.get("content-type", ""):
+            return response
+        body = b""
+        async for chunk in response.body_iterator:
+            body += chunk
+        tag = (
+            f'<script defer src="{UMAMI_DOMAIN}/script.js" '
+            f'data-website-id="{UMAMI_ID}"></script>'
+        ).encode()
+        # Anchor: just before </body>, AFTER the app module tag. Deferred
+        # scripts execute in document order, so a slow analytics fetch can
+        # never delay main.js.
+        body = body.replace(b"</body>", tag + b"</body>", 1)
+        headers = dict(response.headers)
+        # The rewritten body differs from the file on disk — StaticFiles'
+        # validators must not survive onto it.
+        for h in ("etag", "last-modified", "accept-ranges"):
+            headers.pop(h, None)
+        headers["content-length"] = str(len(body))
+        return Response(content=body, status_code=response.status_code, headers=headers)
+
+
 app = FastAPI(title="Rent or Buy?")
 app.add_middleware(NoCacheMiddleware)
+app.add_middleware(UmamiInjectionMiddleware)
 
 
 @app.get("/api/health")
