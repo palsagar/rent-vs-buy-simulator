@@ -96,6 +96,27 @@ test('when the share sheet fails, Share copies the link instead', async ({ page,
   expect(copied).toBe(new URL('/?r=us&v=2', page.url()).href);
 });
 
+test('a second copy keeps Link copied for its own two seconds', async ({ page }) => {
+  await page.clock.install();
+  await load(page);
+  await page.evaluate(() => {
+    window.__copies = 0;
+    Object.defineProperty(navigator, 'share', { configurable: true, value: undefined });
+    navigator.clipboard.writeText = async () => { window.__copies += 1; };
+  });
+  const btn = page.locator('#share-btn');
+  await btn.click();
+  await expect(btn).toHaveText('Link copied');
+  await page.clock.runFor(1500);
+  await btn.click();
+  await expect.poll(() => page.evaluate(() => window.__copies)).toBe(2);
+  // Past the first click's two seconds, inside the second click's.
+  await page.clock.runFor(1000);
+  await expect(btn).toHaveText('Link copied');
+  await page.clock.runFor(1500);
+  await expect(btn).toHaveText('Share this scenario');
+});
+
 test('the page has a description and link-preview tags', async ({ page }) => {
   await page.goto('/');
   for (const sel of [

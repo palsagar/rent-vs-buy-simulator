@@ -149,6 +149,23 @@ test.describe('phone: inputs sheet', () => {
     await expect(page.locator('#input-panel')).not.toHaveClass(/visible/);
     await expect(page.locator('#drawer-scrim')).toBeHidden();
   });
+
+  test('after Enter opens the sheet, Tab moves into the sheet', async ({ page }) => {
+    await page.locator('#inputs-btn').focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#input-panel')).toHaveClass(/visible/);
+    await page.keyboard.press('Tab');
+    expect(await page.evaluate(() => document.getElementById('input-panel').contains(document.activeElement))).toBe(true);
+  });
+
+  test('widening past the phone size with the sheet open closes the sheet and its scrim', async ({ page }) => {
+    // A large iPhone turned to landscape is 932-956 px wide.
+    await page.click('#inputs-btn');
+    await expect(page.locator('#input-panel')).toHaveClass(/visible/);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(page.locator('#drawer-scrim')).toBeHidden();
+    await expect(page.locator('#input-panel')).not.toHaveClass(/visible/);
+  });
 });
 
 test.describe('phone: live verdict in the sheet', () => {
@@ -319,6 +336,15 @@ test.describe('phone: the tour inside the inputs sheet', () => {
     await expect(page.locator('.tour-title')).toHaveText('Your situation');
     await expect.poll(() => sheetView(page, '.tour-ring')).toEqual({ inBand: true, hit: true });
     await expect.poll(() => sheetView(page, '#core-inputs input')).toEqual({ inBand: true, hit: true });
+    await page.evaluate(() => window.__testTour.skip());
+  });
+
+  test('Your situation shows the first value button below the sheet header', async ({ page }) => {
+    // The step asks people to tap a value to type a number.
+    await startRealTour(page);
+    await walkTo(page, 4);
+    await expect(page.locator('.tour-title')).toHaveText('Your situation');
+    await expect.poll(() => sheetView(page, '#core-inputs .slider-value')).toEqual({ inBand: true, hit: true });
     await page.evaluate(() => window.__testTour.skip());
   });
 });

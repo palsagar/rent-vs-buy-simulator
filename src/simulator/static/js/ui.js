@@ -188,6 +188,10 @@ export function initUi(tour) {
   // The native share sheet where the browser has one (phones), else copy
   // the link.
   const shareBtn = document.getElementById("share-btn");
+  const shareLabel = shareBtn.textContent;
+  // One timer: a second copy restarts the two seconds instead of letting
+  // the first copy's timer put the label back early.
+  let shareLabelTimer = null;
   shareBtn.addEventListener("click", async () => {
     const url = shareUrl();
     if (navigator.share) {
@@ -210,8 +214,9 @@ export function initUi(tour) {
     } catch {
       shareBtn.textContent = "Copy the link from the address bar";
     }
-    setTimeout(() => {
-      shareBtn.textContent = "Share this scenario";
+    clearTimeout(shareLabelTimer);
+    shareLabelTimer = setTimeout(() => {
+      shareBtn.textContent = shareLabel;
     }, 2000);
   });
 

@@ -122,7 +122,9 @@ function openTypedField(def, value, slider, shown, apply) {
     e.preventDefault();
     cancelled = e.key === "Escape";
     close();
-    value.focus();
+    // Only when removing the field dropped focus to the page: a typed value
+    // can advance the tour, which moves focus to its next step.
+    if (!document.activeElement || document.activeElement === document.body) value.focus();
   });
   typed.addEventListener("blur", close);
   value.hidden = true;

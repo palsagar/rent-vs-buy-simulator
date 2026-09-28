@@ -406,11 +406,11 @@ export class Tour {
             reopened = true;
         }
 
-        // For the core inputs we bring the first slider itself into the hole
-        // so the user can actually drag it.
+        // For the core inputs we bring the first slider's whole row into the
+        // hole, so the user can drag the slider or tap its value to type.
         let focus = el;
         if (el.id === 'core-inputs') {
-            const first = el.querySelector('input');
+            const first = el.querySelector('.slider-row');
             if (first) focus = first;
         }
         const r = el.getBoundingClientRect();

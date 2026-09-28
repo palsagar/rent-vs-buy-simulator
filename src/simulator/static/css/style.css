@@ -228,6 +228,10 @@ body {
   background: var(--bg);
   border: 1px solid var(--accent);
   border-radius: 4px;
+  /* The field is 24px tall and the value it replaces 14px: without this
+     the row grows while typing and shrinks back on the next mousedown,
+     moving the next value button out from under the pointer. */
+  margin-block: -5px;
 }
 /* The hidden attribute must win over the display Task 13 sets on phones. */
 .slider-value[hidden] { display: none; }
@@ -725,6 +729,8 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   .checkbox-row input { width: 20px; height: 20px; }
   .select-row select { min-height: 44px; font-size: 16px; }
   .slider-value { display: inline-flex; align-items: center; min-height: 28px; }
+  /* The 24px typed field takes the value's 28px, so the row keeps its height. */
+  .slider-typed { margin-block: 2px; }
   /* The taller value button would otherwise leave the name riding high. */
   .slider-header { align-items: center; }
   .stat-label,

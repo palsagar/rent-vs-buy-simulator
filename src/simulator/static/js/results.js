@@ -40,9 +40,12 @@ function paintSheetVerdict() {
   if (!lastVerdict) return;
   const { winner, difference, horizonYears } = lastVerdict;
   const amount = `~${fmtMoney(Math.abs(difference))}`;
-  document.getElementById("sheet-verdict").textContent = tossUp
+  const text = tossUp
     ? `Too close to call · ${amount} apart after ${horizonYears} yrs`
     : `${winner === "buy" ? "Buying" : "Renting"} ahead by ${amount} after ${horizonYears} yrs`;
+  // The line is a live region: rewriting the same text would announce it again.
+  const line = document.getElementById("sheet-verdict");
+  if (line.textContent !== text) line.textContent = text;
 }
 
 function renderVerdict(data) {

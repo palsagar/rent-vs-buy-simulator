@@ -133,7 +133,25 @@ test('in the tour, Escape in the field keeps the step and Enter completes it', a
   await field.fill('450000');
   await field.press('Enter');
   await expect(page.locator('.tour-counter')).toHaveText('6 / 12');
+  // The tour moved focus to its next step; the closed field leaves it there.
+  expect(await page.evaluate(() => document.querySelector('.tour-tooltip').contains(document.activeElement))).toBe(true);
   await page.evaluate(() => window.__testTour.skip());
+});
+
+/** Height of the first core slider row: closed, then with its typed field open. */
+async function rowHeights(page) {
+  const row = page.locator('#core-inputs .slider-row').first();
+  const closed = (await row.boundingBox()).height;
+  await row.locator('.slider-value').click();
+  await expect(row.locator('.slider-typed')).toBeVisible();
+  return { closed, open: (await row.boundingBox()).height };
+}
+
+test('opening the typed field keeps the row height, so the rows below stay put', async ({ page }) => {
+  // A taller row would shrink back on the next mousedown and move the
+  // value button under the pointer before mouseup, losing the click.
+  const { closed, open } = await rowHeights(page);
+  expect(Math.abs(open - closed)).toBeLessThanOrEqual(1);
 });
 
 test.describe('phone', () => {
@@ -148,6 +166,12 @@ test.describe('phone', () => {
     await field.press('Escape');
     await expect(field).toHaveCount(0);
     await expect(page.locator('#input-panel')).toHaveClass(/visible/);
+  });
+
+  test('opening the typed field keeps the row height', async ({ page }) => {
+    await page.click('#inputs-btn');
+    const { closed, open } = await rowHeights(page);
+    expect(Math.abs(open - closed)).toBeLessThanOrEqual(1);
   });
 
   test('the value is hidden while its field is open', async ({ page }) => {

@@ -35,6 +35,10 @@ export function initPhoneLayout() {
       // Reverse order, so a saved neighbour that was itself moved is
       // already back in place when a node is re-inserted before it.
       for (const m of [...moves].reverse()) m.desktopParent.insertBefore(m.node, m.desktopNext);
+      // An inputs sheet left open (a large phone turned to landscape) must
+      // not leave its scrim dimming the desktop layout.
+      document.getElementById("input-panel").classList.remove("visible");
+      document.getElementById("drawer-scrim").classList.add("hidden");
     }
   };
   apply();
