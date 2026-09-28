@@ -205,7 +205,32 @@ body {
 .slider-row { margin-bottom: 10px; }
 .slider-header { display: flex; justify-content: space-between; margin-bottom: 3px; }
 .slider-name { font-size: 12px; color: #c9d1d9; }
-.slider-value { font-size: 12px; color: var(--green-text); font-family: var(--mono); }
+.slider-value {
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: text;
+  font-size: 12px;
+  color: var(--green-text);
+  font-family: var(--mono);
+  /* Dotted underline: the value can be tapped to type an exact number. */
+  text-decoration: underline dotted var(--faint);
+  text-underline-offset: 3px;
+}
+.slider-typed {
+  width: 8em;
+  padding: 2px 6px;
+  text-align: right;
+  /* Under 16px, iOS Safari zooms the page when the field gets focus. */
+  font-size: 16px;
+  font-family: var(--mono);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+}
+/* The hidden attribute must win over the display Task 13 sets on phones. */
+.slider-value[hidden] { display: none; }
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;

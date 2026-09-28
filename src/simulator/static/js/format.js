@@ -43,3 +43,38 @@ export function fmtPct(v, digits = 1) {
   const sign = v < 0 ? MINUS : "";
   return `${sign}${Math.abs(v).toFixed(digits)}%`;
 }
+
+/**
+ * Parse a number typed into a slider's exact-value field.
+ *
+ * Ignores currency symbols, spaces and "%" and accepts U+2212 as a minus.
+ * Separators: when both "," and "." appear, the later one is the decimal
+ * point ("1.234,5", "1,234.5"). When only one kind appears, more than one
+ * of it is digit grouping ("1.234.567"). A single one is the decimal point
+ * ("6,5", "7.5") -- the iOS decimal keypad shows "," in most European
+ * locales -- except in a whole-number field when exactly three digits
+ * follow it, where it is digit grouping ("437,000", "437.000"). A
+ * whole-number field rounds the result ("7.5" gives 8). Returns NaN when
+ * nothing numeric is left.
+ */
+export function parseTypedNumber(text, integerField) {
+  let s = String(text)
+    .replace(/−/g, "-")
+    .replace(/[^\d.,-]/g, "");
+  const lastDot = s.lastIndexOf(".");
+  const lastComma = s.lastIndexOf(",");
+  if (lastDot >= 0 && lastComma >= 0) {
+    const decimal = lastComma > lastDot ? "," : ".";
+    s = s.split(decimal === "," ? "." : ",").join("").replace(decimal, ".");
+  } else if (lastDot >= 0 || lastComma >= 0) {
+    const at = Math.max(lastDot, lastComma);
+    const sep = s[at];
+    const count = s.split(sep).length - 1;
+    const grouping =
+      count > 1 || (integerField && /^\d{3}$/.test(s.slice(at + 1)));
+    s = grouping ? s.split(sep).join("") : s.replace(sep, ".");
+  }
+  if (s === "" || s === "-") return NaN;
+  const n = Number(s);
+  return integerField ? Math.round(n) : n;
+}

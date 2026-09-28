@@ -4,7 +4,7 @@
 
 import { INPUT_DEFS } from "./fields.js";
 import { trackEvent } from "./analytics.js";
-import { fmtMoney, setCurrency } from "./format.js";
+import { fmtMoney, parseTypedNumber, setCurrency } from "./format.js";
 import {
   applyPreset,
   getConfig,
@@ -35,29 +35,89 @@ function buildSlider(def, container) {
   row.innerHTML = `
     <div class="slider-header">
       <span class="slider-name">${def.label}</span>
-      <span class="slider-value"></span>
+      <button type="button" class="slider-value"></button>
   </div>
     <input type="range" min="${def.min}" max="${def.max}" step="${def.step}">
     ${def.hint ? `<div class="slider-hint">${def.hint}</div>` : ""}
   `;
   const input = row.querySelector("input");
   const value = row.querySelector(".slider-value");
+  // The button's name carries the value it shows, so a screen reader
+  // announces both the field and its current value.
+  const show = (displayed) => {
+    const text = def.fmt(displayed);
+    value.textContent = text;
+    value.setAttribute("aria-label", `${def.label} ${text}, type an exact value`);
+  };
   const refresh = () => {
     const stored = getConfig()[def.key];
     input.value = stored * scale;
-    value.textContent = def.fmt(stored * scale);
+    show(stored * scale);
   };
   input.addEventListener("input", () => {
     const displayed = Number(input.value);
-    value.textContent = def.fmt(displayed);
+    show(displayed);
     setParam(def.key, displayed / scale);
     // Dragging the price across a relief ceiling must withdraw the
     // relief, so the buyer-cost keys cannot stay latched at their FTB
     // values while the price says they no longer apply.
     if (def.key === "propertyPrice") syncFtbToPrice();
   });
+  value.addEventListener("click", () => openTypedField(def, value, refresh));
   container.appendChild(row);
   widgets.push({ refresh });
+}
+
+// Exact values: tapping a slider's value swaps it for a text field. Enter
+// or leaving the field applies the number, clamped to the slider's range
+// but NOT snapped to its step (a $437,000 price is allowed); Escape
+// cancels. The field exists only while typing, so `#core-inputs input`
+// still finds the slider everywhere else (the tour, the tests).
+function openTypedField(def, value, refresh) {
+  const scale = def.scale ?? 1;
+  const typed = document.createElement("input");
+  typed.type = "text";
+  typed.className = "slider-typed";
+  // The iOS decimal keypad has no minus key, so fields that go below zero
+  // get the full keyboard.
+  typed.inputMode = def.min < 0 ? "text" : "decimal";
+  typed.enterKeyHint = "done";
+  typed.setAttribute("aria-label", def.label);
+  // Stored -> displayed units, without float noise (0.03 * 100).
+  typed.value = String(Number((getConfig()[def.key] * scale).toFixed(6)));
+  let cancelled = false;
+  let closed = false;
+  // Runs once: removing the focused field can fire blur a second time.
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    const n = parseTypedNumber(typed.value, def.step >= 1);
+    if (!cancelled && Number.isFinite(n)) {
+      setParam(def.key, Math.min(def.max, Math.max(def.min, n)) / scale);
+      // Same reason as the slider's input handler: a price that crosses
+      // a relief ceiling must withdraw the relief.
+      if (def.key === "propertyPrice") syncFtbToPrice();
+      refresh();
+    }
+    typed.remove();
+    value.hidden = false;
+  };
+  typed.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== "Escape") return;
+    // Escape here must not also close the inputs sheet or the tour, and
+    // Enter must not go on to press the value button focused below,
+    // which would reopen the field.
+    e.stopPropagation();
+    e.preventDefault();
+    cancelled = e.key === "Escape";
+    close();
+    value.focus();
+  });
+  typed.addEventListener("blur", close);
+  value.hidden = true;
+  value.after(typed);
+  typed.focus();
+  typed.select();
 }
 
 function buildSegmented(def, container) {
