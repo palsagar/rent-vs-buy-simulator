@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { startRealTour, performCurrentAction } from './helpers.js';
+import { startRealTour, walkTo } from './helpers.js';
 
 /** Typing an exact value by tapping a slider's value label. Desktop size
  *  (the inputs panel is always visible there), except the phone block. */
@@ -117,12 +117,7 @@ test("the value button's accessible name includes the shown value", async ({ pag
 
 test('in the tour, Escape in the field keeps the step and Enter completes it', async ({ page }) => {
   await startRealTour(page);
-  while (await page.evaluate(() => window.__testTour.stepIndex) < 4) {
-    const hasNext = await page.locator('.tour-footer .tour-btn-primary').count();
-    if (hasNext) await page.locator('.tour-footer .tour-btn-primary').click();
-    else await performCurrentAction(page);
-    await page.waitForTimeout(100);
-  }
+  await walkTo(page, 4);
   await expect(page.locator('.tour-title')).toHaveText('Your situation');
   const value = page.locator('#core-inputs .slider-value').first();
   const field = page.locator('#core-inputs .slider-typed').first();

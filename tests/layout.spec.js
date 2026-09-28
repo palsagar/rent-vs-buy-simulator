@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { startRealTour, performCurrentAction } from './helpers.js';
+import { startRealTour, walkTo } from './helpers.js';
 
 /**
  * Phone layout: the title bar, the controls that move into the inputs
@@ -219,32 +219,22 @@ test.describe('phone: Advanced sheet', () => {
 
   test('the tour closes the inputs sheet when it leaves the Advanced step', async ({ page }) => {
     await startRealTour(page);
-    while (await page.evaluate(() => window.__testTour.stepIndex) < 9) {
-      // The Advanced step opens the inputs sheet, where the Advanced button lives.
-      if (await page.evaluate(() => window.__testTour.stepIndex) === 8) {
-        await expect(page.locator('#input-panel')).toHaveClass(/visible/);
-      }
-      const hasNext = await page.locator('.tour-footer .tour-btn-primary').count();
-      if (hasNext) await page.locator('.tour-footer .tour-btn-primary').click();
-      else await performCurrentAction(page);
-      await page.waitForTimeout(100);
-    }
+    await walkTo(page, 8);
+    // The Advanced step opens the inputs sheet, where the Advanced button lives.
+    await expect(page.locator('#input-panel')).toHaveClass(/visible/);
+    await walkTo(page, 9);
     await expect(page.locator('.tour-counter')).toHaveText('10 / 12');
     await expect(page.locator('#input-panel')).not.toHaveClass(/visible/);
     await expect(page.locator('#drawer-scrim')).toBeHidden();
     await page.evaluate(() => window.__testTour.skip());
   });
 
-  // Guard: passes before and after this task. The spec's acceptance needs
-  // all 12 steps to complete at phone size.
+  // The spec's acceptance needs all 12 steps to complete at phone size,
+  // with Region presets done by tapping a pill rather than by Next.
   test('the tour completes all 12 steps on a phone', async ({ page }) => {
     await startRealTour(page);
-    for (let i = 0; i < 40 && (await page.evaluate(() => window.__testTour.active)); i++) {
-      const hasNext = await page.locator('.tour-footer .tour-btn-primary').count();
-      if (hasNext) await page.locator('.tour-footer .tour-btn-primary').click();
-      else await performCurrentAction(page);
-      await page.waitForTimeout(100);
-    }
+    const gestures = await walkTo(page, 12);
+    expect(gestures).toContain(1);
     expect(await page.evaluate(() => window.__testTour.active)).toBe(false);
     expect(await page.evaluate(() => localStorage.getItem('rvb.tour.v1'))).toBe('done');
   });
@@ -272,14 +262,16 @@ function sheetView(page, sel) {
 test.describe('phone: the tour inside the inputs sheet', () => {
   test.use(PHONE);
 
-  async function walkTo(page, index) {
-    while (await page.evaluate(() => window.__testTour.stepIndex) < index) {
-      const hasNext = await page.locator('.tour-footer .tour-btn-primary').count();
-      if (hasNext) await page.locator('.tour-footer .tour-btn-primary').click();
-      else await performCurrentAction(page);
-      await page.waitForTimeout(100);
-    }
-  }
+  test('Region presets shows no Next while the sheet slides open', async ({ page }) => {
+    await startRealTour(page);
+    await page.locator('.tour-footer .tour-btn-primary').click(); // Welcome → Region presets
+    await expect(page.locator('.tour-title')).toHaveText('Region presets');
+    // Counted at once, before the tour's re-check ~420 ms later.
+    expect(await page.locator('.tour-footer .tour-btn-primary').count()).toBe(0);
+    await page.waitForFunction(() => window.__testTour._recheckTimer == null);
+    await expect(page.locator('.tour-footer .tour-btn-primary')).toHaveCount(0);
+    await page.evaluate(() => window.__testTour.skip());
+  });
 
   test('Back from Market outlook shows each earlier control below the sheet header', async ({ page }) => {
     await startRealTour(page);

@@ -43,3 +43,27 @@ export async function performCurrentAction(page) {
   }
   await page.waitForFunction((i) => window.__testTour.stepIndex === i + 1, idx);
 }
+
+/**
+ * Walk the real tour forward until it reaches step `index` or ends: Next
+ * on read steps, the gesture on do-it steps. Each step first waits for the
+ * tour's pending re-check: the tour renders a step again ~420 ms after it
+ * opens the inputs sheet or scrolls a target into view, and until then a
+ * do-it step can show a fallback Next. Returns the indexes of the steps
+ * completed by the gesture.
+ */
+export async function walkTo(page, index) {
+  const gestures = [];
+  for (;;) {
+    await page.waitForFunction(() => !window.__testTour.active || window.__testTour._recheckTimer == null);
+    const i = await page.evaluate(() => (window.__testTour.active ? window.__testTour.stepIndex : Infinity));
+    if (i >= index) return gestures;
+    const next = page.locator('.tour-footer .tour-btn-primary');
+    if (await next.count()) {
+      await next.click();
+    } else {
+      await performCurrentAction(page);
+      gestures.push(i);
+    }
+  }
+}

@@ -273,6 +273,9 @@ export class Tour {
         // drawer that contains it; scroll the scrollable ancestor) before
         // deciding reachability.
         const needsRecheck = this._makeTargetReachable(step);
+        // A re-render is due once the drawer/scroll settles; until then a
+        // target that is still sliding into view does not get a Next button.
+        const recheckDue = needsRecheck && this._recheckedStepIndex !== this._index;
 
         // Reachability, not just DOM presence, decides whether an action
         // step can actually be performed. A target that exists but is
@@ -288,7 +291,7 @@ export class Tour {
                 reachable = r.width > 0 && r.height > 0 && r.bottom > band.top && r.right > 0 && r.top < band.bottom && r.left < W;
             }
         }
-        if (!step.action || !reachable) {
+        if (!step.action || (!reachable && !recheckDue)) {
             const nextBtn = document.createElement('button');
             nextBtn.className = 'tour-btn tour-btn-primary';
             nextBtn.textContent = isLast ? 'Done' : 'Next';
@@ -323,7 +326,7 @@ export class Tour {
 
         // One deferred re-render once a drawer/scroll transition settles, so
         // the do-it-vs-Next decision and the ring land on the final geometry.
-        if (needsRecheck && this._recheckedStepIndex !== this._index) {
+        if (recheckDue) {
             this._recheckedStepIndex = this._index;
             const idx = this._index;
             clearTimeout(this._recheckTimer);
