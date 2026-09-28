@@ -149,10 +149,21 @@ export function initUi(tour) {
     const s = scrim();
     if (s) s.classList.toggle("hidden", !open);
   };
+  // On a phone the Advanced sheet opens on top of the inputs sheet, so Done,
+  // Esc and a tap outside them close both. After Done or Esc, focus that was
+  // in a sheet goes to the button that reopens it, not off-screen.
+  const closeSheets = (returnFocus) => {
+    const active = document.activeElement;
+    const focusInSheet = inputPanel.contains(active) || panel.contains(active);
+    setDrawer(false);
+    panel.classList.remove("visible");
+    if (returnFocus && focusInSheet) document.getElementById("inputs-btn").focus();
+  };
   document.getElementById("inputs-btn").addEventListener("click", () => setDrawer(!inputPanel.classList.contains("visible")));
-  document.getElementById("sheet-done").addEventListener("click", () => setDrawer(false));
+  document.getElementById("sheet-done").addEventListener("click", () => closeSheets(true));
+  // The scrim only shows on phones.
   document.addEventListener("click", (e) => {
-    if (e.target && e.target.id === "drawer-scrim") setDrawer(false);
+    if (e.target && e.target.id === "drawer-scrim") closeSheets(false);
   });
   // Esc closes the mobile drawer (and hides the scrim). Only fires when the
   // drawer is actually the open mobile surface, so it can't clobber the tour's
@@ -160,7 +171,7 @@ export function initUi(tour) {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && inputPanel.classList.contains("visible")) {
       const mobile = window.getComputedStyle(document.getElementById("inputs-btn")).display !== "none";
-      if (mobile) setDrawer(false);
+      if (mobile) closeSheets(true);
     }
   });
 

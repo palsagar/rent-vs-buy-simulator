@@ -653,4 +653,22 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   #sheet-outlook .preset-label { display: none; }
   #sheet-advanced { margin-top: 16px; }
   #sheet-advanced .btn { width: 100%; }
+  /* Advanced is a second bottom sheet above the inputs sheet, 64px
+     shorter so the inputs sheet's verdict line (#sheet-header) shows. */
+  #advanced-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    width: auto;
+    height: calc(60vh - 64px);
+    height: calc(60dvh - 64px);
+    border-left: none;
+    border-top: 1px solid var(--border);
+    border-radius: 14px 14px 0 0;
+    z-index: 270;
+    transform: translateY(100%);
+  }
+  #advanced-panel.visible { transform: translateY(0); box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45); }
 }

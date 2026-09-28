@@ -378,9 +378,9 @@ export class Tour {
             inputsBtn.click();
             reopened = true;
         } else if (advancedPanel && advancedPanel.contains(el) && !advancedPanel.classList.contains('visible')) {
-            // #advanced-panel is a true overlay drawer at every width
-            // (position:absolute, translateX(100%) → 0; no media-query override
-            // in style.css), so its class-based reopen stays ungated.
+            // #advanced-panel is a true overlay drawer at every width (a
+            // right-side panel on desktop, a bottom sheet on phones), so its
+            // class-based reopen stays ungated.
             document.getElementById('advanced-btn')?.click();
             reopened = true;
         }
@@ -588,7 +588,13 @@ export const STEPS = [
     { target: '#verdict-hero', title: 'The verdict', body: 'The headline: which strategy leaves you wealthier at your horizon, by how much, the breakeven year, and the Monte Carlo confidence. Four stat cards break down year-1 costs.' },
     { target: '#decision-chart', title: 'Net value over time', body: 'What you’d walk away with minus everything you put in, at every year — hover or tap for exact figures. Where the orange line crosses the blue is your breakeven.' },
     { target: '#fan-chart', title: 'How sure is this?', body: '500 simulated futures with randomized year-by-year returns. The fan shows the range of outcomes; the tornado below ranks which assumptions swing the result most.' },
-    { target: '#advanced-btn', title: 'Advanced assumptions', body: 'Open the drawer: tax deductibility, capital gains, levies, maintenance — every default follows the selected region. Open it now, then press Next.', onLeave: () => document.getElementById('advanced-panel')?.classList.remove('visible') },
+    { target: '#advanced-btn', title: 'Advanced assumptions', body: 'Open the drawer: tax deductibility, capital gains, levies, maintenance — every default follows the selected region. Open it now, then press Next.', onLeave: () => {
+        document.getElementById('advanced-panel')?.classList.remove('visible');
+        // On a phone the Advanced button lives in the inputs sheet, which the
+        // tour opened to reach it; the next steps frame the results.
+        document.getElementById('input-panel')?.classList.remove('visible');
+        document.getElementById('drawer-scrim')?.classList.add('hidden');
+    } },
     { target: '#numbers', title: 'The numbers', body: 'Every figure behind the charts, year by year — expand the table or download it as CSV for your own analysis.' },
     { target: '#guide-btn', title: 'The Guide', body: 'The concepts behind the simulator — net value, breakeven, Monte Carlo — documented one tap or click away, with a Replay the Tour button at the bottom.' },
     { target: null, title: 'You’re all set', body: 'Everything you changed during the tour has been restored. Adjust the inputs to your own numbers — the URL is always a shareable link to your exact scenario.' },

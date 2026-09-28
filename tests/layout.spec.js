@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { startRealTour, performCurrentAction } from './helpers.js';
 
 /**
  * Phone layout: the title bar, the controls that move into the inputs
@@ -161,5 +162,77 @@ test.describe('phone: live verdict in the sheet', () => {
     });
     await expect(page.locator('#error-banner')).toContainText('Monte Carlo failed: boom');
     await expect(page.locator('#sheet-verdict')).toHaveText('Renting ahead by ~$739,670 after 10 yrs');
+  });
+});
+
+test.describe('phone: Advanced sheet', () => {
+  test.use(PHONE);
+
+  async function openBothSheets(page) {
+    await page.click('#inputs-btn');
+    await waitForSlideAtRest(page, 'input-panel');
+    await page.locator('#advanced-btn').scrollIntoViewIfNeeded();
+    await page.click('#advanced-btn');
+    await expect(page.locator('#advanced-panel')).toHaveClass(/visible/);
+    await waitForSlideAtRest(page, 'advanced-panel');
+  }
+
+  test('Advanced opens above the inputs sheet and leaves the live verdict in view', async ({ page }) => {
+    await openBothSheets(page);
+    const hit = await page.evaluate(() => {
+      const adv = document.getElementById('advanced-panel');
+      const verdict = document.getElementById('sheet-verdict');
+      const a = adv.getBoundingClientRect();
+      const v = verdict.getBoundingClientRect();
+      return {
+        width: a.width,
+        onAdvanced: adv.contains(document.elementFromPoint(a.left + a.width / 2, a.top + a.height / 2)),
+        verdictInView: verdict.contains(document.elementFromPoint(v.left + 10, v.top + v.height / 2)),
+      };
+    });
+    expect(hit).toEqual({ width: 390, onAdvanced: true, verdictInView: true });
+  });
+
+  test('a tap on the scrim closes both sheets', async ({ page }) => {
+    await openBothSheets(page);
+    await page.mouse.click(195, 60);
+    await expect(page.locator('#input-panel')).not.toHaveClass(/visible/);
+    await expect(page.locator('#advanced-panel')).not.toHaveClass(/visible/);
+  });
+
+  test('Done closes both sheets and returns focus to the Edit your numbers button', async ({ page }) => {
+    await openBothSheets(page);
+    await page.click('#sheet-done');
+    await expect(page.locator('#input-panel')).not.toHaveClass(/visible/);
+    await expect(page.locator('#advanced-panel')).not.toHaveClass(/visible/);
+    expect(await page.evaluate(() => document.activeElement.id)).toBe('inputs-btn');
+  });
+
+  test('the tour closes the inputs sheet when it leaves the Advanced step', async ({ page }) => {
+    await startRealTour(page);
+    while (await page.evaluate(() => window.__testTour.stepIndex) < 9) {
+      const hasNext = await page.locator('.tour-footer .tour-btn-primary').count();
+      if (hasNext) await page.locator('.tour-footer .tour-btn-primary').click();
+      else await performCurrentAction(page);
+      await page.waitForTimeout(100);
+    }
+    await expect(page.locator('.tour-counter')).toHaveText('10 / 12');
+    await expect(page.locator('#input-panel')).not.toHaveClass(/visible/);
+    await expect(page.locator('#drawer-scrim')).toBeHidden();
+    await page.evaluate(() => window.__testTour.skip());
+  });
+
+  // Guard: passes before and after this task. The spec's acceptance needs
+  // all 12 steps to complete at phone size.
+  test('the tour completes all 12 steps on a phone', async ({ page }) => {
+    await startRealTour(page);
+    for (let i = 0; i < 40 && (await page.evaluate(() => window.__testTour.active)); i++) {
+      const hasNext = await page.locator('.tour-footer .tour-btn-primary').count();
+      if (hasNext) await page.locator('.tour-footer .tour-btn-primary').click();
+      else await performCurrentAction(page);
+      await page.waitForTimeout(100);
+    }
+    expect(await page.evaluate(() => window.__testTour.active)).toBe(false);
+    expect(await page.evaluate(() => localStorage.getItem('rvb.tour.v1'))).toBe('done');
   });
 });
