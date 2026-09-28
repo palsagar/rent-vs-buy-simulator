@@ -58,8 +58,12 @@ function baseLayout(xTitle) {
     margin: { t: 16, r: 64, b: 40, l: 56 },
     showlegend: false,
     hovermode: "x unified",
-    xaxis: { title: { text: xTitle }, gridcolor: GRID, zerolinecolor: "#30363d" },
+    // No drag-to-zoom: on a touch screen it captures the swipe, so a page
+    // scroll that starts on a chart zooms the chart instead. Taps still hover.
+    dragmode: false,
+    xaxis: { title: { text: xTitle }, gridcolor: GRID, zerolinecolor: "#30363d", fixedrange: true },
     yaxis: {
+      fixedrange: true,
       gridcolor: GRID,
       zerolinecolor: "#30363d",
       tickformat: currencyTickformat(),

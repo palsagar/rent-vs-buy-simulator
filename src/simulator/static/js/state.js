@@ -45,8 +45,14 @@ export function onConfigChange(fn) {
   listeners.push(fn);
 }
 
+// Debounced like the simulate run, so the link and the charts settle
+// together. Writing on every slider tick broke Safari, which throws once a
+// page makes 100 history updates in 10 s -- and the throw also skipped the
+// listeners below, so the results froze mid-drag.
+const scheduleUrlWrite = debounce(writeUrl, 300);
+
 function emit() {
-  writeUrl();
+  scheduleUrlWrite();
   for (const fn of listeners) fn(getConfig());
 }
 
