@@ -141,13 +141,17 @@ test('dragging a slider coalesces share-URL writes into one', async ({ page }) =
   expect(result.price).toBe('1045000');
 });
 
+/** How far the content has scrolled, whichever element is scrolling it. */
+function contentScroll(page) {
+  return page.evaluate(() => window.scrollY + document.getElementById('results').scrollTop);
+}
+
 for (const chart of ['#decision-chart', '#tornado-chart']) {
   test(`a swipe that starts on ${chart} scrolls the page`, async ({ page }) => {
     await page.evaluate((sel) => document.querySelector(sel).scrollIntoView({ block: 'center' }), chart);
-    const results = page.locator('#results');
-    const before = await results.evaluate((el) => el.scrollTop);
+    const before = await contentScroll(page);
     await swipeUp(page, chart);
-    await expect.poll(() => results.evaluate((el) => el.scrollTop)).toBeGreaterThan(before + 50);
+    await expect.poll(() => contentScroll(page)).toBeGreaterThan(before + 50);
   });
 }
 

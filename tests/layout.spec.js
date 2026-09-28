@@ -236,3 +236,24 @@ test.describe('phone: Advanced sheet', () => {
     expect(await page.evaluate(() => localStorage.getItem('rvb.tour.v1'))).toBe('done');
   });
 });
+
+test.describe('phone: page scrolling', () => {
+  test.use(PHONE);
+
+  test('the document scrolls, not an inner panel', async ({ page }) => {
+    const y = await page.evaluate(() => {
+      window.scrollTo(0, 400);
+      return window.scrollY;
+    });
+    expect(y).toBe(400);
+  });
+
+  test('a scroll inside an open sheet does not move the page behind it', async ({ page }) => {
+    const style = await page.evaluate(() => ({
+      inputs: getComputedStyle(document.getElementById('input-panel')).overscrollBehaviorY,
+      advanced: getComputedStyle(document.getElementById('advanced-panel')).overscrollBehaviorY,
+      scrim: getComputedStyle(document.getElementById('drawer-scrim')).touchAction,
+    }));
+    expect(style).toEqual({ inputs: 'contain', advanced: 'contain', scrim: 'none' });
+  });
+});

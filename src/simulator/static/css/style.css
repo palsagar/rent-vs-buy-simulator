@@ -671,4 +671,15 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
     transform: translateY(100%);
   }
   #advanced-panel.visible { transform: translateY(0); box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45); }
+  /* The document scrolls on a phone, not #results: Safari only collapses
+     its toolbars on a document scroll, and 100vh is taller than the
+     visible area while they show. */
+  body { overflow: visible; }
+  #app { height: auto; min-height: 100vh; min-height: 100dvh; }
+  #main { overflow: visible; }
+  #results { overflow: visible; }
+  /* A scroll that starts in a sheet (or on the scrim) stays there. */
+  #input-panel,
+  #advanced-panel { overscroll-behavior: contain; }
+  #drawer-scrim { touch-action: none; }
 }
