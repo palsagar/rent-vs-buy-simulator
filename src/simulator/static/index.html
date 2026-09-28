@@ -21,7 +21,7 @@
         <div class="welcome-hero">
           <div class="welcome-hero-emoji">🏠</div>
           <h1>Buy vs. Rent Financial Simulator</h1>
-          <p class="welcome-hero-sub">Compare capital allocation strategies over time</p>
+          <p class="welcome-hero-sub">Find out whether buying or renting leaves you wealthier</p>
         </div>
         <p class="welcome-intro">Should you buy a home or rent and invest the difference?
           This simulator models <strong>two financial strategies</strong> side-by-side so
@@ -69,8 +69,21 @@
     picture:
 </p>
 <div class="explainer-formula">
-    <code>Net Value = Asset Value − Total Outflows</code>
+    <code>Net Value = what you'd walk away with − everything you paid in</code>
 </div>
+<p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+    For Buy, what you'd walk away with is the sale price minus the
+    remaining mortgage, selling costs and any capital-gains tax, plus
+    anything the buyer invested along the way and any tax savings from
+    deducting mortgage interest and levies. For Rent, it is your
+    investment portfolio after capital-gains tax.
+</p>
+<p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+    Everything you paid in is the same total for both: the up-front costs,
+    plus each month the larger of the rent and the cost of owning, because
+    the cheaper side invests the difference. So both numbers are often
+    below zero.
+</p>
 <p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
     This tells you which strategy actually leaves you wealthier. A scenario
     can have higher asset growth but <em>lower</em> net value if the costs
@@ -171,7 +184,7 @@
         <div class="card-sub">500 simulated futures of the Buy − Rent difference. Bands: 50% and 90% of outcomes.</div>
         <div id="fan-chart" class="chart"></div>
         <h2 style="margin-top:18px">Which assumption to stress-test hardest</h2>
-        <div class="card-sub">Wider bar = bigger swing in the outcome. Blue = assumption goes up, grey = goes down. Each assumption is moved by a realistic amount — for the growth and inflation rates, that amount shrinks as your horizon lengthens. Hover a bar to see its before and after.</div>
+        <div class="card-sub">Wider bar = bigger swing in the outcome. Blue = assumption goes up, grey = goes down. Each assumption is moved by a realistic amount — for the growth and inflation rates, that amount shrinks as your horizon lengthens. Hover over or tap a bar to see its before and after.</div>
         <div id="tornado-chart" class="chart"></div>
       </section>
 
