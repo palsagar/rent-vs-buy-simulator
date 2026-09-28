@@ -64,3 +64,47 @@ test.describe('phone: controls move into the inputs panel', () => {
     expect(order).toEqual(['region-group', 'outlook-group', 'advanced-btn', 'guide-btn']);
   });
 });
+
+/** Resolve once `id`'s slide transition has finished. */
+async function waitForSlideAtRest(page, id) {
+  await page.waitForFunction((elId) => {
+    const t = getComputedStyle(document.getElementById(elId)).transform;
+    return t === 'none' || /^matrix\(1, 0, 0, 1, -?0(?:\.0+)?, -?0(?:\.0+)?\)$/.test(t);
+  }, id, { timeout: 5_000 });
+}
+
+test.describe('phone: inputs sheet', () => {
+  test.use(PHONE);
+
+  test('the Edit your numbers button stays pinned to the bottom of the screen', async ({ page }) => {
+    const btn = page.locator('#inputs-btn');
+    await expect(btn).toHaveText('Edit your numbers');
+    for (const y of [0, 600]) {
+      await page.evaluate((top) => {
+        window.scrollTo(0, top);
+        document.getElementById('results').scrollTo(0, top);
+      }, y);
+      const box = await btn.boundingBox();
+      expect(box.y + box.height).toBeGreaterThan(664 - 80);
+      expect(box.y + box.height).toBeLessThanOrEqual(664);
+    }
+  });
+
+  test('the inputs open as a full-width sheet from the bottom', async ({ page }) => {
+    await page.click('#inputs-btn');
+    await expect(page.locator('#input-panel')).toHaveClass(/visible/);
+    await waitForSlideAtRest(page, 'input-panel');
+    const box = await page.locator('#input-panel').boundingBox();
+    expect(box.width).toBe(390);
+    expect(Math.round(box.y + box.height)).toBe(664);
+    expect(Math.round(box.height)).toBe(Math.round(664 * 0.6));
+  });
+
+  test('Done closes the sheet and its scrim', async ({ page }) => {
+    await page.click('#inputs-btn');
+    await waitForSlideAtRest(page, 'input-panel');
+    await page.click('#sheet-done');
+    await expect(page.locator('#input-panel')).not.toHaveClass(/visible/);
+    await expect(page.locator('#drawer-scrim')).toBeHidden();
+  });
+});

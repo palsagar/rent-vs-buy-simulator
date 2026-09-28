@@ -150,6 +150,7 @@ export function initUi(tour) {
     if (s) s.classList.toggle("hidden", !open);
   };
   document.getElementById("inputs-btn").addEventListener("click", () => setDrawer(!inputPanel.classList.contains("visible")));
+  document.getElementById("sheet-done").addEventListener("click", () => setDrawer(false));
   document.addEventListener("click", (e) => {
     if (e.target && e.target.id === "drawer-scrim") setDrawer(false);
   });
