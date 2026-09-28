@@ -11,11 +11,33 @@ import {
 } from "./charts.js";
 import { fmtMoney } from "./format.js";
 
-function renderVerdict(data) {
-  const { winner, difference, horizonYears } = data.verdict;
+// A winner that wins in 40-60% of simulated futures (the confidence, as
+// displayed) is a toss-up, so the headline stops naming it (ADR-0010).
+const TOSS_UP_MIN_PCT = 40;
+const TOSS_UP_MAX_PCT = 60;
+
+// The last simulate verdict, and whether the last Monte Carlo run called
+// it a toss-up. The flag survives a simulate re-render until the matching
+// Monte Carlo result replaces it, so dragging a slider inside a toss-up
+// does not flash the winner headline on every step.
+let lastVerdict = null;
+let tossUp = false;
+
+function headlineHtml({ winner, difference, horizonYears }) {
+  const amount = `~${fmtMoney(Math.abs(difference))}`;
+  if (tossUp) {
+    // No Buy/Rent colour on the amount: either colour would imply a winner.
+    return `Too close to call: buying and renting end within ${amount} of each other after ${horizonYears} years`;
+  }
   const name = winner === "buy" ? "Buying" : "Renting";
-  document.getElementById("verdict-line").innerHTML =
-    `${name} leaves you <span class="amount-${winner}">~${fmtMoney(Math.abs(difference))}</span> wealthier if you sell after ${horizonYears} years`;
+  return `${name} leaves you <span class="amount-${winner}">${amount}</span> wealthier if you sell after ${horizonYears} years`;
+}
+
+function renderVerdict(data) {
+  lastVerdict = data.verdict;
+  const { winner, horizonYears } = data.verdict;
+  const name = winner === "buy" ? "Buying" : "Renting";
+  document.getElementById("verdict-line").innerHTML = headlineHtml(data.verdict);
 
   const breakevenEl = document.getElementById("verdict-breakeven");
   const b = data.breakevenYear;
@@ -92,8 +114,13 @@ export function renderSimulate(data, cfg) {
 export function renderMonteCarlo(mc, winner) {
   const pct = winner === "buy" ? mc.buyWinsPct : 100 - mc.buyWinsPct;
   const name = winner === "buy" ? "Buying" : "Renting";
+  // Decide on the rounded share, so the headline agrees with the number
+  // printed beside it (60.4% prints as 60% and is a toss-up).
+  const shownPct = Math.round(pct);
+  tossUp = shownPct >= TOSS_UP_MIN_PCT && shownPct <= TOSS_UP_MAX_PCT;
+  if (lastVerdict) document.getElementById("verdict-line").innerHTML = headlineHtml(lastVerdict);
   document.getElementById("verdict-confidence").textContent =
-    ` · ${name} wins in ${pct.toFixed(0)}% of simulated futures`;
+    ` · ${name} wins in ${shownPct}% of simulated futures`;
   renderFanChart(document.getElementById("fan-chart"), mc);
   renderTornadoChart(document.getElementById("tornado-chart"), mc.tornado);
 }
