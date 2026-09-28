@@ -115,6 +115,9 @@ body {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
+/* A narrow bar scrolls sideways instead of squeezing the pill groups, which
+   would wrap their buttons into a vertical stack. */
+#preset-bar > * { flex-shrink: 0; }
 #preset-bar::-webkit-scrollbar { height: 8px; }
 #preset-bar::-webkit-scrollbar-thumb {
   background: var(--border);
@@ -578,7 +581,9 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   }
   #input-panel.visible { transform: translateX(0); box-shadow: 8px 0 16px rgba(0, 0, 0, 0.4); }
   input[type="range"] { height: 8px; }
-  input[type="range"]::-webkit-slider-thumb,
+  /* Separate rules: a browser drops a whole selector list when it does not
+     recognise one of its pseudo-elements. */
+  input[type="range"]::-webkit-slider-thumb { width: 20px; height: 20px; }
   input[type="range"]::-moz-range-thumb { width: 20px; height: 20px; }
   #stat-row { grid-template-columns: repeat(2, 1fr); }
   #verdict-line { font-size: 20px; }

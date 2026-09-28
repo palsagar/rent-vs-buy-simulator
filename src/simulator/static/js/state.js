@@ -45,8 +45,14 @@ export function onConfigChange(fn) {
   listeners.push(fn);
 }
 
+// Debounced like the simulate run, so the link and the charts settle
+// together. Writing on every slider tick broke Safari, which throws once a
+// page makes 100 history updates in 10 s -- and the throw also skipped the
+// listeners below, so the results froze mid-drag.
+const scheduleUrlWrite = debounce(writeUrl, 300);
+
 function emit() {
-  writeUrl();
+  scheduleUrlWrite();
   for (const fn of listeners) fn(getConfig());
 }
 
@@ -86,7 +92,10 @@ export function getRegionId() {
 
 export function setRegionId(id) {
   regionId = id;
-  writeUrl();
+  // Through the same delay as config changes: a region click applies the
+  // bundle's numbers right after this, so an immediate write would put the
+  // new region's id beside the old region's numbers for 300 ms.
+  scheduleUrlWrite();
 }
 
 function writeUrl() {
@@ -96,11 +105,16 @@ function writeUrl() {
   }
   if (regionId) params.set("r", regionId);
   const qs = params.toString();
-  history.replaceState(
-    null,
-    "",
-    qs ? `?${qs}&v=${URL_SCHEMA_VERSION}` : location.pathname,
-  );
+  try {
+    history.replaceState(
+      null,
+      "",
+      qs ? `?${qs}&v=${URL_SCHEMA_VERSION}` : location.pathname,
+    );
+  } catch {
+    // Safari refuses history updates past 100 in 10 s. The link then lags
+    // until the next write succeeds; nothing else depends on it.
+  }
 }
 
 // Per-field validation metadata derived from INPUT_DEFS (the single source
