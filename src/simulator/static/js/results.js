@@ -49,10 +49,16 @@ function renderVerdict(data) {
 }
 
 function renderStats(data) {
-  document.getElementById("stat-buy").textContent = fmtMoney(data.series.netBuy.at(-1));
-  document.getElementById("stat-rent").textContent = fmtMoney(data.series.netRent.at(-1));
+  const netBuy = data.series.netBuy.at(-1);
+  const netRent = data.series.netRent.at(-1);
+  document.getElementById("stat-buy").textContent = fmtMoney(netBuy);
+  document.getElementById("stat-rent").textContent = fmtMoney(netRent);
   document.getElementById("stat-cost-buy").textContent = `${fmtMoney(data.monthlyCostBuyYear1)}/mo`;
   document.getElementById("stat-cost-rent").textContent = `${fmtMoney(data.monthlyCostRentYear1)}/mo`;
+  // Net Value subtracts everything paid in, rent included, so both sides
+  // are often negative -- which reads as "I lose money either way" unless
+  // something says why.
+  document.getElementById("net-note").hidden = netBuy >= 0 && netRent >= 0;
 }
 
 const TABLE_COLUMNS = [

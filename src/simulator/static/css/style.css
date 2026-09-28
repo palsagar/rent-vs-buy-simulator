@@ -363,6 +363,7 @@ input[type="range"]::-moz-range-thumb {
 .stat-value { font-family: var(--mono); font-size: 16px; color: var(--text); margin-top: 3px; }
 .stat-value.buy { color: var(--buy); }
 .stat-value.rent { color: var(--rent); }
+#net-note { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
 
 /* Chart cards */
 .card {
