@@ -95,3 +95,27 @@ test('when the share sheet fails, Share copies the link instead', async ({ page,
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toBe(new URL('/?r=us&v=2', page.url()).href);
 });
+
+test('the page has a description and link-preview tags', async ({ page }) => {
+  await page.goto('/');
+  for (const sel of [
+    'meta[name="description"]',
+    'meta[property="og:title"]',
+    'meta[property="og:description"]',
+    'meta[property="og:image"]',
+    'meta[name="twitter:card"]',
+  ]) {
+    await expect(page.locator(sel)).toHaveAttribute('content', /.+/);
+  }
+});
+
+// Guard: the image already exists; this keeps the og:image path honest.
+test('the og:image path is served by the app', async ({ request }) => {
+  const res = await request.get('/screenshots/verdict.png');
+  expect(res.ok()).toBe(true);
+});
+
+test('Plotly loads with defer so it does not block the first paint', async ({ page }) => {
+  await page.goto('/');
+  expect(await page.evaluate(() => document.querySelector('script[src*="plotly"]').defer)).toBe(true);
+});
