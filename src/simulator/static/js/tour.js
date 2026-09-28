@@ -283,8 +283,9 @@ export class Tour {
             const el = this._targetEl(step.target);
             if (el) {
                 const r = el.getBoundingClientRect();
-                const W = window.innerWidth, H = window.innerHeight;
-                reachable = r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 && r.top < H && r.left < W;
+                const W = window.innerWidth;
+                const band = this._sheetBand(el) ?? { top: 0, bottom: window.innerHeight };
+                reachable = r.width > 0 && r.height > 0 && r.bottom > band.top && r.right > 0 && r.top < band.bottom && r.left < W;
             }
         }
         if (!step.action || !reachable) {
@@ -342,6 +343,23 @@ export class Tour {
     }
 
     /**
+     * The strip of the screen where a control inside the phone inputs sheet
+     * can be seen: below the sheet's sticky header, down to the sheet's
+     * bottom edge. A control scrolled up under the header is hidden even
+     * though it is inside the viewport. Null when `el` is not in the sheet,
+     * or on desktop, where the header is not shown: the viewport applies.
+     */
+    _sheetBand(el) {
+        const sheet = document.getElementById('input-panel');
+        const header = document.getElementById('sheet-header');
+        if (!sheet || !sheet.contains(el) || !header || !header.offsetHeight) return null;
+        return {
+            top: Math.max(0, header.getBoundingClientRect().bottom),
+            bottom: Math.min(window.innerHeight, sheet.getBoundingClientRect().bottom),
+        };
+    }
+
+    /**
      * Make an off-viewport target frameable. A target hidden by a collapsed
      * drawer (mobile inputs, right-side advanced) is opened via its toggle
      * button (never ui.js internals); any target outside the viewport is then
@@ -385,9 +403,24 @@ export class Tour {
             reopened = true;
         }
 
+        // For the core inputs we bring the first slider itself into the hole
+        // so the user can actually drag it.
+        let focus = el;
+        if (el.id === 'core-inputs') {
+            const first = el.querySelector('input');
+            if (first) focus = first;
+        }
         const r = el.getBoundingClientRect();
         const W = window.innerWidth, H = window.innerHeight;
-        if (reopened || (r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 && r.top < H && r.left < W)) {
+        // In the phone sheet the control must sit fully below the sticky
+        // header (to within a pixel of rounding); elsewhere any part
+        // on-screen will do.
+        const band = this._sheetBand(el);
+        const f = focus.getBoundingClientRect();
+        const shown = band
+            ? f.top >= band.top - 1 && f.bottom <= band.bottom + 1
+            : r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 && r.top < H && r.left < W;
+        if (reopened || shown) {
             // Already on-screen — or freshly reopened mid-close. Returning
             // `reopened` requests the deferred re-render so the do-it-vs-Next
             // decision and the ring land on the drawer's final OPEN geometry
@@ -395,13 +428,8 @@ export class Tour {
             return reopened;
         }
         // Scroll the spotlight target into view (minimal, axis-aware) so the
-        // ring can frame it. For the core inputs we bring the first slider
-        // itself into the hole so the user can actually drag it.
-        let focus = el;
-        if (el.id === 'core-inputs') {
-            const first = el.querySelector('input');
-            if (first) focus = first;
-        }
+        // ring can frame it. The sheet's scroll-padding-top keeps it clear of
+        // the sticky header.
         focus.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' });
         return true;
     }
@@ -414,9 +442,12 @@ export class Tour {
         const [dt, dr, db, dl] = dims;
 
         let el = this._targetEl(this._overrideTarget ?? step.target);
+        // The hole and ring stay inside the part of the screen that shows
+        // the target: the viewport, or the phone sheet below its header.
+        const band = (el && this._sheetBand(el)) ?? { top: 0, bottom: H };
         if (el) {
             const r = el.getBoundingClientRect();
-            if (r.width <= 0 || r.height <= 0 || r.bottom <= 0 || r.right <= 0 || r.top >= H || r.left >= W) {
+            if (r.width <= 0 || r.height <= 0 || r.bottom <= band.top || r.right <= 0 || r.top >= band.bottom || r.left >= W) {
                 el = null;
             } else {
                 this._attachTargetRelayoutListener(el);
@@ -435,8 +466,8 @@ export class Tour {
         }
 
         const r = el.getBoundingClientRect();
-        const t = Math.max(0, r.top - PAD), l = Math.max(0, r.left - PAD);
-        const b = Math.min(H, r.bottom + PAD), rt = Math.min(W, r.right + PAD);
+        const t = Math.max(band.top, r.top - PAD), l = Math.max(0, r.left - PAD);
+        const b = Math.min(band.bottom, r.bottom + PAD), rt = Math.min(W, r.right + PAD);
 
         ring.style.display = 'block';
         Object.assign(ring.style, { left: `${l}px`, top: `${t}px`, width: `${rt - l}px`, height: `${b - t}px` });

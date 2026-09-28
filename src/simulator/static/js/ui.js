@@ -8,7 +8,14 @@ import { moveFocusIn, restoreFocus, trapFocus } from "./focus.js";
 export function initUi(tour) {
   const panel = document.getElementById("advanced-panel");
   document.getElementById("advanced-btn").addEventListener("click", () => panel.classList.toggle("visible"));
-  document.getElementById("advanced-close").addEventListener("click", () => panel.classList.remove("visible"));
+  const advancedClose = document.getElementById("advanced-close");
+  advancedClose.addEventListener("click", () => {
+    panel.classList.remove("visible");
+    // On a phone the close button slides off-screen with the sheet; the
+    // Advanced button that opened it stays in view in the inputs sheet.
+    const mobile = window.getComputedStyle(document.getElementById("inputs-btn")).display !== "none";
+    if (mobile && document.activeElement === advancedClose) document.getElementById("advanced-btn").focus();
+  });
 
   // ── Guide overlay ────────────────────────────────────────────────────────
   const guide = document.getElementById("guide-overlay");
@@ -165,9 +172,10 @@ export function initUi(tour) {
   document.addEventListener("click", (e) => {
     if (e.target && e.target.id === "drawer-scrim") closeSheets(false);
   });
-  // Esc closes the mobile drawer (and hides the scrim). Only fires when the
-  // drawer is actually the open mobile surface, so it can't clobber the tour's
-  // own Escape handling.
+  // Esc closes both phone sheets and the scrim, and returns focus that was in
+  // a sheet to the Edit your numbers button. Only fires when the inputs sheet
+  // is actually the open mobile surface, so it can't clobber the tour's own
+  // Escape handling.
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && inputPanel.classList.contains("visible")) {
       const mobile = window.getComputedStyle(document.getElementById("inputs-btn")).display !== "none";

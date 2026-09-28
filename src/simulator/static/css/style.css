@@ -610,6 +610,8 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
     z-index: 260;
     transform: translateY(100%);
     transition: transform 0.3s ease;
+    /* A control scrolled into view lands below the sticky header. */
+    scroll-padding-top: 64px;
   }
   #input-panel.visible { transform: translateY(0); box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45); }
   /* 64px tall exactly (border box): the Advanced sheet is 64px shorter than

@@ -208,9 +208,22 @@ test.describe('phone: Advanced sheet', () => {
     expect(await page.evaluate(() => document.activeElement.id)).toBe('inputs-btn');
   });
 
+  test('the Advanced close button hands focus to the Advanced button', async ({ page }) => {
+    await openBothSheets(page);
+    await page.locator('#advanced-close').focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#advanced-panel')).not.toHaveClass(/visible/);
+    await expect(page.locator('#input-panel')).toHaveClass(/visible/);
+    await expect(page.locator('#advanced-btn')).toBeFocused();
+  });
+
   test('the tour closes the inputs sheet when it leaves the Advanced step', async ({ page }) => {
     await startRealTour(page);
     while (await page.evaluate(() => window.__testTour.stepIndex) < 9) {
+      // The Advanced step opens the inputs sheet, where the Advanced button lives.
+      if (await page.evaluate(() => window.__testTour.stepIndex) === 8) {
+        await expect(page.locator('#input-panel')).toHaveClass(/visible/);
+      }
       const hasNext = await page.locator('.tour-footer .tour-btn-primary').count();
       if (hasNext) await page.locator('.tour-footer .tour-btn-primary').click();
       else await performCurrentAction(page);
@@ -234,6 +247,66 @@ test.describe('phone: Advanced sheet', () => {
     }
     expect(await page.evaluate(() => window.__testTour.active)).toBe(false);
     expect(await page.evaluate(() => localStorage.getItem('rvb.tour.v1'))).toBe('done');
+  });
+});
+
+/**
+ * Where `sel` (or the tour ring, for '.tour-ring') sits against the part of
+ * the inputs sheet that shows content: below its sticky header, down to the
+ * bottom of the screen. `hit` is whether a tap at its centre reaches it.
+ */
+function sheetView(page, sel) {
+  return page.evaluate((s) => {
+    const el = document.querySelector(s);
+    const r = el.getBoundingClientRect();
+    const top = document.getElementById('sheet-header').getBoundingClientRect().bottom;
+    const bottom = Math.min(innerHeight, document.getElementById('input-panel').getBoundingClientRect().bottom);
+    const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return {
+      inBand: r.height > 0 && r.top >= top - 1 && r.bottom <= bottom + 1,
+      hit: s === '.tour-ring' || el.contains(at),
+    };
+  }, sel);
+}
+
+test.describe('phone: the tour inside the inputs sheet', () => {
+  test.use(PHONE);
+
+  async function walkTo(page, index) {
+    while (await page.evaluate(() => window.__testTour.stepIndex) < index) {
+      const hasNext = await page.locator('.tour-footer .tour-btn-primary').count();
+      if (hasNext) await page.locator('.tour-footer .tour-btn-primary').click();
+      else await performCurrentAction(page);
+      await page.waitForTimeout(100);
+    }
+  }
+
+  test('Back from Market outlook shows each earlier control below the sheet header', async ({ page }) => {
+    await startRealTour(page);
+    await walkTo(page, 3);
+    await expect(page.locator('.tour-title')).toHaveText('Market outlook');
+    await expect.poll(() => sheetView(page, '#outlook-pills')).toEqual({ inBand: true, hit: true });
+
+    await page.locator('.tour-footer .tour-btn-secondary').click(); // Back
+    await expect(page.locator('.tour-title')).toHaveText('First-time-buyer relief');
+    await expect.poll(() => sheetView(page, '#ftb-pill')).toEqual({ inBand: true, hit: true });
+    await expect.poll(() => sheetView(page, '.tour-ring')).toEqual({ inBand: true, hit: true });
+
+    await page.locator('.tour-footer .tour-btn-secondary').click(); // Back
+    await expect(page.locator('.tour-title')).toHaveText('Region presets');
+    await expect.poll(() => sheetView(page, '#region-pills')).toEqual({ inBand: true, hit: true });
+    // Still a do-it step: the pills are there to tap, so no Next button.
+    await expect(page.locator('.tour-footer .tour-btn-primary')).toHaveCount(0);
+    await page.evaluate(() => window.__testTour.skip());
+  });
+
+  test('the Your situation ring stays inside the part of the sheet below its header', async ({ page }) => {
+    await startRealTour(page);
+    await walkTo(page, 4);
+    await expect(page.locator('.tour-title')).toHaveText('Your situation');
+    await expect.poll(() => sheetView(page, '.tour-ring')).toEqual({ inBand: true, hit: true });
+    await expect.poll(() => sheetView(page, '#core-inputs input')).toEqual({ inBand: true, hit: true });
+    await page.evaluate(() => window.__testTour.skip());
   });
 });
 
