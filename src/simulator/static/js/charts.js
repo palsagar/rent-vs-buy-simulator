@@ -101,11 +101,37 @@ function strategyTraces(x, buyY, rentY, fwd) {
   return [mk(buyY, BUY, "Buy"), mk(rentY, RENT, "Rent")];
 }
 
-function endLabelAnnotations(x, buyY, rentY, fwd) {
+// End labels closer than this are pushed apart so they never overprint.
+// Larger than the ~15px text box because Plotly pads the autorange ~5%,
+// which makes the estimate below slightly generous.
+const LABEL_GAP_PX = 18;
+
+// The plot area's height: the chart div minus the top and bottom margins.
+function plotHeight(el, layout) {
+  return el.clientHeight - layout.margin.t - layout.margin.b;
+}
+
+// `plotHeightPx` turns the data-space distance between the two end values
+// into pixels, so the labels are pushed apart only when they would touch.
+function endLabelAnnotations(x, buyY, rentY, fwd, plotHeightPx) {
   const y = (v) => (fwd ? fwd(v) : v);
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const arr of [buyY, rentY]) {
+    for (const v of arr) {
+      const t = y(v);
+      if (t < lo) lo = t;
+      if (t > hi) hi = t;
+    }
+  }
+  const buyEnd = y(buyY.at(-1));
+  const rentEnd = y(rentY.at(-1));
+  const gapPx = hi > lo ? (Math.abs(buyEnd - rentEnd) / (hi - lo)) * plotHeightPx : 0;
+  const push = Math.max(0, (LABEL_GAP_PX - gapPx) / 2);
+  const buyUp = buyEnd >= rentEnd ? 1 : -1;
   return [
-    { x: x.at(-1), y: y(buyY.at(-1)), text: "Buy", font: { color: BUY, size: 12 }, showarrow: false, xanchor: "left", xshift: 6 },
-    { x: x.at(-1), y: y(rentY.at(-1)), text: "Rent", font: { color: RENT, size: 12 }, showarrow: false, xanchor: "left", xshift: 6 },
+    { x: x.at(-1), y: buyEnd, yshift: buyUp * push, text: "Buy", font: { color: BUY, size: 12 }, showarrow: false, xanchor: "left", xshift: 6 },
+    { x: x.at(-1), y: rentEnd, yshift: -buyUp * push, text: "Rent", font: { color: RENT, size: 12 }, showarrow: false, xanchor: "left", xshift: 6 },
   ];
 }
 
@@ -194,8 +220,13 @@ function maybeSymlog(layout, buyY, rentY) {
 export function renderDecisionChart(el, series, breakevenYear) {
   const x = series.year;
   const layout = baseLayout("Years");
+  // End at the horizon: autorange also fits the end labels, which stretched
+  // the axis to ~1.8x the horizon and left the right of the plot empty.
+  layout.xaxis.range = [x[0], x.at(-1)];
+  // The series is monthly, so the raw hover x reads "6.416667".
+  layout.xaxis.hoverformat = ".1f";
   const fwd = maybeSymlog(layout, series.netBuy, series.netRent);
-  layout.annotations = endLabelAnnotations(x, series.netBuy, series.netRent, fwd);
+  layout.annotations = endLabelAnnotations(x, series.netBuy, series.netRent, fwd, plotHeight(el, layout));
   if (breakevenYear != null) {
     layout.shapes = [
       { type: "line", x0: breakevenYear, x1: breakevenYear, yref: "paper", y0: 0, y1: 1, line: { color: "#484f58", width: 1, dash: "dash" } },
@@ -219,6 +250,7 @@ export function renderFanChart(el, mc) {
     { x, y: row[50], mode: "lines", line: { color: "#e6edf3", width: 1.5 }, name: "Median", customdata: moneyHover(row[50]), hovertemplate: `Median %{customdata}<extra></extra>`, showlegend: false },
   ];
   const layout = baseLayout("Years");
+  layout.xaxis.hoverformat = ".1f";
   layout.yaxis.title = { text: "Buy − Rent" };
   layout.shapes = [
     { type: "line", x0: 0, x1: x.at(-1), y0: 0, y1: 0, line: { color: "#484f58", width: 1, dash: "dash" } },
@@ -308,8 +340,10 @@ export function renderTornadoChart(el, tornado) {
 export function renderOutflowChart(el, series) {
   const x = series.year;
   const layout = baseLayout("Years");
+  layout.xaxis.range = [x[0], x.at(-1)];
+  layout.xaxis.hoverformat = ".1f";
   const fwd = maybeSymlog(layout, series.outflowBuy, series.outflowRent);
-  layout.annotations = endLabelAnnotations(x, series.outflowBuy, series.outflowRent, fwd);
+  layout.annotations = endLabelAnnotations(x, series.outflowBuy, series.outflowRent, fwd, plotHeight(el, layout));
   Plotly.react(el, strategyTraces(x, series.outflowBuy, series.outflowRent, fwd), layout, PLOT_CONFIG);
 }
 
