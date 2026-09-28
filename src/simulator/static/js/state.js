@@ -98,23 +98,31 @@ export function setRegionId(id) {
   scheduleUrlWrite();
 }
 
-function writeUrl() {
+function currentQuery() {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(config)) {
     if (value !== DEFAULT_CONFIG[key]) params.set(key, value);
   }
   if (regionId) params.set("r", regionId);
   const qs = params.toString();
+  return qs ? `?${qs}&v=${URL_SCHEMA_VERSION}` : "";
+}
+
+function writeUrl() {
   try {
-    history.replaceState(
-      null,
-      "",
-      qs ? `?${qs}&v=${URL_SCHEMA_VERSION}` : location.pathname,
-    );
+    history.replaceState(null, "", currentQuery() || location.pathname);
   } catch {
     // Safari refuses history updates past 100 in 10 s. The link then lags
     // until the next write succeeds; nothing else depends on it.
   }
+}
+
+/**
+ * An absolute link to the current scenario. Built from the live config,
+ * so it is current even while the debounced address-bar write is pending.
+ */
+export function shareUrl() {
+  return `${location.origin}${location.pathname}${currentQuery()}`;
 }
 
 // Per-field validation metadata derived from INPUT_DEFS (the single source

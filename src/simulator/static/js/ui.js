@@ -4,6 +4,7 @@
 
 import { Tour, currentActiveTour } from "./tour.js";
 import { moveFocusIn, restoreFocus, trapFocus } from "./focus.js";
+import { shareUrl } from "./state.js";
 
 export function initUi(tour) {
   const panel = document.getElementById("advanced-panel");
@@ -181,6 +182,37 @@ export function initUi(tour) {
       const mobile = window.getComputedStyle(document.getElementById("inputs-btn")).display !== "none";
       if (mobile) closeSheets(true);
     }
+  });
+
+  // ── Share ────────────────────────────────────────────────────────────────
+  // The native share sheet where the browser has one (phones), else copy
+  // the link.
+  const shareBtn = document.getElementById("share-btn");
+  shareBtn.addEventListener("click", async () => {
+    const url = shareUrl();
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Rent or buy?",
+          text: document.getElementById("verdict-line").textContent,
+          url,
+        });
+        return;
+      } catch (err) {
+        // AbortError means the person closed the share sheet. Any other
+        // failure falls through to copying the link.
+        if (err.name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      shareBtn.textContent = "Link copied";
+    } catch {
+      shareBtn.textContent = "Copy the link from the address bar";
+    }
+    setTimeout(() => {
+      shareBtn.textContent = "Share this scenario";
+    }, 2000);
   });
 
   // Wired here (not inline onclick) so the CSP script-src can omit 'unsafe-inline'.
