@@ -54,13 +54,22 @@ export function fmtPct(v, digits = 1) {
  * ("6,5", "7.5") -- the iOS decimal keypad shows "," in most European
  * locales -- except in a whole-number field when exactly three digits
  * follow it, where it is digit grouping ("437,000", "437.000"). A
- * whole-number field rounds the result ("7.5" gives 8). Returns NaN when
- * nothing numeric is left.
+ * whole-number field rounds the result ("7.5" gives 8). A trailing "k"
+ * or "M" (either case) multiplies by a thousand or a million, before that
+ * rounding ("450k", "1.5M", "2,5k"). Returns NaN when any other letter
+ * is left ("12abc", "1e5") or when nothing numeric is left.
  */
 export function parseTypedNumber(text, integerField) {
   let s = String(text)
-    .replace(/−/g, "-")
-    .replace(/[^\d.,-]/g, "");
+    .replaceAll(MINUS, "-")
+    .replace(/[^\d.,\p{L}-]/gu, "");
+  let multiplier = 1;
+  const suffix = s.slice(-1).toLowerCase();
+  if (suffix === "k" || suffix === "m") {
+    multiplier = suffix === "k" ? 1_000 : 1_000_000;
+    s = s.slice(0, -1);
+  }
+  if (/\p{L}/u.test(s)) return NaN;
   const lastDot = s.lastIndexOf(".");
   const lastComma = s.lastIndexOf(",");
   if (lastDot >= 0 && lastComma >= 0) {
@@ -75,6 +84,6 @@ export function parseTypedNumber(text, integerField) {
     s = grouping ? s.split(sep).join("") : s.replace(sep, ".");
   }
   if (s === "" || s === "-") return NaN;
-  const n = Number(s);
+  const n = Number(s) * multiplier;
   return integerField ? Math.round(n) : n;
 }

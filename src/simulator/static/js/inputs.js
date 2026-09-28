@@ -54,16 +54,19 @@ function buildSlider(def, container) {
     input.value = stored * scale;
     show(stored * scale);
   };
-  input.addEventListener("input", () => {
-    const displayed = Number(input.value);
+  // Dragging and typing both store a value in displayed units here.
+  const apply = (displayed) => {
     show(displayed);
     setParam(def.key, displayed / scale);
-    // Dragging the price across a relief ceiling must withdraw the
+    // Moving the price across a relief ceiling must withdraw the
     // relief, so the buyer-cost keys cannot stay latched at their FTB
     // values while the price says they no longer apply.
     if (def.key === "propertyPrice") syncFtbToPrice();
-  });
-  value.addEventListener("click", () => openTypedField(def, value, refresh));
+  };
+  input.addEventListener("input", () => apply(Number(input.value)));
+  value.addEventListener("click", () =>
+    openTypedField(def, value, input, getConfig()[def.key] * scale, apply),
+  );
   container.appendChild(row);
   widgets.push({ refresh });
 }
@@ -72,9 +75,10 @@ function buildSlider(def, container) {
 // or leaving the field applies the number, clamped to the slider's range
 // but NOT snapped to its step (a $437,000 price is allowed); Escape
 // cancels. The field exists only while typing, so `#core-inputs input`
-// still finds the slider everywhere else (the tour, the tests).
-function openTypedField(def, value, refresh) {
-  const scale = def.scale ?? 1;
+// still finds the slider everywhere else (the tour, the tests). `shown`
+// is the current value and `apply` stores a new one, both in displayed
+// units; `apply` is the slider's own drag handler.
+function openTypedField(def, value, slider, shown, apply) {
   const typed = document.createElement("input");
   typed.type = "text";
   typed.className = "slider-typed";
@@ -83,8 +87,9 @@ function openTypedField(def, value, refresh) {
   typed.inputMode = def.min < 0 ? "text" : "decimal";
   typed.enterKeyHint = "done";
   typed.setAttribute("aria-label", def.label);
-  // Stored -> displayed units, without float noise (0.03 * 100).
-  typed.value = String(Number((getConfig()[def.key] * scale).toFixed(6)));
+  // Without float noise (0.03 * 100).
+  const prefill = String(Number(shown.toFixed(6)));
+  typed.value = prefill;
   let cancelled = false;
   let closed = false;
   // Runs once: removing the focused field can fire blur a second time.
@@ -92,16 +97,22 @@ function openTypedField(def, value, refresh) {
     if (closed) return;
     closed = true;
     const n = parseTypedNumber(typed.value, def.step >= 1);
-    if (!cancelled && Number.isFinite(n)) {
-      setParam(def.key, Math.min(def.max, Math.max(def.min, n)) / scale);
-      // Same reason as the slider's input handler: a price that crosses
-      // a relief ceiling must withdraw the relief.
-      if (def.key === "propertyPrice") syncFtbToPrice();
-      refresh();
+    // An unedited field changes nothing: no re-run, and no re-reading of
+    // a hand-edited link value such as "1234.567" as digit grouping.
+    if (!cancelled && typed.value !== prefill && Number.isFinite(n)) {
+      const clamped = Math.min(def.max, Math.max(def.min, n));
+      slider.value = clamped;
+      apply(clamped);
+      // A typed value counts as a slider change (the tour's do-it step).
+      slider.dispatchEvent(new Event("change", { bubbles: true }));
     }
     typed.remove();
     value.hidden = false;
   };
+  // Browsers fire the field's own change events inconsistently (Chromium
+  // even on removal after Escape, WebKit not on Enter), so they stay in
+  // the field; the slider's change above is the one that counts.
+  typed.addEventListener("change", (e) => e.stopPropagation());
   typed.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" && e.key !== "Escape") return;
     // Escape here must not also close the inputs sheet or the tour, and
