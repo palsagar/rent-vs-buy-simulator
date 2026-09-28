@@ -61,9 +61,8 @@ function baseLayout(xTitle) {
     // No drag-to-zoom: on a touch screen it captures the swipe, so a page
     // scroll that starts on a chart zooms the chart instead. Taps still hover.
     dragmode: false,
-    xaxis: { title: { text: xTitle }, gridcolor: GRID, zerolinecolor: "#30363d", fixedrange: true },
+    xaxis: { title: { text: xTitle }, gridcolor: GRID, zerolinecolor: "#30363d" },
     yaxis: {
-      fixedrange: true,
       gridcolor: GRID,
       zerolinecolor: "#30363d",
       tickformat: currencyTickformat(),

@@ -6,7 +6,8 @@ import { test, expect } from '@playwright/test';
  *
  * The viewport is an iPhone 13 with Safari's toolbars showing. Touch swipes
  * go through CDP because Playwright's touchscreen API only taps, so this
- * file assumes the Chromium project the config already runs.
+ * file needs Chromium -- Playwright's default browser, which the config
+ * does not override.
  */
 
 test.use({ viewport: { width: 390, height: 664 }, hasTouch: true, isMobile: true });
@@ -48,7 +49,8 @@ test('preset bar controls stay on one row instead of stacking', async ({ page })
   expect(new Set(tops).size).toBe(1);
 });
 
-test('a failing share-URL write does not stop the simulation', async ({ page }) => {
+/** Make history.replaceState throw the way Safari does past its limit. */
+async function throttleHistoryLikeSafari(page) {
   // Safari throws once a page makes more than 100 history updates in 10 s.
   await page.evaluate(() => {
     history.replaceState = () => {
@@ -58,6 +60,12 @@ test('a failing share-URL write does not stop the simulation', async ({ page }) 
       );
     };
   });
+}
+
+test('a failing share-URL write does not stop the simulation', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', (err) => pageErrors.push(err.message));
+  await throttleHistoryLikeSafari(page);
   const rerun = page.waitForRequest(
     (req) => req.url().endsWith('/api/simulate') && req.postDataJSON().propertyPrice === 750000,
     { timeout: 5_000 },
@@ -65,9 +73,47 @@ test('a failing share-URL write does not stop the simulation', async ({ page }) 
   await page.evaluate(() => {
     const price = document.querySelector('#core-inputs input[type=range]');
     price.value = 750000;
-    price.dispatchEvent(new Event('input'));
+    price.dispatchEvent(new Event('input', { bubbles: true }));
   });
   await rerun;
+  // Past the 300 ms URL write too: a refused write is not an app error.
+  await page.waitForTimeout(500);
+  expect(pageErrors).toEqual([]);
+});
+
+test('a failing share-URL write does not stop a region switch', async ({ page }) => {
+  await throttleHistoryLikeSafari(page);
+  // The UK bundle carries a flat council-tax levy; the US one has none.
+  const rerun = page.waitForRequest(
+    (req) => req.url().endsWith('/api/simulate') && req.postDataJSON().annualPropertyLevy > 0,
+    { timeout: 5_000 },
+  );
+  await page.locator('#region-pills .preset-btn', { hasText: 'UK' }).click();
+  await rerun;
+});
+
+test('a region switch writes its id and its numbers to the link together', async ({ page }) => {
+  const written = await page.evaluate(async () => {
+    const urls = [];
+    const original = history.replaceState.bind(history);
+    history.replaceState = (state, title, url) => {
+      urls.push(String(url));
+      return original(state, title, url);
+    };
+    [...document.querySelectorAll('#region-pills .preset-btn')]
+      .find((b) => b.textContent === 'UK')
+      .click();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    return urls;
+  });
+  // A link that names the UK but still carries US numbers would reload as
+  // a UK label over a US scenario.
+  expect(written.length).toBeGreaterThan(0);
+  for (const url of written) {
+    const query = new URLSearchParams(url.split('?')[1]);
+    expect(query.get('r')).toBe('uk');
+    expect(Number(query.get('annualPropertyLevy'))).toBeGreaterThan(0);
+  }
 });
 
 test('dragging a slider coalesces share-URL writes into one', async ({ page }) => {
@@ -81,12 +127,12 @@ test('dragging a slider coalesces share-URL writes into one', async ({ page }) =
     const price = document.querySelector('#core-inputs input[type=range]');
     for (let i = 0; i < 150; i++) {
       price.value = 300000 + i * 5000;
-      price.dispatchEvent(new Event('input'));
+      price.dispatchEvent(new Event('input', { bubbles: true }));
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
     return { calls, price: new URLSearchParams(location.search).get('propertyPrice') };
   });
-  expect(result.calls).toBeLessThanOrEqual(2);
+  expect(result.calls).toBe(1);
   // The link still ends on the last value the slider reached.
   expect(result.price).toBe('1045000');
 });
@@ -109,8 +155,9 @@ test('tapping a chart still shows its values', async ({ page }) => {
 });
 
 test('the phone-size slider thumb rule survives CSS parsing', async ({ page }) => {
-  // A selector list that mixes -webkit- and -moz- pseudo-elements is dropped
-  // whole by every browser, so the enlarged thumb has to be its own rule.
+  // Chromium and WebKit (the engine in every iPhone browser) drop a whole
+  // selector list that names a -moz- pseudo-element they do not know, so
+  // the enlarged thumb has to be its own rule per engine.
   const width = await page.evaluate(() => {
     for (const sheet of document.styleSheets) {
       for (const rule of sheet.cssRules) {
