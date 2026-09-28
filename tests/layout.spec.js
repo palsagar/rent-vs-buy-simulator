@@ -335,3 +335,39 @@ test.describe('phone: page scrolling', () => {
     expect(style).toEqual({ inputs: 'contain', advanced: 'contain', scrim: 'none' });
   });
 });
+
+test.describe('phone: touch targets and text size', () => {
+  test.use(PHONE);
+
+  test('mortgage-term buttons, checkbox rows and dropdowns are at least 44px tall', async ({ page }) => {
+    const small = await page.evaluate(() =>
+      [...document.querySelectorAll('.seg-btn, .checkbox-row, .select-row select')]
+        .map((el) => ({ what: el.className || el.tagName, h: Math.round(el.getBoundingClientRect().height) }))
+        .filter((x) => x.h < 44),
+    );
+    expect(small).toEqual([]);
+  });
+
+  test('the typed-value buttons are at least 28px tall', async ({ page }) => {
+    const heights = await page.evaluate(() =>
+      [...document.querySelectorAll('.slider-value')].map((el) => el.getBoundingClientRect().height),
+    );
+    expect(Math.min(...heights)).toBeGreaterThanOrEqual(28);
+  });
+
+  test('stat labels and slider hints are at least 12px', async ({ page }) => {
+    const tiny = await page.evaluate(() =>
+      [...document.querySelectorAll('.stat-label, .slider-hint')]
+        .filter((el) => parseFloat(getComputedStyle(el).fontSize) < 12).length,
+    );
+    expect(tiny).toBe(0);
+  });
+
+  test('dropdowns use 16px text so iOS does not zoom on focus', async ({ page }) => {
+    const sizes = await page.evaluate(() =>
+      [...document.querySelectorAll('.select-row select')].map((el) => getComputedStyle(el).fontSize),
+    );
+    expect(sizes.length).toBeGreaterThan(0);
+    expect(new Set(sizes)).toEqual(new Set(['16px']));
+  });
+});
