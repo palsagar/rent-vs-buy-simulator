@@ -162,7 +162,6 @@ body {
   color: #c9d1d9;
   white-space: nowrap;
 }
-.btn-advanced { background: var(--error); border-color: var(--error); color: #fff; }
 
 /* Layout */
 #main { flex: 1; display: flex; overflow: hidden; position: relative; }
@@ -589,4 +588,10 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   #stat-row { grid-template-columns: repeat(2, 1fr); }
   #verdict-line { font-size: 20px; }
   #results { padding: 14px; }
+  /* One line: the name and (from layout.js) the Guide button. The author
+     and repo links live in the footer. */
+  #title-bar .badge,
+  #title-bar .author-link,
+  #title-bar .gh-pill { display: none; }
+  #title-bar { padding: 6px 12px; }
 }
