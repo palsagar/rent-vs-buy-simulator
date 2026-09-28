@@ -133,3 +133,33 @@ test.describe('phone: inputs sheet', () => {
     await expect(page.locator('#drawer-scrim')).toBeHidden();
   });
 });
+
+test.describe('phone: live verdict in the sheet', () => {
+  test.use(PHONE);
+
+  test('the sheet shows a one-line verdict that follows the inputs', async ({ page }) => {
+    await page.click('#inputs-btn');
+    const line = page.locator('#sheet-verdict');
+    await expect(line).toHaveText('Too close to call · ~$1,248 apart after 10 yrs');
+    await page.evaluate(() => {
+      const price = document.querySelector('#core-inputs input[type=range]');
+      price.value = 1295000;
+      price.dispatchEvent(new Event('input'));
+    });
+    await expect(line).toHaveText('Renting ahead by ~$739,670 after 10 yrs');
+  });
+
+  test('a failed Monte Carlo run drops the toss-up wording from the sheet too', async ({ page }) => {
+    await page.route('**/api/monte-carlo', (route) =>
+      route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ detail: 'boom' }) }),
+    );
+    await page.click('#inputs-btn');
+    await page.evaluate(() => {
+      const price = document.querySelector('#core-inputs input[type=range]');
+      price.value = 1295000;
+      price.dispatchEvent(new Event('input'));
+    });
+    await expect(page.locator('#error-banner')).toContainText('Monte Carlo failed: boom');
+    await expect(page.locator('#sheet-verdict')).toHaveText('Renting ahead by ~$739,670 after 10 yrs');
+  });
+});

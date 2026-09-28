@@ -33,6 +33,18 @@ function headlineHtml({ winner, difference, horizonYears }) {
   return `${name} leaves you <span class="amount-${winner}">${amount}</span> wealthier if you sell after ${horizonYears} years`;
 }
 
+// The one-line verdict pinned at the top of the phone inputs sheet, so the
+// answer stays in view while the sheet covers the page. Same toss-up rule
+// as the headline.
+function paintSheetVerdict() {
+  if (!lastVerdict) return;
+  const { winner, difference, horizonYears } = lastVerdict;
+  const amount = `~${fmtMoney(Math.abs(difference))}`;
+  document.getElementById("sheet-verdict").textContent = tossUp
+    ? `Too close to call · ${amount} apart after ${horizonYears} yrs`
+    : `${winner === "buy" ? "Buying" : "Renting"} ahead by ${amount} after ${horizonYears} yrs`;
+}
+
 function renderVerdict(data) {
   lastVerdict = data.verdict;
   const { winner, horizonYears } = data.verdict;
@@ -46,6 +58,7 @@ function renderVerdict(data) {
       ? `${name} pulls ahead if you stay ≥ ${Math.ceil(b)} years`
       : `No breakeven within ${horizonYears} years`;
   document.getElementById("verdict-confidence").textContent = "";
+  paintSheetVerdict();
 }
 
 function renderStats(data) {
@@ -122,6 +135,7 @@ export function renderSimulate(data, cfg) {
 export function clearTossUp() {
   tossUp = false;
   if (lastVerdict) document.getElementById("verdict-line").innerHTML = headlineHtml(lastVerdict);
+  paintSheetVerdict();
 }
 
 export function renderMonteCarlo(mc, winner) {
@@ -132,6 +146,7 @@ export function renderMonteCarlo(mc, winner) {
   const shownPct = Math.round(pct);
   tossUp = shownPct >= TOSS_UP_MIN_PCT && shownPct <= TOSS_UP_MAX_PCT;
   if (lastVerdict) document.getElementById("verdict-line").innerHTML = headlineHtml(lastVerdict);
+  paintSheetVerdict();
   document.getElementById("verdict-confidence").textContent =
     ` · ${name} wins in ${shownPct}% of simulated futures`;
   renderFanChart(document.getElementById("fan-chart"), mc);
