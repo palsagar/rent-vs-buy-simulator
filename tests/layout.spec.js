@@ -100,6 +100,31 @@ test.describe('phone: inputs sheet', () => {
     expect(Math.round(box.height)).toBe(Math.round(664 * 0.6));
   });
 
+  test('the sheet header is exactly 64px, even with a two-line verdict', async ({ page }) => {
+    await page.click('#inputs-btn');
+    await waitForSlideAtRest(page, 'input-panel');
+    await page.evaluate(() => {
+      document.getElementById('sheet-verdict').textContent =
+        'Buying wins after 14 years, and the odds favour buying under this outlook';
+    });
+    const { header, verdict } = await page.evaluate(() => ({
+      header: document.getElementById('sheet-header').getBoundingClientRect().height,
+      verdict: document.getElementById('sheet-verdict').getBoundingClientRect().height,
+    }));
+    expect(header).toBe(64);
+    // Two lines at 13px * 1.35: more than one line, and inside the header.
+    expect(verdict).toBeGreaterThan(30);
+    expect(verdict).toBeLessThan(header - 2);
+  });
+
+  test('Outlook is labelled once in the sheet, and the pills keep an accessible name', async ({ page }) => {
+    await expect(page.locator('#sheet-outlook .preset-label')).toBeHidden();
+    await expect(page.locator('#sheet-outlook').getByRole('group', { name: 'Outlook' })).toHaveCount(1);
+    // On a wide screen the group returns to the preset bar with its label.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(page.locator('#preset-bar #outlook-group .preset-label')).toBeVisible();
+  });
+
   test('Done closes the sheet and its scrim', async ({ page }) => {
     await page.click('#inputs-btn');
     await waitForSlideAtRest(page, 'input-panel');

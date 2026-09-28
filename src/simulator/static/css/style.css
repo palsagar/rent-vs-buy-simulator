@@ -570,7 +570,7 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   .guide-chevron { transition: none; }
 }
 
-/* Mobile: left panel becomes a drawer */
+/* Mobile: the left panel becomes a bottom sheet */
 #inputs-btn { display: none; }
 #sheet-header { display: none; }
 @media (max-width: 900px) {
@@ -612,8 +612,9 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
     transition: transform 0.3s ease;
   }
   #input-panel.visible { transform: translateY(0); box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45); }
-  /* 64px tall exactly: the Advanced sheet is 64px shorter than this sheet
-     so the verdict line stays in view above it. */
+  /* 64px tall exactly (border box): the Advanced sheet is 64px shorter than
+     this sheet so the verdict line stays in view above it. The 9px padding
+     leaves 45px of content height for the 44px Done button. */
   #sheet-header {
     display: flex;
     position: sticky;
@@ -621,9 +622,10 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
     z-index: 1;
     align-items: center;
     gap: 12px;
-    min-height: 64px;
+    box-sizing: border-box;
+    height: 64px;
     margin: 0 -16px 12px;
-    padding: 10px 16px;
+    padding: 9px 16px;
     background: var(--surface);
     border-bottom: 1px solid var(--border);
   }
@@ -647,6 +649,8 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   /* Preset controls inside the inputs panel (moved there by layout.js). */
   #sheet-region .preset-group,
   #sheet-outlook .preset-group { flex-wrap: wrap; margin: 0 0 12px; }
+  /* The section title above already names the outlook pills. */
+  #sheet-outlook .preset-label { display: none; }
   #sheet-advanced { margin-top: 16px; }
   #sheet-advanced .btn { width: 100%; }
 }

@@ -120,6 +120,9 @@ async function init() {
   readUrl();
   const tour = new Tour({ steps: STEPS });
   window.__rvb = { tour }; // test handle for browser-driven verification
+  // Before the regions request: the move needs only static markup, so phones
+  // never show the controls in the preset bar and then see them jump.
+  initPhoneLayout();
   let regions;
   try {
     regions = await getRegions();
@@ -142,7 +145,6 @@ async function init() {
     ];
   }
   initInputs(regions);
-  initPhoneLayout();
   initUi(tour);
   syncInputs();
   onConfigChange(() => {
