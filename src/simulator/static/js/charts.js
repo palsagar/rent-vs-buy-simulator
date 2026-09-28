@@ -225,6 +225,11 @@ function maybeSymlog(layout, buyY, rentY) {
   return fwd;
 }
 
+// Past this fraction of the x-range the breakeven label moves to the left of
+// its line: the ~85px label no longer fits between the line and the plot's
+// right edge. At the midpoint it fits on either side down to a ~360px phone.
+const BREAKEVEN_FLIP_FRACTION = 0.5;
+
 export function renderDecisionChart(el, series, breakevenYear) {
   const x = series.year;
   const layout = baseLayout("Years");
@@ -236,11 +241,12 @@ export function renderDecisionChart(el, series, breakevenYear) {
   const fwd = maybeSymlog(layout, series.netBuy, series.netRent);
   layout.annotations = endLabelAnnotations(x, series.netBuy, series.netRent, fwd, plotHeight(el, layout));
   if (breakevenYear != null) {
+    const labelLeft = (breakevenYear - x[0]) / (x.at(-1) - x[0]) > BREAKEVEN_FLIP_FRACTION;
     layout.shapes = [
       { type: "line", x0: breakevenYear, x1: breakevenYear, yref: "paper", y0: 0, y1: 1, line: { color: "#484f58", width: 1, dash: "dash" } },
     ];
     layout.annotations.push({
-      x: breakevenYear, yref: "paper", y: 1, yanchor: "bottom", xanchor: "left", xshift: 4,
+      x: breakevenYear, yref: "paper", y: 1, yanchor: "bottom", xanchor: labelLeft ? "right" : "left", xshift: labelLeft ? -4 : 4,
       text: `breakeven ${breakevenYear.toFixed(1)}y`, font: { color: MUTED, size: 11 }, showarrow: false,
     });
   }

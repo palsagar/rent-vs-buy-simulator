@@ -61,6 +61,21 @@ test.describe('on a phone', () => {
     expect(share).toBeGreaterThan(0.75);
   });
 
+  test('the breakeven label stays inside the plot when it falls near the horizon', async ({ page }) => {
+    await load(page); // default config: breakeven at 9.985 years, on a 10-year horizon
+    const { labelRight, plotRight } = await page.evaluate(() => {
+      const el = document.getElementById('decision-chart');
+      const label = [...el.querySelectorAll('.annotation-text')]
+        .find((t) => t.textContent.startsWith('breakeven'));
+      const size = el._fullLayout._size;
+      return {
+        labelRight: label.getBoundingClientRect().right,
+        plotRight: el.getBoundingClientRect().left + size.l + size.w,
+      };
+    });
+    expect(labelRight).toBeLessThanOrEqual(plotRight);
+  });
+
   test('every tornado label is still shown, above its bar', async ({ page }) => {
     await load(page);
     const labels = await page.evaluate(() =>
