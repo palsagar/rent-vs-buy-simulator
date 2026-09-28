@@ -291,6 +291,11 @@ test.describe('phone: the tour inside the inputs sheet', () => {
     await expect(page.locator('.tour-title')).toHaveText('First-time-buyer relief');
     await expect.poll(() => sheetView(page, '#ftb-pill')).toEqual({ inBand: true, hit: true });
     await expect.poll(() => sheetView(page, '.tour-ring')).toEqual({ inBand: true, hit: true });
+    // The ring keeps its full 8px margin above the pill, not clipped by the header.
+    await expect.poll(() => page.evaluate(() =>
+      document.getElementById('ftb-pill').getBoundingClientRect().top
+        - document.querySelector('.tour-ring').getBoundingClientRect().top,
+    )).toBeCloseTo(8, 0);
 
     await page.locator('.tour-footer .tour-btn-secondary').click(); // Back
     await expect(page.locator('.tour-title')).toHaveText('Region presets');

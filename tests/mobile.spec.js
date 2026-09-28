@@ -155,6 +155,24 @@ for (const chart of ['#decision-chart', '#tornado-chart']) {
   });
 }
 
+test.describe('rotating a landscape phone to portrait', () => {
+  // 844 px is still under the 900 px phone breakpoint, so the phone layout
+  // applies before and after the turn.
+  test.use({ viewport: { width: 844, height: 390 } });
+
+  test('leaves no sideways scroll on the page', async ({ page }) => {
+    // The numbers table is the widest thing that cannot shrink on its own.
+    await page.locator('#numbers > summary').click();
+    await expect(page.locator('#data-table table')).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 664 });
+    // Charts re-lay out on the resize; the page is narrow again once they do.
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
+      .toBeLessThanOrEqual(0);
+  });
+});
+
 test('tapping a chart still shows its values', async ({ page }) => {
   await page.evaluate(() => document.getElementById('decision-chart').scrollIntoView({ block: 'center' }));
   const box = await page.locator('#decision-chart').boundingBox();

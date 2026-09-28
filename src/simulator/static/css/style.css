@@ -610,8 +610,9 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
     z-index: 260;
     transform: translateY(100%);
     transition: transform 0.3s ease;
-    /* A control scrolled into view lands below the sticky header. */
-    scroll-padding-top: 64px;
+    /* A control scrolled into view lands below the sticky header (64px)
+       plus the tour ring's 8px margin. */
+    scroll-padding-top: 72px;
   }
   #input-panel.visible { transform: translateY(0); box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45); }
   /* 64px tall exactly (border box): the Advanced sheet is 64px shorter than
@@ -679,7 +680,9 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   body { overflow: visible; }
   #app { height: auto; min-height: 100vh; min-height: 100dvh; }
   #main { overflow: visible; }
-  #results { overflow: visible; }
+  /* min-width: 0 because overflow: visible no longer zeroes a flex item's
+     automatic minimum, so a wide chart or table would widen the page. */
+  #results { overflow: visible; min-width: 0; }
   /* A scroll that starts in a sheet (or on the scrim) stays there. */
   #input-panel,
   #advanced-panel { overscroll-behavior: contain; }
