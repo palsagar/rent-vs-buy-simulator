@@ -140,11 +140,15 @@
 
   <div id="preset-bar">
     <button id="inputs-btn" class="btn">Inputs</button>
-    <span class="preset-label">Region</span>
-    <span id="region-pills"></span>
-    <span id="ftb-pill"></span>
-    <span class="preset-label" style="margin-left:14px">Outlook</span>
-    <span id="outlook-pills"></span>
+    <span class="preset-group" id="region-group">
+      <span class="preset-label">Region</span>
+      <span id="region-pills"></span>
+      <span id="ftb-pill"></span>
+    </span>
+    <span class="preset-group" id="outlook-group">
+      <span class="preset-label">Outlook</span>
+      <span id="outlook-pills"></span>
+    </span>
     <span class="title-spacer"></span>
     <button id="advanced-btn" class="btn">⚙ Advanced</button>
     <button id="guide-btn" class="btn">? Guide</button>
@@ -152,10 +156,13 @@
 
   <div id="main">
     <aside id="input-panel">
+      <div id="sheet-region"></div>
       <div class="section-title">Your situation</div>
       <div id="core-inputs"></div>
       <div class="section-title">Outlook assumptions</div>
+      <div id="sheet-outlook"></div>
       <div id="assumption-inputs"></div>
+      <div id="sheet-advanced"></div>
     </aside>
 
     <div id="results">

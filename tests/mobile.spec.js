@@ -41,10 +41,14 @@ async function swipeUp(page, selector) {
 }
 
 test('preset bar controls stay on one row instead of stacking', async ({ page }) => {
+  // Just above the phone breakpoint: the bar is still a bar, and narrower
+  // than its contents, which is when the groups used to be squeezed.
+  await page.setViewportSize({ width: 920, height: 700 });
+  await expect(page.locator('#preset-bar #region-pills')).toHaveCount(1);
   const tops = await page.evaluate(() =>
-    [...document.querySelectorAll('#preset-bar button')].map((b) =>
-      Math.round(b.getBoundingClientRect().top),
-    ),
+    [...document.querySelectorAll('#preset-bar button')]
+      .filter((b) => b.offsetParent !== null)
+      .map((b) => Math.round(b.getBoundingClientRect().top)),
   );
   expect(new Set(tops).size).toBe(1);
 });
@@ -88,7 +92,7 @@ test('a failing share-URL write does not stop a region switch', async ({ page })
     (req) => req.url().endsWith('/api/simulate') && req.postDataJSON().annualPropertyLevy > 0,
     { timeout: 5_000 },
   );
-  await page.locator('#region-pills .preset-btn', { hasText: 'UK' }).click();
+  await page.evaluate(() => [...document.querySelectorAll('#region-pills .preset-btn')].find((b) => b.textContent === 'UK').click());
   await rerun;
 });
 

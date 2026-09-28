@@ -4,6 +4,7 @@
 
 import { getRegions, postMonteCarlo, postSimulate } from "./api.js";
 import { initInputs, syncInputs } from "./inputs.js";
+import { initPhoneLayout } from "./layout.js";
 import { clearTossUp, renderMonteCarlo, renderSimulate } from "./results.js";
 import {
   configHash,
@@ -141,6 +142,7 @@ async function init() {
     ];
   }
   initInputs(regions);
+  initPhoneLayout();
   initUi(tour);
   syncInputs();
   onConfigChange(() => {

@@ -118,6 +118,8 @@ body {
 /* A narrow bar scrolls sideways instead of squeezing the pill groups, which
    would wrap their buttons into a vertical stack. */
 #preset-bar > * { flex-shrink: 0; }
+.preset-group { display: inline-flex; align-items: center; gap: 8px; }
+#outlook-group { margin-left: 14px; }
 #preset-bar::-webkit-scrollbar { height: 8px; }
 #preset-bar::-webkit-scrollbar-thumb {
   background: var(--border);
@@ -197,7 +199,9 @@ body {
   letter-spacing: 0.5px;
   margin: 14px 0 8px;
 }
-#input-panel .section-title:first-child { margin-top: 0; }
+/* The first title sits flush at the top -- unless layout.js has put the
+   region controls above it (phones). */
+#sheet-region:empty + .section-title { margin-top: 0; }
 .slider-row { margin-bottom: 10px; }
 .slider-header { display: flex; justify-content: space-between; margin-bottom: 3px; }
 .slider-name { font-size: 12px; color: #c9d1d9; }
@@ -594,4 +598,9 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   #title-bar .author-link,
   #title-bar .gh-pill { display: none; }
   #title-bar { padding: 6px 12px; }
+  /* Preset controls inside the inputs panel (moved there by layout.js). */
+  #sheet-region .preset-group,
+  #sheet-outlook .preset-group { flex-wrap: wrap; margin: 0 0 12px; }
+  #sheet-advanced { margin-top: 16px; }
+  #sheet-advanced .btn { width: 100%; }
 }

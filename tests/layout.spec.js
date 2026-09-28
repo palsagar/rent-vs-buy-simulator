@@ -37,3 +37,30 @@ test('the Advanced button does not use the error red', async ({ page }) => {
 test('the footer credits the author', async ({ page }) => {
   await expect(page.locator('footer a[href="https://github.com/palsagar"]')).toHaveCount(1);
 });
+
+test.describe('phone: controls move into the inputs panel', () => {
+  test.use(PHONE);
+
+  test('region, outlook and Advanced sit in the inputs panel; Guide in the title bar', async ({ page }) => {
+    for (const sel of [
+      '#input-panel #region-pills',
+      '#input-panel #ftb-pill',
+      '#input-panel #outlook-pills',
+      '#input-panel #advanced-btn',
+      '#title-bar #guide-btn',
+    ]) {
+      await expect(page.locator(sel)).toHaveCount(1);
+    }
+  });
+
+  test('they return to the preset bar, in order, when the screen widens', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await expect(page.locator('#preset-bar #region-pills')).toHaveCount(1);
+    const order = await page.evaluate(() =>
+      [...document.getElementById('preset-bar').children]
+        .map((c) => c.id)
+        .filter((id) => ['region-group', 'outlook-group', 'advanced-btn', 'guide-btn'].includes(id)),
+    );
+    expect(order).toEqual(['region-group', 'outlook-group', 'advanced-btn', 'guide-btn']);
+  });
+});
