@@ -48,3 +48,22 @@ test('the explanation stays hidden when both net values are positive', async ({ 
   await load(page, '?horizonYears=40&propertyPrice=50000&monthlyRent=500&propertyAppreciationAnnual=10&equityGrowthAnnual=15&r=us&v=2');
   await expect(page.locator('#net-note')).toBeHidden();
 });
+
+test('a failed Monte Carlo run clears the toss-up headline', async ({ page }) => {
+  await load(page);
+  await expect(page.locator('#verdict-line')).toContainText('Too close to call');
+
+  // The next config is clear-cut, but its Monte Carlo run fails, so nothing
+  // can replace the toss-up state carried over from the default config.
+  await page.route('**/api/monte-carlo', (route) =>
+    route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ detail: 'boom' }) }),
+  );
+  const priceRow = page.locator('#core-inputs .slider-row', { hasText: 'Home price' });
+  const input = priceRow.locator('input');
+  await input.fill('1295000');
+  await input.evaluate((el) => el.dispatchEvent(new Event('input', { bubbles: true })));
+
+  await expect(page.locator('#error-banner')).toContainText('Monte Carlo failed: boom');
+  await expect(page.locator('#verdict-line')).toContainText('Renting leaves you');
+  await expect(page.locator('#verdict-line')).not.toContainText('Too close to call');
+});

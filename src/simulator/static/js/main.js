@@ -4,7 +4,7 @@
 
 import { getRegions, postMonteCarlo, postSimulate } from "./api.js";
 import { initInputs, syncInputs } from "./inputs.js";
-import { renderMonteCarlo, renderSimulate } from "./results.js";
+import { clearTossUp, renderMonteCarlo, renderSimulate } from "./results.js";
 import {
   configHash,
   debounce,
@@ -107,6 +107,7 @@ async function runMonteCarlo() {
     if (!controller.signal.aborted && mcAbort === controller) {
       errors.monteCarlo = `Monte Carlo failed: ${err.message}`;
       syncBanner();
+      clearTossUp();
     }
   }
 }

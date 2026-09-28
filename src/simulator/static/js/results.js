@@ -117,6 +117,13 @@ export function renderSimulate(data, cfg) {
   document.getElementById("csv-btn").onclick = () => downloadCsv(data.series);
 }
 
+// A failed Monte Carlo run leaves nothing to call the verdict a toss-up,
+// so the carried-over flag must not keep the headline from naming the winner.
+export function clearTossUp() {
+  tossUp = false;
+  if (lastVerdict) document.getElementById("verdict-line").innerHTML = headlineHtml(lastVerdict);
+}
+
 export function renderMonteCarlo(mc, winner) {
   const pct = winner === "buy" ? mc.buyWinsPct : 100 - mc.buyWinsPct;
   const name = winner === "buy" ? "Buying" : "Renting";
