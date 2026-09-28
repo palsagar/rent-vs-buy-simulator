@@ -155,6 +155,53 @@ for (const chart of ['#decision-chart', '#tornado-chart']) {
   });
 }
 
+test.describe('an open overlay holds the page still', () => {
+  // A swipe that did scroll the page can keep moving it for a moment
+  // (momentum), so each check waits this long before reading the scroll.
+  const SETTLE_MS = 500;
+
+  test('a swipe in the Guide scrolls the Guide, not the page', async ({ page }) => {
+    await page.click('#guide-btn');
+    await expect(page.locator('#guide-overlay')).toBeVisible();
+    // Closed sections: the Guide is shorter than the screen, so the whole
+    // swipe goes past it.
+    for (let i = 0; i < 4; i++) await swipeUp(page, '#guide-overlay .modal');
+    await page.waitForTimeout(SETTLE_MS);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+    // Open sections: the Guide is taller than its box and scrolls inside.
+    for (const header of await page.locator('.guide-section-header').all()) await header.click();
+    await page.waitForTimeout(SETTLE_MS); // the sections expand over 0.3 s
+    await swipeUp(page, '#guide-overlay .modal');
+    await expect.poll(() => page.locator('#guide-overlay .modal').evaluate((el) => el.scrollTop)).toBeGreaterThan(50);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+    // Closed again, a swipe scrolls the page.
+    await page.click('#guide-overlay .modal-close');
+    await expect(page.locator('#guide-overlay')).toBeHidden();
+    await swipeUp(page, '#verdict-hero');
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(50);
+  });
+
+  test('a swipe on the welcome modal does not scroll the page', async ({ context }) => {
+    // A second page without the seeded tour flag, so the welcome shows.
+    const fresh = await context.newPage();
+    await fresh.addInitScript(() => {
+      try { localStorage.removeItem('rvb.tour.v1'); } catch (e) {}
+    });
+    await fresh.goto('/');
+    await expect(fresh.locator('#welcome-overlay')).toBeVisible();
+    await fresh.waitForFunction(
+      () => document.getElementById('verdict-confidence').textContent.length > 0,
+      null,
+      { timeout: 20_000 },
+    );
+    for (let i = 0; i < 4; i++) await swipeUp(fresh, '#welcome-overlay .modal');
+    await fresh.waitForTimeout(SETTLE_MS);
+    expect(await fresh.evaluate(() => window.scrollY)).toBe(0);
+  });
+});
+
 test.describe('rotating a landscape phone to portrait', () => {
   // 844 px is still under the 900 px phone breakpoint, so the phone layout
   // applies before and after the turn.

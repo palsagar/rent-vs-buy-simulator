@@ -91,6 +91,22 @@ test.describe('phone: inputs sheet', () => {
     }
   });
 
+  test('the pinned button does not cover the tour target on The numbers step', async ({ page }) => {
+    await startRealTour(page);
+    await walkTo(page, 9);
+    await expect(page.locator('.tour-title')).toHaveText('The numbers');
+    const where = await page.evaluate(() => {
+      const t = document.getElementById('numbers').getBoundingClientRect();
+      const b = document.getElementById('inputs-btn').getBoundingClientRect();
+      return {
+        inView: t.top >= 0 && t.bottom <= innerHeight,
+        overlap: t.top < b.bottom && b.top < t.bottom && t.left < b.right && b.left < t.right,
+      };
+    });
+    expect(where).toEqual({ inView: true, overlap: false });
+    await page.evaluate(() => window.__testTour.skip());
+  });
+
   test('the inputs open as a full-width sheet from the bottom', async ({ page }) => {
     await page.click('#inputs-btn');
     await expect(page.locator('#input-panel')).toHaveClass(/visible/);

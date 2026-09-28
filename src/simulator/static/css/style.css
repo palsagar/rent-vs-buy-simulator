@@ -704,6 +704,12 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
      its toolbars on a document scroll, and 100vh is taller than the
      visible area while they show. */
   body { overflow: visible; }
+  /* While the Guide or the welcome modal is open, a swipe that reaches its
+     end does not scroll the page behind it. */
+  html:has(.overlay:not(.hidden)) { overflow: hidden; }
+  /* A target scrolled into view (the tour does this) stops above the
+     pinned Edit button: 44px button + 16px bottom gap + 16px of air. */
+  html { scroll-padding-bottom: 76px; }
   #app { height: auto; min-height: 100vh; min-height: 100dvh; }
   #main { overflow: visible; }
   /* min-width: 0 because overflow: visible no longer zeroes a flex item's
