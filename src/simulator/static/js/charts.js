@@ -9,6 +9,14 @@ const RENT = "#58a6ff";
 const MUTED = "#8b949e";
 const GRID = "rgba(48,54,61,0.6)";
 
+// Tornado "assumption goes up" bars. Not the Rent blue: in this chart the
+// colour means a direction, not a strategy.
+const HIGHER = "#d2a8ff";
+
+// Below this chart width the tornado's category labels took half the plot,
+// so they move above their bars and the bars get the full width.
+const NARROW_CHART_PX = 480;
+
 // Plotly's tickprefix renders before EVERYTHING, minus sign included, so
 // a prefixed axis reads "EUR-30M". d3-format's currency type puts the
 // symbol after the sign instead -- "-EUR30M", how money is normally
@@ -325,7 +333,7 @@ export function renderTornadoChart(el, tornado) {
       : `%{y} ${side}<br>%{customdata[0]}<br>%{customdata[1]}<extra></extra>`;
   const traces = [
     { type: "bar", orientation: "h", y: params, x: low, marker: { color: MUTED }, customdata: hoverData(lowIn, low), hovertemplate: tpl("lower") },
-    { type: "bar", orientation: "h", y: params, x: high, marker: { color: RENT }, customdata: hoverData(highIn, high), hovertemplate: tpl("higher") },
+    { type: "bar", orientation: "h", y: params, x: high, marker: { color: HIGHER }, customdata: hoverData(highIn, high), hovertemplate: tpl("higher") },
   ];
   const layout = baseLayout("Impact on Buy − Rent difference");
   moveCurrencyToXAxis(layout);
@@ -334,6 +342,27 @@ export function renderTornadoChart(el, tornado) {
   layout.shapes = [
     { type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1, line: { color: "#e6edf3", width: 1 } },
   ];
+  if (el.clientWidth < NARROW_CHART_PX) {
+    layout.yaxis.showticklabels = false;
+    layout.yaxis.automargin = false;
+    layout.xaxis.automargin = true;
+    layout.margin = { ...layout.margin, l: 16, r: 24 };
+    layout.bargap = 0.5;
+    // Each label's bottom edge sits on its bar's top edge: a bar fills
+    // (1 - bargap) of its category slot, centred on the category.
+    const slotPx = plotHeight(el, layout) / params.length;
+    layout.annotations = params.map((p) => ({
+      xref: "paper",
+      x: 0,
+      xanchor: "left",
+      y: p,
+      yanchor: "bottom",
+      yshift: (slotPx * (1 - layout.bargap)) / 2,
+      text: p,
+      showarrow: false,
+      font: { color: MUTED, size: 11 },
+    }));
+  }
   Plotly.react(el, traces, layout, PLOT_CONFIG);
 }
 
