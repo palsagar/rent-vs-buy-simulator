@@ -7,7 +7,7 @@ A public web app that answers one question for one person: "should I buy this ho
 ## Language
 
 **Verdict**:
-The single headline answer the app produces for a given set of inputs: which strategy leaves you wealthier at the horizon, and by how much.
+The single headline answer the app produces for a given set of inputs: which strategy leaves you wealthier at the horizon, and by how much. When the Confidence is between 40% and 60%, the headline reads as a toss-up instead of naming a winner; the winner and the difference themselves are unchanged (ADR-0010).
 _Avoid_: Winner, difference, result
 
 **Net Value**:

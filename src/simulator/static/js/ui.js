@@ -4,11 +4,20 @@
 
 import { Tour, currentActiveTour } from "./tour.js";
 import { moveFocusIn, restoreFocus, trapFocus } from "./focus.js";
+import { verdictIsCurrent } from "./results.js";
+import { shareUrl } from "./state.js";
 
 export function initUi(tour) {
   const panel = document.getElementById("advanced-panel");
   document.getElementById("advanced-btn").addEventListener("click", () => panel.classList.toggle("visible"));
-  document.getElementById("advanced-close").addEventListener("click", () => panel.classList.remove("visible"));
+  const advancedClose = document.getElementById("advanced-close");
+  advancedClose.addEventListener("click", () => {
+    panel.classList.remove("visible");
+    // On a phone the close button slides off-screen with the sheet; the
+    // Advanced button that opened it stays in view in the inputs sheet.
+    const mobile = window.getComputedStyle(document.getElementById("inputs-btn")).display !== "none";
+    if (mobile && document.activeElement === advancedClose) document.getElementById("advanced-btn").focus();
+  });
 
   // ── Guide overlay ────────────────────────────────────────────────────────
   const guide = document.getElementById("guide-overlay");
@@ -149,18 +158,73 @@ export function initUi(tour) {
     const s = scrim();
     if (s) s.classList.toggle("hidden", !open);
   };
+  // On a phone the Advanced sheet opens on top of the inputs sheet, so Done,
+  // Esc and a tap outside them close both. After Esc, focus that was in a
+  // sheet goes to the button that reopens it, not off-screen.
+  const closeSheets = (returnFocus) => {
+    const active = document.activeElement;
+    const focusInSheet = inputPanel.contains(active) || panel.contains(active);
+    setDrawer(false);
+    panel.classList.remove("visible");
+    if (returnFocus && focusInSheet) document.getElementById("inputs-btn").focus();
+  };
   document.getElementById("inputs-btn").addEventListener("click", () => setDrawer(!inputPanel.classList.contains("visible")));
-  document.addEventListener("click", (e) => {
-    if (e.target && e.target.id === "drawer-scrim") setDrawer(false);
+  // Done always sits in the sheet it closes, so focus always goes back to the
+  // Edit button, even where a tap does not focus Done (WebKit, iOS Safari).
+  document.getElementById("sheet-done").addEventListener("click", () => {
+    closeSheets(false);
+    document.getElementById("inputs-btn").focus();
   });
-  // Esc closes the mobile drawer (and hides the scrim). Only fires when the
-  // drawer is actually the open mobile surface, so it can't clobber the tour's
-  // own Escape handling.
+  // The scrim only shows on phones.
+  document.addEventListener("click", (e) => {
+    if (e.target && e.target.id === "drawer-scrim") closeSheets(false);
+  });
+  // Esc closes both phone sheets and the scrim, and returns focus that was in
+  // a sheet to the Edit your numbers button. Only fires when the inputs sheet
+  // is actually the open mobile surface, so it can't clobber the tour's own
+  // Escape handling.
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && inputPanel.classList.contains("visible")) {
       const mobile = window.getComputedStyle(document.getElementById("inputs-btn")).display !== "none";
-      if (mobile) setDrawer(false);
+      if (mobile) closeSheets(true);
     }
+  });
+
+  // ── Share ────────────────────────────────────────────────────────────────
+  // The native share sheet wherever the browser has one (phones, but also
+  // desktop Safari and Edge or Chrome on Windows), else copy the link.
+  const shareBtn = document.getElementById("share-btn");
+  const shareLabel = shareBtn.textContent;
+  // One timer: a second copy restarts the two seconds instead of letting
+  // the first copy's timer put the label back early.
+  let shareLabelTimer = null;
+  shareBtn.addEventListener("click", async () => {
+    const url = shareUrl();
+    if (navigator.share) {
+      // The link is always the live config; the verdict on screen can still
+      // be the previous one (loading, or its request failed). Send it only
+      // when it matches the link.
+      const data = { title: "Rent or buy?", url };
+      if (verdictIsCurrent()) data.text = document.getElementById("verdict-line").textContent;
+      try {
+        await navigator.share(data);
+        return;
+      } catch (err) {
+        // AbortError means the person closed the share sheet. Any other
+        // failure falls through to copying the link.
+        if (err.name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      shareBtn.textContent = "Link copied";
+    } catch {
+      shareBtn.textContent = "Copy the link from the address bar";
+    }
+    clearTimeout(shareLabelTimer);
+    shareLabelTimer = setTimeout(() => {
+      shareBtn.textContent = shareLabel;
+    }, 2000);
   });
 
   // Wired here (not inline onclick) so the CSP script-src can omit 'unsafe-inline'.

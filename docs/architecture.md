@@ -16,7 +16,7 @@ Hub: [../README.md](../README.md) · Index: [README.md](README.md) · Related: [
 
 ## 2. Module Dependency Graph
 
-Twelve JS modules under `src/simulator/static/js/`:
+Thirteen JS modules under `src/simulator/static/js/`:
 
 ```mermaid
 graph TD
@@ -26,6 +26,8 @@ graph TD
     main --> state["state.js"]
     main --> tour["tour.js"]
     main --> ui["ui.js"]
+    main --> layout["layout.js"]
+    ui --> state
     inputs --> fields["fields.js"]
     inputs --> analytics["analytics.js"]
     inputs --> format["format.js"]
@@ -38,26 +40,30 @@ graph TD
     ui --> focus
     results --> charts["charts.js"]
     results --> format
+    results --> state
+    ui --> results
     charts --> fields
     charts --> format
     fields --> format
 ```
 
-**`main.js`** — entry point (a module, no exports). Boots the app in order: `getRegions()` → `initInputs(regions)` → `initUi(tour)` → `syncInputs()` → `onConfigChange(...)`. Falls back to an inline US region if the API is unreachable, and exposes `window.__rvb = { tour }` for browser-driven tests.
+**`main.js`** — entry point (a module, no exports). Boots the app in order: `readUrl()` → `initPhoneLayout()` → `getRegions()` → `initInputs(regions)` → `initUi(tour)` → `syncInputs()` → `onConfigChange(...)`. `initPhoneLayout` runs before the regions request because it needs only static markup, so phones never show the moved controls in the preset bar first. Falls back to an inline US region if the API is unreachable, and exposes `window.__rvb = { tour }` for browser-driven tests.
 
-**`ui.js`** — `initUi`: welcome modal, guide overlay (accordion sections), the **Replay the Tour** entry point, the Inputs drawer on small screens, error banner and loading state. Depends on `tour.js` (layers the spotlight over the guide) and `focus.js` (traps focus in the modal).
+**`ui.js`** — `initUi`: welcome modal, guide overlay (accordion sections), the **Replay the Tour** entry point, the inputs and Advanced bottom sheets on small screens (Done button, scrim; one `closeSheets()` path closes both; Done always returns focus to **Edit your numbers**, because WebKit and iOS Safari do not focus a tapped button, and Esc returns it only when focus was inside a sheet), the **Share this scenario** button (the native share sheet where the browser has one, else copies the link), error banner and loading state. Depends on `tour.js` (layers the spotlight over the guide), `focus.js` (traps focus in the modal), `state.js` (`shareUrl`) and `results.js` (`verdictIsCurrent`: Share sends the verdict text only when the verdict on screen belongs to the linked config).
+
+**`layout.js`** — `initPhoneLayout`: at or below 900 px, moves the region, outlook and Advanced controls into the inputs sheet and the Guide button into the title bar, and moves them back above 900 px. When it moves them back it also closes an inputs sheet left open and hides its scrim (a large phone turned to landscape crosses 900 px). It moves nodes rather than cloning them, so ids, listeners and the tour's targets survive.
 
 **`focus.js`** — `moveFocusIn`/`restoreFocus`/`trapFocus`: a focus trap for the welcome modal and tour spotlight, keeping Tab/Shift+Tab within the active overlay and restoring focus on close. Consumed by both `ui.js` and `tour.js`; imports nothing itself.
 
-**`tour.js`** — `Tour` class + the exported `STEPS` array (12 steps). A four-rect spotlight hole frames the target; the rest of the screen is dimmed. Gated by the `rvb.tour.v1` localStorage flag. Step-agnostic engine; `main.js` injects the real steps.
+**`tour.js`** — `Tour` class + the exported `STEPS` array (12 steps). A four-rect spotlight hole frames the target; the rest of the screen is dimmed. On phones it judges a control inside the inputs sheet as visible only against the part of the sheet below its sticky header. Gated by the `rvb.tour.v1` localStorage flag. Step-agnostic engine; `main.js` injects the real steps.
 
-**`state.js`** — the config store: `DEFAULT_CONFIG`, `getConfig`/`setParam`/`applyPreset`, and the share-URL codec (`readUrl`/`writeUrl`) so the address bar is always a link to the exact scenario. Holds `regionId`. Pulls `INPUT_DEFS` from `fields.js`; nothing imports it back.
+**`state.js`** — the config store: `DEFAULT_CONFIG`, `getConfig`/`setParam`/`applyPreset`, and the share-URL codec, so the address bar is always a link to the exact scenario. The codec exports `readUrl` (restores the config from the address bar) and `shareUrl` (the link for the Share button). `writeUrl` (the address-bar update, 300 ms after the last change) and `currentQuery()` (the single serializer behind both `writeUrl` and `shareUrl`) are private to the module. Holds `regionId`. Pulls `INPUT_DEFS` from `fields.js`; nothing imports it back.
 
-**`inputs.js`** — `initInputs`: renders sliders from `INPUT_DEFS`, wires the region pills, outlook presets, and first-time-buyer pill, and derives the active region from the URL or config. `snapshotSettings`/`restoreSettings` back the tour's "restore what you changed" step.
+**`inputs.js`** — `initInputs`: renders sliders from `INPUT_DEFS` (each slider's value is a button that opens a text field for an exact number, clamped to the range but not snapped to the step; a typed value fires `change` from the slider, so the tour treats it like a drag), wires the region pills, outlook presets, and first-time-buyer pill, and derives the active region from the URL or config. `snapshotSettings`/`restoreSettings` back the tour's "restore what you changed" step.
 
 **`fields.js`** — `INPUT_DEFS`, the input schema (key, label, bounds, step, formatter). A value here is a contract, cross-checked against tests.
 
-**`results.js`** — renders a simulate or Monte Carlo payload into the results DOM; `downloadCsv` exports the year-by-year table.
+**`results.js`** — renders a simulate or Monte Carlo payload into the results DOM, including the toss-up wording when the winner takes 40–60% of simulated futures (ADR-0010), the net-value note, and the live one-line verdict in the phone sheet header; `downloadCsv` exports the year-by-year table.
 
 **`charts.js`** — the five Plotly charts: decision (Net Value over time, with breakeven marker), fan (simulated futures), tornado (sensitivity), outflows, and the ownership-cost breakdown.
 
@@ -65,7 +71,7 @@ graph TD
 
 **`api.js`** — `serializeForWire` + `postSimulate`/`postMonteCarlo` fetch wrappers; turns a non-2xx FastAPI `detail` into a readable error.
 
-**`format.js`** — currency, money, compact, and percent formatters; `setCurrency` swaps the symbol and Plotly locale per region.
+**`format.js`** — currency, money, compact, and percent formatters; `setCurrency` swaps the symbol and Plotly locale per region; `parseTypedNumber(text, integerField)` reads a typed slider value (currency symbols, spaces, `%`, U+2212, `k`/`M` suffixes, `,` vs `.` rules, whole-number rounding).
 
 ## 3. Server Middleware
 
@@ -99,6 +105,19 @@ Monte Carlo is CPU-bound (~500 engine runs), so `/api/monte-carlo` is guarded by
 ## 6. Test Layout
 
 - `tests/test_*.py` (**12 files**) — pytest over the engine primitives, core, taxes and models; the API serialization (`test_api.py`); region bundles and US regression (`test_regions.py`, `test_us_regression.py`); Monte Carlo calibration and tornado bounds (`test_monte_carlo.py`, `test_tornado_bounds.py`); Umami env validation (`test_umami.py`).
-- `tests/*.spec.js` (**5 files**) — Playwright, headless on port 8323 (the config leaves Playwright's default headless mode): `tour.spec.js` walks the 12-step tour, `welcome.spec.js` the welcome modal, `analytics.spec.js` the event contract, `a11y.spec.js` the accessibility checks, `restore.spec.js` the share/restore flow.
+- `tests/*.spec.js` (**12 files**) — Playwright, headless on port 8323 (the config leaves Playwright's default headless mode):
+  - `a11y.spec.js` — overlay focus management, dialog semantics, the keyboard accordion and the inputs scrim.
+  - `analytics.spec.js` — the Umami event contract.
+  - `charts.spec.js` — chart geometry and readouts.
+  - `copy.spec.js` — plain-language and touch-friendly wording.
+  - `layout.spec.js` — the phone layout: moved controls, the bottom sheets, the tour inside the inputs sheet, page scrolling and touch targets.
+  - `mobile.spec.js` — phone-size regressions: the preset bar, share-URL writes while dragging, swipes on charts and over open overlays, rotation.
+  - `restore.spec.js` — the share/restore flow and the error banner on aborted requests.
+  - `share.spec.js` — the Share button and the link-preview tags.
+  - `tour.spec.js` — the tour engine and the 12-step walkthrough.
+  - `typed-input.spec.js` — typing an exact value into a slider.
+  - `verdict.spec.js` — the verdict wording, toss-up included.
+  - `welcome.spec.js` — the welcome modal's action row.
+- `tests/helpers.js` — shared tour helpers for the specs that walk the real 12-step tour (start it, perform a step's gesture, walk to a step). It is not a spec file, so Playwright does not collect it.
 
 Run with `uv run pytest tests/ -q` and `npx playwright test`.

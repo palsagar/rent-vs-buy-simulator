@@ -9,6 +9,14 @@ const RENT = "#58a6ff";
 const MUTED = "#8b949e";
 const GRID = "rgba(48,54,61,0.6)";
 
+// Tornado "assumption goes up" bars. Not the Rent blue: in this chart the
+// colour means a direction, not a strategy.
+const HIGHER = "#d2a8ff";
+
+// Below this chart width the tornado's category labels took half the plot,
+// so they move above their bars and the bars get the full width.
+const NARROW_CHART_PX = 480;
+
 // Plotly's tickprefix renders before EVERYTHING, minus sign included, so
 // a prefixed axis reads "EUR-30M". d3-format's currency type puts the
 // symbol after the sign instead -- "-EUR30M", how money is normally
@@ -101,11 +109,37 @@ function strategyTraces(x, buyY, rentY, fwd) {
   return [mk(buyY, BUY, "Buy"), mk(rentY, RENT, "Rent")];
 }
 
-function endLabelAnnotations(x, buyY, rentY, fwd) {
+// End labels closer than this are pushed apart so they never overprint.
+// Larger than the ~15px text box because Plotly pads the autorange ~5%,
+// which makes the estimate below slightly generous.
+const LABEL_GAP_PX = 18;
+
+// The plot area's height: the chart div minus the top and bottom margins.
+function plotHeight(el, layout) {
+  return el.clientHeight - layout.margin.t - layout.margin.b;
+}
+
+// `plotHeightPx` turns the data-space distance between the two end values
+// into pixels, so the labels are pushed apart only when they would touch.
+function endLabelAnnotations(x, buyY, rentY, fwd, plotHeightPx) {
   const y = (v) => (fwd ? fwd(v) : v);
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const arr of [buyY, rentY]) {
+    for (const v of arr) {
+      const t = y(v);
+      if (t < lo) lo = t;
+      if (t > hi) hi = t;
+    }
+  }
+  const buyEnd = y(buyY.at(-1));
+  const rentEnd = y(rentY.at(-1));
+  const gapPx = hi > lo ? (Math.abs(buyEnd - rentEnd) / (hi - lo)) * plotHeightPx : 0;
+  const push = Math.max(0, (LABEL_GAP_PX - gapPx) / 2);
+  const buyUp = buyEnd >= rentEnd ? 1 : -1;
   return [
-    { x: x.at(-1), y: y(buyY.at(-1)), text: "Buy", font: { color: BUY, size: 12 }, showarrow: false, xanchor: "left", xshift: 6 },
-    { x: x.at(-1), y: y(rentY.at(-1)), text: "Rent", font: { color: RENT, size: 12 }, showarrow: false, xanchor: "left", xshift: 6 },
+    { x: x.at(-1), y: buyEnd, yshift: buyUp * push, text: "Buy", font: { color: BUY, size: 12 }, showarrow: false, xanchor: "left", xshift: 6 },
+    { x: x.at(-1), y: rentEnd, yshift: -buyUp * push, text: "Rent", font: { color: RENT, size: 12 }, showarrow: false, xanchor: "left", xshift: 6 },
   ];
 }
 
@@ -191,17 +225,29 @@ function maybeSymlog(layout, buyY, rentY) {
   return fwd;
 }
 
+// Past this fraction of the x-range the breakeven label sits to the left of
+// its line, so a breakeven near the horizon keeps its label inside the plot.
+// At the midpoint the ~85px label fits on either side of the line: 102px of
+// room each side on a 390px phone, 87px on a 360px one.
+const BREAKEVEN_FLIP_FRACTION = 0.5;
+
 export function renderDecisionChart(el, series, breakevenYear) {
   const x = series.year;
   const layout = baseLayout("Years");
+  // End at the horizon: autorange also fits the end labels, which stretched
+  // the axis to ~1.8x the horizon and left the right of the plot empty.
+  layout.xaxis.range = [x[0], x.at(-1)];
+  // The series is monthly, so the raw hover x reads "6.416667".
+  layout.xaxis.hoverformat = ".1f";
   const fwd = maybeSymlog(layout, series.netBuy, series.netRent);
-  layout.annotations = endLabelAnnotations(x, series.netBuy, series.netRent, fwd);
+  layout.annotations = endLabelAnnotations(x, series.netBuy, series.netRent, fwd, plotHeight(el, layout));
   if (breakevenYear != null) {
+    const labelLeft = (breakevenYear - x[0]) / (x.at(-1) - x[0]) > BREAKEVEN_FLIP_FRACTION;
     layout.shapes = [
       { type: "line", x0: breakevenYear, x1: breakevenYear, yref: "paper", y0: 0, y1: 1, line: { color: "#484f58", width: 1, dash: "dash" } },
     ];
     layout.annotations.push({
-      x: breakevenYear, yref: "paper", y: 1, yanchor: "bottom", xanchor: "left", xshift: 4,
+      x: breakevenYear, yref: "paper", y: 1, yanchor: "bottom", xanchor: labelLeft ? "right" : "left", xshift: labelLeft ? -4 : 4,
       text: `breakeven ${breakevenYear.toFixed(1)}y`, font: { color: MUTED, size: 11 }, showarrow: false,
     });
   }
@@ -219,6 +265,7 @@ export function renderFanChart(el, mc) {
     { x, y: row[50], mode: "lines", line: { color: "#e6edf3", width: 1.5 }, name: "Median", customdata: moneyHover(row[50]), hovertemplate: `Median %{customdata}<extra></extra>`, showlegend: false },
   ];
   const layout = baseLayout("Years");
+  layout.xaxis.hoverformat = ".1f";
   layout.yaxis.title = { text: "Buy − Rent" };
   layout.shapes = [
     { type: "line", x0: 0, x1: x.at(-1), y0: 0, y1: 0, line: { color: "#484f58", width: 1, dash: "dash" } },
@@ -293,7 +340,7 @@ export function renderTornadoChart(el, tornado) {
       : `%{y} ${side}<br>%{customdata[0]}<br>%{customdata[1]}<extra></extra>`;
   const traces = [
     { type: "bar", orientation: "h", y: params, x: low, marker: { color: MUTED }, customdata: hoverData(lowIn, low), hovertemplate: tpl("lower") },
-    { type: "bar", orientation: "h", y: params, x: high, marker: { color: RENT }, customdata: hoverData(highIn, high), hovertemplate: tpl("higher") },
+    { type: "bar", orientation: "h", y: params, x: high, marker: { color: HIGHER }, customdata: hoverData(highIn, high), hovertemplate: tpl("higher") },
   ];
   const layout = baseLayout("Impact on Buy − Rent difference");
   moveCurrencyToXAxis(layout);
@@ -302,14 +349,37 @@ export function renderTornadoChart(el, tornado) {
   layout.shapes = [
     { type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1, line: { color: "#e6edf3", width: 1 } },
   ];
+  if (el.clientWidth < NARROW_CHART_PX) {
+    layout.yaxis.showticklabels = false;
+    layout.yaxis.automargin = false;
+    layout.xaxis.automargin = true;
+    layout.margin = { ...layout.margin, l: 16, r: 24 };
+    layout.bargap = 0.5;
+    // Each label's bottom edge sits on its bar's top edge: a bar fills
+    // (1 - bargap) of its category slot, centred on the category.
+    const slotPx = plotHeight(el, layout) / params.length;
+    layout.annotations = params.map((p) => ({
+      xref: "paper",
+      x: 0,
+      xanchor: "left",
+      y: p,
+      yanchor: "bottom",
+      yshift: (slotPx * (1 - layout.bargap)) / 2,
+      text: p,
+      showarrow: false,
+      font: { color: MUTED, size: 11 },
+    }));
+  }
   Plotly.react(el, traces, layout, PLOT_CONFIG);
 }
 
 export function renderOutflowChart(el, series) {
   const x = series.year;
   const layout = baseLayout("Years");
+  layout.xaxis.range = [x[0], x.at(-1)];
+  layout.xaxis.hoverformat = ".1f";
   const fwd = maybeSymlog(layout, series.outflowBuy, series.outflowRent);
-  layout.annotations = endLabelAnnotations(x, series.outflowBuy, series.outflowRent, fwd);
+  layout.annotations = endLabelAnnotations(x, series.outflowBuy, series.outflowRent, fwd, plotHeight(el, layout));
   Plotly.react(el, strategyTraces(x, series.outflowBuy, series.outflowRent, fwd), layout, PLOT_CONFIG);
 }
 

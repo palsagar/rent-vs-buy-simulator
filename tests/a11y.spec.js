@@ -146,7 +146,7 @@ test('inputs drawer scrim closes the drawer and hides itself', async ({ page }) 
   expect(hit.isSlider).toBe(true);
   expect(hit.isScrim).toBe(false);
 
-  await scrim.click();
+  await scrim.click({ position: { x: 400, y: 100 } });
   await expect(drawer).not.toHaveClass(/visible/);
   await expect(scrim).toBeHidden();
 });

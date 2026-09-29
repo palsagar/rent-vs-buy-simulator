@@ -113,7 +113,27 @@ export class Tour {
         let resizeTimer = null;
         this._onResize = () => {
             clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(() => this._layout(), 150);
+            resizeTimer = setTimeout(() => {
+                // A phone turned to landscape and back: layout.js closed the
+                // inputs sheet on the way out and has now moved the target
+                // back into it, so render the step again to reopen the sheet.
+                // Every other resize only lays out: a full render moves focus,
+                // which would pull it out of a field an on-screen keyboard is
+                // typing into.
+                const step = this._steps[this._index];
+                const el = step?.target && document.querySelector(step.target);
+                const inputPanel = document.getElementById('input-panel');
+                const inputsBtn = document.getElementById('inputs-btn');
+                const drawerRegime = inputsBtn && window.getComputedStyle(inputsBtn).display !== 'none';
+                if (el && drawerRegime && inputPanel && inputPanel.contains(el) && !inputPanel.classList.contains('visible')) {
+                    // The step's one re-check was spent when it first opened
+                    // the sheet; allow another once the sheet opens again.
+                    this._recheckedStepIndex = -1;
+                    this._renderStep();
+                } else {
+                    this._layout();
+                }
+            }, 150);
         };
         window.addEventListener('resize', this._onResize);
         this._onScroll = () => {
@@ -273,6 +293,9 @@ export class Tour {
         // drawer that contains it; scroll the scrollable ancestor) before
         // deciding reachability.
         const needsRecheck = this._makeTargetReachable(step);
+        // A re-render is due once the drawer/scroll settles; until then a
+        // target that is still sliding into view does not get a Next button.
+        const recheckDue = needsRecheck && this._recheckedStepIndex !== this._index;
 
         // Reachability, not just DOM presence, decides whether an action
         // step can actually be performed. A target that exists but is
@@ -283,11 +306,12 @@ export class Tour {
             const el = this._targetEl(step.target);
             if (el) {
                 const r = el.getBoundingClientRect();
-                const W = window.innerWidth, H = window.innerHeight;
-                reachable = r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 && r.top < H && r.left < W;
+                const W = window.innerWidth;
+                const band = this._sheetBand(el) ?? { top: 0, bottom: window.innerHeight };
+                reachable = r.width > 0 && r.height > 0 && r.bottom > band.top && r.right > 0 && r.top < band.bottom && r.left < W;
             }
         }
-        if (!step.action || !reachable) {
+        if (!step.action || (!reachable && !recheckDue)) {
             const nextBtn = document.createElement('button');
             nextBtn.className = 'tour-btn tour-btn-primary';
             nextBtn.textContent = isLast ? 'Done' : 'Next';
@@ -322,7 +346,7 @@ export class Tour {
 
         // One deferred re-render once a drawer/scroll transition settles, so
         // the do-it-vs-Next decision and the ring land on the final geometry.
-        if (needsRecheck && this._recheckedStepIndex !== this._index) {
+        if (recheckDue) {
             this._recheckedStepIndex = this._index;
             const idx = this._index;
             clearTimeout(this._recheckTimer);
@@ -342,10 +366,29 @@ export class Tour {
     }
 
     /**
+     * The strip of the screen where a control inside the phone inputs sheet
+     * can be seen: below the sheet's sticky header, down to the sheet's
+     * bottom edge. A control scrolled up under the header is hidden even
+     * though it is inside the viewport. Null when `el` is not in the sheet,
+     * or on desktop, where the header is not shown: the viewport applies.
+     */
+    _sheetBand(el) {
+        const sheet = document.getElementById('input-panel');
+        const header = document.getElementById('sheet-header');
+        if (!sheet || !sheet.contains(el) || !header || !header.offsetHeight) return null;
+        return {
+            top: Math.max(0, header.getBoundingClientRect().bottom),
+            bottom: Math.min(window.innerHeight, sheet.getBoundingClientRect().bottom),
+        };
+    }
+
+    /**
      * Make an off-viewport target frameable. A target hidden by a collapsed
      * drawer (mobile inputs, right-side advanced) is opened via its toggle
      * button (never ui.js internals); any target outside the viewport is then
-     * scrolled into view so the spotlight ring can frame it.
+     * scrolled into view so the spotlight ring can frame it. A target inside
+     * the phone inputs sheet is also scrolled when it is not fully below the
+     * sheet's sticky header.
      * Returns true when visibility work was performed — the caller re-renders
      * once the drawer/scroll transition settles.
      */
@@ -378,16 +421,31 @@ export class Tour {
             inputsBtn.click();
             reopened = true;
         } else if (advancedPanel && advancedPanel.contains(el) && !advancedPanel.classList.contains('visible')) {
-            // #advanced-panel is a true overlay drawer at every width
-            // (position:absolute, translateX(100%) → 0; no media-query override
-            // in style.css), so its class-based reopen stays ungated.
+            // #advanced-panel is a true overlay drawer at every width (a
+            // right-side panel on desktop, a bottom sheet on phones), so its
+            // class-based reopen stays ungated.
             document.getElementById('advanced-btn')?.click();
             reopened = true;
         }
 
+        // For the core inputs we bring the first slider's whole row into the
+        // hole, so the user can drag the slider or tap its value to type.
+        let focus = el;
+        if (el.id === 'core-inputs') {
+            const first = el.querySelector('.slider-row');
+            if (first) focus = first;
+        }
         const r = el.getBoundingClientRect();
         const W = window.innerWidth, H = window.innerHeight;
-        if (reopened || (r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 && r.top < H && r.left < W)) {
+        // In the phone sheet the control must sit fully below the sticky
+        // header (to within a pixel of rounding); elsewhere any part
+        // on-screen will do.
+        const band = this._sheetBand(el);
+        const f = focus.getBoundingClientRect();
+        const shown = band
+            ? f.top >= band.top - 1 && f.bottom <= band.bottom + 1
+            : r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 && r.top < H && r.left < W;
+        if (reopened || shown) {
             // Already on-screen — or freshly reopened mid-close. Returning
             // `reopened` requests the deferred re-render so the do-it-vs-Next
             // decision and the ring land on the drawer's final OPEN geometry
@@ -395,13 +453,8 @@ export class Tour {
             return reopened;
         }
         // Scroll the spotlight target into view (minimal, axis-aware) so the
-        // ring can frame it. For the core inputs we bring the first slider
-        // itself into the hole so the user can actually drag it.
-        let focus = el;
-        if (el.id === 'core-inputs') {
-            const first = el.querySelector('input');
-            if (first) focus = first;
-        }
+        // ring can frame it. The sheet's scroll-padding-top keeps it clear of
+        // the sticky header.
         focus.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' });
         return true;
     }
@@ -414,9 +467,12 @@ export class Tour {
         const [dt, dr, db, dl] = dims;
 
         let el = this._targetEl(this._overrideTarget ?? step.target);
+        // The hole and ring stay inside the part of the screen that shows
+        // the target: the viewport, or the phone sheet below its header.
+        const band = (el && this._sheetBand(el)) ?? { top: 0, bottom: H };
         if (el) {
             const r = el.getBoundingClientRect();
-            if (r.width <= 0 || r.height <= 0 || r.bottom <= 0 || r.right <= 0 || r.top >= H || r.left >= W) {
+            if (r.width <= 0 || r.height <= 0 || r.bottom <= band.top || r.right <= 0 || r.top >= band.bottom || r.left >= W) {
                 el = null;
             } else {
                 this._attachTargetRelayoutListener(el);
@@ -435,8 +491,8 @@ export class Tour {
         }
 
         const r = el.getBoundingClientRect();
-        const t = Math.max(0, r.top - PAD), l = Math.max(0, r.left - PAD);
-        const b = Math.min(H, r.bottom + PAD), rt = Math.min(W, r.right + PAD);
+        const t = Math.max(band.top, r.top - PAD), l = Math.max(0, r.left - PAD);
+        const b = Math.min(band.bottom, r.bottom + PAD), rt = Math.min(W, r.right + PAD);
 
         ring.style.display = 'block';
         Object.assign(ring.style, { left: `${l}px`, top: `${t}px`, width: `${rt - l}px`, height: `${b - t}px` });
@@ -584,12 +640,18 @@ export const STEPS = [
     { target: '#region-pills', title: 'Region presets', body: 'Tax rules, buyer costs and typical prices for five regions — US, France, Germany, Netherlands, UK. Pick one now and watch every number and the currency update.', action: { type: 'click', selector: '.preset-btn' } },
     { target: '#ftb-pill', title: 'First-time-buyer relief', body: 'Regions with buyer relief get this toggle — on by default, and it withdraws itself above the statutory price cap. Greyed out when the region or the price rules it out.' },
     { target: '#outlook-pills', title: 'Market outlook', body: 'Conservative, historical, or optimistic growth and inflation assumptions. Switch outlooks to stress the verdict — try Optimistic now.', action: { type: 'click', selector: '.preset-btn' } },
-    { target: '#core-inputs', title: 'Your situation', body: 'Price, down payment, mortgage rate, rent — drag any slider and the charts recompute live. The URL updates too: the address bar is always a shareable link.', action: { type: 'change' }, onLeave: () => { document.getElementById('input-panel')?.classList.remove('visible'); document.getElementById('drawer-scrim')?.classList.add('hidden'); } },
+    { target: '#core-inputs', title: 'Your situation', body: 'Price, down payment, mortgage rate, rent — drag any slider, or tap its value to type an exact number, and the charts recompute live. The URL updates too: the address bar is always a shareable link.', action: { type: 'change' }, onLeave: () => { document.getElementById('input-panel')?.classList.remove('visible'); document.getElementById('drawer-scrim')?.classList.add('hidden'); } },
     { target: '#verdict-hero', title: 'The verdict', body: 'The headline: which strategy leaves you wealthier at your horizon, by how much, the breakeven year, and the Monte Carlo confidence. Four stat cards break down year-1 costs.' },
-    { target: '#decision-chart', title: 'Net value over time', body: 'What you’d walk away with minus everything you put in, at every year — hover for exact figures. Where the orange line crosses the blue is your breakeven.' },
+    { target: '#decision-chart', title: 'Net value over time', body: 'What you’d walk away with minus everything you put in, at every year — hover or tap for exact figures. Where the orange line crosses the blue is your breakeven.' },
     { target: '#fan-chart', title: 'How sure is this?', body: '500 simulated futures with randomized year-by-year returns. The fan shows the range of outcomes; the tornado below ranks which assumptions swing the result most.' },
-    { target: '#advanced-btn', title: 'Advanced assumptions', body: 'Open the drawer: tax deductibility, capital gains, levies, maintenance — every default follows the selected region. Click to open it now, then hit Next.', onLeave: () => document.getElementById('advanced-panel')?.classList.remove('visible') },
+    { target: '#advanced-btn', title: 'Advanced assumptions', body: 'Open the drawer: tax deductibility, capital gains, levies, maintenance — every default follows the selected region. Open it now, then press Next.', onLeave: () => {
+        document.getElementById('advanced-panel')?.classList.remove('visible');
+        // On a phone the Advanced button lives in the inputs sheet, which the
+        // tour opened to reach it; the next steps frame the results.
+        document.getElementById('input-panel')?.classList.remove('visible');
+        document.getElementById('drawer-scrim')?.classList.add('hidden');
+    } },
     { target: '#numbers', title: 'The numbers', body: 'Every figure behind the charts, year by year — expand the table or download it as CSV for your own analysis.' },
-    { target: '#guide-btn', title: 'The Guide', body: 'The concepts behind the simulator — net value, breakeven, Monte Carlo — documented one click away, with a Replay the Tour button at the bottom.' },
+    { target: '#guide-btn', title: 'The Guide', body: 'The concepts behind the simulator — net value, breakeven, Monte Carlo — documented one tap or click away, with a Replay the Tour button at the bottom.' },
     { target: null, title: 'You’re all set', body: 'Everything you changed during the tour has been restored. Adjust the inputs to your own numbers — the URL is always a shareable link to your exact scenario.' },
 ];

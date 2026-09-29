@@ -4,9 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Rent or buy?</title>
+  <meta name="description" content="Should you buy a home or rent and invest the difference? Compare both with your own numbers and the tax rules of the US, France, Germany, the Netherlands or the UK.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Rent or buy?">
+  <meta property="og:title" content="Rent or buy?">
+  <meta property="og:description" content="Should you buy a home or rent and invest the difference? Compare both with your own numbers and the tax rules of the US, France, Germany, the Netherlands or the UK.">
+  <meta property="og:image" content="https://rent-or-buy-sim.com/screenshots/verdict.png">
+  <meta property="og:image:width" content="1600">
+  <meta property="og:image:height" content="1000">
+  <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏠</text></svg>">
   <link rel="stylesheet" href="css/style.css">
-  <script src="https://cdn.plot.ly/plotly-basic-2.35.2.min.js" integrity="sha384-wQ3lfCxuvLfhHGiSdHF5+e3NZ1zNwEMd8/nII+K7VKChF9llO/OwOcn/aVRkB7az" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.plot.ly/plotly-basic-2.35.2.min.js" integrity="sha384-wQ3lfCxuvLfhHGiSdHF5+e3NZ1zNwEMd8/nII+K7VKChF9llO/OwOcn/aVRkB7az" crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -21,7 +30,7 @@
         <div class="welcome-hero">
           <div class="welcome-hero-emoji">🏠</div>
           <h1>Buy vs. Rent Financial Simulator</h1>
-          <p class="welcome-hero-sub">Compare capital allocation strategies over time</p>
+          <p class="welcome-hero-sub">Find out whether buying or renting leaves you wealthier</p>
         </div>
         <p class="welcome-intro">Should you buy a home or rent and invest the difference?
           This simulator models <strong>two financial strategies</strong> side-by-side so
@@ -69,8 +78,21 @@
     picture:
 </p>
 <div class="explainer-formula">
-    <code>Net Value = Asset Value − Total Outflows</code>
+    <code>Net Value = what you'd walk away with − everything you paid in</code>
 </div>
+<p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+    For Buy, what you'd walk away with is the sale price minus the
+    remaining mortgage, selling costs and any capital-gains tax, plus
+    anything the buyer invested along the way and any tax savings from
+    deducting mortgage interest and levies. For Rent, it is your
+    investment portfolio after capital-gains tax.
+</p>
+<p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
+    Everything you paid in is the same total for both: the up-front costs,
+    plus each month the larger of the rent and the cost of owning, because
+    the cheaper side invests the difference. So both numbers are often
+    below zero.
+</p>
 <p style="color: #ccc; font-size: 0.9rem; line-height: 1.6;">
     This tells you which strategy actually leaves you wealthier. A scenario
     can have higher asset growth but <em>lower</em> net value if the costs
@@ -126,23 +148,35 @@
   </div>
 
   <div id="preset-bar">
-    <button id="inputs-btn" class="btn">Inputs</button>
-    <span class="preset-label">Region</span>
-    <span id="region-pills"></span>
-    <span id="ftb-pill"></span>
-    <span class="preset-label" style="margin-left:14px">Outlook</span>
-    <span id="outlook-pills"></span>
+    <span class="preset-group" id="region-group">
+      <span class="preset-label">Region</span>
+      <span id="region-pills"></span>
+      <span id="ftb-pill"></span>
+    </span>
+    <span class="preset-group" id="outlook-group">
+      <span class="preset-label">Outlook</span>
+      <span id="outlook-pills" role="group" aria-label="Outlook"></span>
+    </span>
     <span class="title-spacer"></span>
-    <button id="advanced-btn" class="btn btn-advanced">⚙ Advanced</button>
+    <button id="advanced-btn" class="btn">⚙ Advanced</button>
     <button id="guide-btn" class="btn">? Guide</button>
   </div>
 
+  <button id="inputs-btn" class="btn">Edit your numbers</button>
+
   <div id="main">
     <aside id="input-panel">
+      <div id="sheet-header">
+        <p id="sheet-verdict" aria-live="polite"></p>
+        <button id="sheet-done" class="btn">Done</button>
+      </div>
+      <div id="sheet-region"></div>
       <div class="section-title">Your situation</div>
       <div id="core-inputs"></div>
       <div class="section-title">Outlook assumptions</div>
+      <div id="sheet-outlook"></div>
       <div id="assumption-inputs"></div>
+      <div id="sheet-advanced"></div>
     </aside>
 
     <div id="results">
@@ -157,6 +191,8 @@
           <div class="stat-card"><div class="stat-label">Buy cost · yr 1</div><div class="stat-value" id="stat-cost-buy"></div></div>
           <div class="stat-card"><div class="stat-label">Rent cost · yr 1</div><div class="stat-value" id="stat-cost-rent"></div></div>
         </div>
+        <p id="net-note" hidden>Both net values count rent, mortgage payments and other costs as money spent, so they are often below zero. What decides the verdict is the gap between them.</p>
+        <button id="share-btn" class="btn">Share this scenario</button>
       </section>
 
       <section class="card">
@@ -170,7 +206,7 @@
         <div class="card-sub">500 simulated futures of the Buy − Rent difference. Bands: 50% and 90% of outcomes.</div>
         <div id="fan-chart" class="chart"></div>
         <h2 style="margin-top:18px">Which assumption to stress-test hardest</h2>
-        <div class="card-sub">Wider bar = bigger swing in the outcome. Blue = assumption goes up, grey = goes down. Each assumption is moved by a realistic amount — for the growth and inflation rates, that amount shrinks as your horizon lengthens. Hover a bar to see its before and after.</div>
+        <div class="card-sub">Wider bar = bigger swing in the outcome. Purple = assumption goes up, grey = goes down. Each assumption is moved by a realistic amount — for the growth and inflation rates, that amount shrinks as your horizon lengthens. Hover over or tap a bar to see its before and after.</div>
         <div id="tornado-chart" class="chart"></div>
       </section>
 
@@ -190,7 +226,7 @@
 
       <footer>
         🔒 <strong>Privacy:</strong> Cookie-less, privacy-friendly analytics via self-hosted <a href="https://umami.is" target="_blank" rel="noopener">Umami</a> — no personal data, no cross-site tracking. Hosted on a tiny VPS via <a href="https://coolify.io/" target="_blank" rel="noopener">Coolify</a>.<br>
-        Calculations use monthly granularity; Net Value prices a full exit at every year (selling costs and capital-gains tax on both sides). Tax defaults follow the selected region. Source: <a href="https://github.com/palsagar/rent-vs-buy-simulator" target="_blank" rel="noopener">GitHub</a>.
+        Calculations use monthly granularity; Net Value prices a full exit at every year (selling costs and capital-gains tax on both sides). Tax defaults follow the selected region. Source: <a href="https://github.com/palsagar/rent-vs-buy-simulator" target="_blank" rel="noopener">GitHub</a>. Made by <a href="https://github.com/palsagar" target="_blank" rel="noopener">palsagar</a>.
         <div id="region-notes"></div>
       </footer>
     </div>

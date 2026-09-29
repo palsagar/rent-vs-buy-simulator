@@ -6,7 +6,7 @@
 
 </div>
 
-![Rent or Buy? verdict — which strategy wins at your horizon, by how much, and with what Monte Carlo confidence](src/simulator/static/screenshots/verdict.png)
+![Rent or Buy? verdict — how far apart buying and renting end at your horizon, how often each wins across simulated futures, and when it is too close to call](src/simulator/static/screenshots/verdict.png)
 
 ## Run it
 

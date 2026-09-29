@@ -2,7 +2,8 @@ import { test, expect } from '@playwright/test';
 
 /**
  * Phone-size regressions: the preset bar layout, share-URL writes while a
- * slider is dragged, touch gestures on the charts, and the slider thumb.
+ * slider is dragged, touch gestures on the charts and over an open overlay,
+ * and the slider thumb.
  *
  * The viewport is an iPhone 13 with Safari's toolbars showing. Touch swipes
  * go through CDP because Playwright's touchscreen API only taps, so this
@@ -41,10 +42,14 @@ async function swipeUp(page, selector) {
 }
 
 test('preset bar controls stay on one row instead of stacking', async ({ page }) => {
+  // Just above the phone breakpoint: the bar is still a bar, and narrower
+  // than its contents, which is when the groups used to be squeezed.
+  await page.setViewportSize({ width: 920, height: 700 });
+  await expect(page.locator('#preset-bar #region-pills')).toHaveCount(1);
   const tops = await page.evaluate(() =>
-    [...document.querySelectorAll('#preset-bar button')].map((b) =>
-      Math.round(b.getBoundingClientRect().top),
-    ),
+    [...document.querySelectorAll('#preset-bar button')]
+      .filter((b) => b.offsetParent !== null)
+      .map((b) => Math.round(b.getBoundingClientRect().top)),
   );
   expect(new Set(tops).size).toBe(1);
 });
@@ -88,7 +93,7 @@ test('a failing share-URL write does not stop a region switch', async ({ page })
     (req) => req.url().endsWith('/api/simulate') && req.postDataJSON().annualPropertyLevy > 0,
     { timeout: 5_000 },
   );
-  await page.locator('#region-pills .preset-btn', { hasText: 'UK' }).click();
+  await page.evaluate(() => [...document.querySelectorAll('#region-pills .preset-btn')].find((b) => b.textContent === 'UK').click());
   await rerun;
 });
 
@@ -137,15 +142,84 @@ test('dragging a slider coalesces share-URL writes into one', async ({ page }) =
   expect(result.price).toBe('1045000');
 });
 
+/** How far the content has scrolled, whichever element is scrolling it. */
+function contentScroll(page) {
+  return page.evaluate(() => window.scrollY + document.getElementById('results').scrollTop);
+}
+
 for (const chart of ['#decision-chart', '#tornado-chart']) {
   test(`a swipe that starts on ${chart} scrolls the page`, async ({ page }) => {
     await page.evaluate((sel) => document.querySelector(sel).scrollIntoView({ block: 'center' }), chart);
-    const results = page.locator('#results');
-    const before = await results.evaluate((el) => el.scrollTop);
+    const before = await contentScroll(page);
     await swipeUp(page, chart);
-    await expect.poll(() => results.evaluate((el) => el.scrollTop)).toBeGreaterThan(before + 50);
+    await expect.poll(() => contentScroll(page)).toBeGreaterThan(before + 50);
   });
 }
+
+test.describe('an open overlay holds the page still', () => {
+  // A swipe that did scroll the page can keep moving it for a moment
+  // (momentum), so each check waits this long before reading the scroll.
+  const SETTLE_MS = 500;
+
+  test('a swipe in the Guide scrolls the Guide, not the page', async ({ page }) => {
+    await page.click('#guide-btn');
+    await expect(page.locator('#guide-overlay')).toBeVisible();
+    // Closed sections: the Guide is shorter than the screen, so the whole
+    // swipe goes past it.
+    for (let i = 0; i < 4; i++) await swipeUp(page, '#guide-overlay .modal');
+    await page.waitForTimeout(SETTLE_MS);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+    // Open sections: the Guide is taller than its box and scrolls inside.
+    for (const header of await page.locator('.guide-section-header').all()) await header.click();
+    await page.waitForTimeout(SETTLE_MS); // the sections expand over 0.3 s
+    await swipeUp(page, '#guide-overlay .modal');
+    await expect.poll(() => page.locator('#guide-overlay .modal').evaluate((el) => el.scrollTop)).toBeGreaterThan(50);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+    // Closed again, a swipe scrolls the page.
+    await page.click('#guide-overlay .modal-close');
+    await expect(page.locator('#guide-overlay')).toBeHidden();
+    await swipeUp(page, '#verdict-hero');
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(50);
+  });
+
+  test('a swipe on the welcome modal does not scroll the page', async ({ context }) => {
+    // A second page without the seeded tour flag, so the welcome shows.
+    const fresh = await context.newPage();
+    await fresh.addInitScript(() => {
+      try { localStorage.removeItem('rvb.tour.v1'); } catch (e) {}
+    });
+    await fresh.goto('/');
+    await expect(fresh.locator('#welcome-overlay')).toBeVisible();
+    await fresh.waitForFunction(
+      () => document.getElementById('verdict-confidence').textContent.length > 0,
+      null,
+      { timeout: 20_000 },
+    );
+    for (let i = 0; i < 4; i++) await swipeUp(fresh, '#welcome-overlay .modal');
+    await fresh.waitForTimeout(SETTLE_MS);
+    expect(await fresh.evaluate(() => window.scrollY)).toBe(0);
+  });
+});
+
+test.describe('rotating a landscape phone to portrait', () => {
+  // 844 px is still under the 900 px phone breakpoint, so the phone layout
+  // applies before and after the turn.
+  test.use({ viewport: { width: 844, height: 390 } });
+
+  test('leaves no sideways scroll on the page', async ({ page }) => {
+    // The numbers table is the widest thing that cannot shrink on its own.
+    await page.locator('#numbers > summary').click();
+    await expect(page.locator('#data-table table')).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 664 });
+    // Charts re-lay out on the resize; the page is narrow again once they do.
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
+      .toBeLessThanOrEqual(0);
+  });
+});
 
 test('tapping a chart still shows its values', async ({ page }) => {
   await page.evaluate(() => document.getElementById('decision-chart').scrollIntoView({ block: 'center' }));

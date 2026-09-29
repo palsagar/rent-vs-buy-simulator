@@ -51,19 +51,22 @@ export function onConfigChange(fn) {
 // listeners below, so the results froze mid-drag.
 const scheduleUrlWrite = debounce(writeUrl, 300);
 
-function emit() {
+function emit(drag) {
   scheduleUrlWrite();
-  for (const fn of listeners) fn(getConfig());
+  for (const fn of listeners) fn(getConfig(), { drag });
 }
 
-export function setParam(key, value) {
+// `drag` marks a change made by dragging a slider (its input events).
+// Listeners get it beside the config: main.js keeps the toss-up wording
+// through a drag but drops it on any other change (ADR-0010).
+export function setParam(key, value, { drag = false } = {}) {
   config[key] = value;
-  emit();
+  emit(drag);
 }
 
 export function applyPreset(partial) {
   Object.assign(config, partial);
-  emit();
+  emit(false);
 }
 
 // --- share URL codec: only non-default values are written ---
@@ -98,23 +101,31 @@ export function setRegionId(id) {
   scheduleUrlWrite();
 }
 
-function writeUrl() {
+function currentQuery() {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(config)) {
     if (value !== DEFAULT_CONFIG[key]) params.set(key, value);
   }
   if (regionId) params.set("r", regionId);
   const qs = params.toString();
+  return qs ? `?${qs}&v=${URL_SCHEMA_VERSION}` : "";
+}
+
+function writeUrl() {
   try {
-    history.replaceState(
-      null,
-      "",
-      qs ? `?${qs}&v=${URL_SCHEMA_VERSION}` : location.pathname,
-    );
+    history.replaceState(null, "", currentQuery() || location.pathname);
   } catch {
     // Safari refuses history updates past 100 in 10 s. The link then lags
     // until the next write succeeds; nothing else depends on it.
   }
+}
+
+/**
+ * An absolute link to the current scenario. Built from the live config,
+ * so it is current even while the debounced address-bar write is pending.
+ */
+export function shareUrl() {
+  return `${location.origin}${location.pathname}${currentQuery()}`;
 }
 
 // Per-field validation metadata derived from INPUT_DEFS (the single source
@@ -148,8 +159,8 @@ export function readUrl() {
   // this gate the migration would rewrite every European region link and
   // silently make that region's levy deductible.
   const isLegacy = !params.has("v");
-  // Validated against the real bundle list by the caller, which owns
-  // the region data; an unknown id simply derives as before.
+  // Validated against the real bundle list by inputs.js, which owns the
+  // region data; an unknown id is dropped there.
   regionId = params.get("r");
   const restored = {};
   for (const [key, def] of Object.entries(DEFAULT_CONFIG)) {

@@ -4,7 +4,7 @@
 
 import { INPUT_DEFS } from "./fields.js";
 import { trackEvent } from "./analytics.js";
-import { fmtMoney, setCurrency } from "./format.js";
+import { fmtMoney, parseTypedNumber, setCurrency } from "./format.js";
 import {
   applyPreset,
   getConfig,
@@ -35,29 +35,107 @@ function buildSlider(def, container) {
   row.innerHTML = `
     <div class="slider-header">
       <span class="slider-name">${def.label}</span>
-      <span class="slider-value"></span>
+      <button type="button" class="slider-value"></button>
   </div>
     <input type="range" min="${def.min}" max="${def.max}" step="${def.step}">
     ${def.hint ? `<div class="slider-hint">${def.hint}</div>` : ""}
   `;
   const input = row.querySelector("input");
   const value = row.querySelector(".slider-value");
+  // The button's name carries the value it shows, so a screen reader
+  // announces both the field and its current value.
+  const show = (displayed) => {
+    const text = def.fmt(displayed);
+    value.textContent = text;
+    value.setAttribute("aria-label", `${def.label} ${text}, type an exact value`);
+  };
   const refresh = () => {
     const stored = getConfig()[def.key];
     input.value = stored * scale;
-    value.textContent = def.fmt(stored * scale);
+    show(stored * scale);
   };
-  input.addEventListener("input", () => {
-    const displayed = Number(input.value);
-    value.textContent = def.fmt(displayed);
-    setParam(def.key, displayed / scale);
-    // Dragging the price across a relief ceiling must withdraw the
+  // Dragging and typing both store a value in displayed units here. Only
+  // a drag passes `drag`, which keeps a toss-up headline (state.js).
+  const apply = (displayed, drag = false) => {
+    show(displayed);
+    setParam(def.key, displayed / scale, { drag });
+    // Moving the price across a relief ceiling must withdraw the
     // relief, so the buyer-cost keys cannot stay latched at their FTB
     // values while the price says they no longer apply.
     if (def.key === "propertyPrice") syncFtbToPrice();
-  });
+  };
+  input.addEventListener("input", () => apply(Number(input.value), true));
+  value.addEventListener("click", () =>
+    openTypedField(def, value, input, getConfig()[def.key] * scale, apply),
+  );
   container.appendChild(row);
   widgets.push({ refresh });
+}
+
+// Exact values: tapping a slider's value swaps it for a text field. Enter
+// or leaving the field applies the number, clamped to the slider's range
+// but NOT snapped to its step (a $437,000 price is allowed); Escape
+// cancels. The field exists only while typing, so `#core-inputs input`
+// still finds the slider everywhere else (the tour, the tests). `shown`
+// is the current value and `apply` stores a new one, both in displayed
+// units; `apply` is the slider's own drag handler.
+function openTypedField(def, value, slider, shown, apply) {
+  const typed = document.createElement("input");
+  typed.type = "text";
+  typed.className = "slider-typed";
+  // The iOS decimal keypad has no minus key, so fields that go below zero
+  // get the full keyboard.
+  typed.inputMode = def.min < 0 ? "text" : "decimal";
+  typed.enterKeyHint = "done";
+  typed.setAttribute("aria-label", def.label);
+  // Without float noise (0.03 * 100).
+  const prefill = String(Number(shown.toFixed(6)));
+  typed.value = prefill;
+  let cancelled = false;
+  let closed = false;
+  // Runs once: removing the focused field can fire blur a second time.
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    const n = parseTypedNumber(typed.value, def.step >= 1);
+    // An unedited field changes nothing: no re-run, and no re-reading of
+    // a hand-edited link value such as "1234.567" as digit grouping.
+    if (!cancelled && typed.value !== prefill && Number.isFinite(n)) {
+      let clamped = Math.min(def.max, Math.max(def.min, n));
+      // Every negative levy cap means "uncapped", but the slider shows that
+      // only at its min; -500 would put the thumb on 0, "not deductible".
+      // The same reason state.js restores legacy links as -1000.
+      if (def.key === "levyDeductionCap" && clamped < 0) clamped = def.min;
+      slider.value = clamped;
+      apply(clamped);
+      // A typed value counts as a slider change (the tour's do-it step).
+      slider.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    typed.remove();
+    value.hidden = false;
+  };
+  // Browsers fire the field's own change events inconsistently (Chromium
+  // even on removal after Escape, WebKit not on Enter), so they stay in
+  // the field; the slider's change above is the one that counts.
+  typed.addEventListener("change", (e) => e.stopPropagation());
+  typed.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== "Escape") return;
+    // Escape here must not also close the inputs sheet or the tour, and
+    // Enter must not go on to press the value button focused below,
+    // which would reopen the field.
+    e.stopPropagation();
+    e.preventDefault();
+    cancelled = e.key === "Escape";
+    close();
+    // Only when removing the field dropped focus to the page: a typed value
+    // can advance the tour, which moves focus to its next step.
+    if (!document.activeElement || document.activeElement === document.body) value.focus();
+  });
+  typed.addEventListener("blur", close);
+  value.hidden = true;
+  value.after(typed);
+  typed.focus();
+  typed.select();
 }
 
 function buildSegmented(def, container) {
@@ -345,8 +423,9 @@ function buildPresetPills(regions) {
   // make the first FTB click apply the US delta to a UK config.
   selectedRegion = deriveSelectedRegion(regions);
   // Persist whatever was derived, so a legacy link upgrades to a stored
-  // id on first load and stops depending on the numbers matching.
-  if (selectedRegion) setRegionId(selectedRegion.id);
+  // id on first load and stops depending on the numbers matching. An `r`
+  // that names no region is dropped, so a shared link never repeats it.
+  setRegionId(selectedRegion?.id ?? null);
   // Only derive the flag from a region that actually enacts relief.
   // ftbMatchesConfig is false for an empty override set, so deriving it
   // from US or DE would latch the flag OFF and the next region WITH
