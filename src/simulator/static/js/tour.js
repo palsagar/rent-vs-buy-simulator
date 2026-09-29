@@ -113,7 +113,27 @@ export class Tour {
         let resizeTimer = null;
         this._onResize = () => {
             clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(() => this._layout(), 150);
+            resizeTimer = setTimeout(() => {
+                // A phone turned to landscape and back: layout.js closed the
+                // inputs sheet on the way out and has now moved the target
+                // back into it, so render the step again to reopen the sheet.
+                // Every other resize only lays out: a full render moves focus,
+                // which would pull it out of a field an on-screen keyboard is
+                // typing into.
+                const step = this._steps[this._index];
+                const el = step?.target && document.querySelector(step.target);
+                const inputPanel = document.getElementById('input-panel');
+                const inputsBtn = document.getElementById('inputs-btn');
+                const drawerRegime = inputsBtn && window.getComputedStyle(inputsBtn).display !== 'none';
+                if (el && drawerRegime && inputPanel && inputPanel.contains(el) && !inputPanel.classList.contains('visible')) {
+                    // The step's one re-check was spent when it first opened
+                    // the sheet; allow another once the sheet opens again.
+                    this._recheckedStepIndex = -1;
+                    this._renderStep();
+                } else {
+                    this._layout();
+                }
+            }, 150);
         };
         window.addEventListener('resize', this._onResize);
         this._onScroll = () => {

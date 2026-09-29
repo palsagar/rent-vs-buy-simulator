@@ -348,6 +348,51 @@ test.describe('phone: the tour inside the inputs sheet', () => {
     await expect.poll(() => sheetView(page, '#core-inputs .slider-value')).toEqual({ inBand: true, hit: true });
     await page.evaluate(() => window.__testTour.skip());
   });
+
+  test('Region presets reopens the sheet after the phone turns to landscape and back', async ({ page }) => {
+    // A large iPhone turned to landscape is 932-956 px wide.
+    await startRealTour(page);
+    await walkTo(page, 1);
+    await expect(page.locator('.tour-title')).toHaveText('Region presets');
+    await expect(page.locator('#input-panel')).toHaveClass(/visible/);
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+    // The tour lays out again: the ring frames the pills back in the preset bar.
+    await expect.poll(() => page.evaluate(() => {
+      const ring = document.querySelector('.tour-ring').getBoundingClientRect();
+      const pills = document.getElementById('region-pills').getBoundingClientRect();
+      return ring.width > 0 && ring.left <= pills.left && ring.right >= pills.right
+        && ring.top <= pills.top && ring.bottom >= pills.bottom;
+    })).toBe(true);
+
+    await page.setViewportSize({ width: 390, height: 664 });
+    await expect(page.locator('#input-panel')).toHaveClass(/visible/);
+    await expect.poll(() => sheetView(page, '#region-pills')).toEqual({ inBand: true, hit: true });
+    // Still a do-it step: the pills are there to tap, so no Next button.
+    await page.waitForFunction(() => window.__testTour._recheckTimer == null);
+    await expect(page.locator('.tour-footer .tour-btn-primary')).toHaveCount(0);
+    await page.evaluate(() => window.__testTour.skip());
+  });
+
+  test('a do-it target that stays out of reach gets its Next once the re-check is done', async ({ page }) => {
+    // Otherwise the step would leave nothing to press but Back and Skip.
+    await startRealTour(page);
+    // Region presets opens the sheet and schedules its re-check; the pills
+    // are hidden before the re-check runs.
+    const now = await page.evaluate(() => {
+      window.__testTour.next(); // Welcome → Region presets
+      document.getElementById('region-pills').style.display = 'none';
+      return {
+        next: document.querySelectorAll('.tour-footer .tour-btn-primary').length,
+        recheckDue: window.__testTour._recheckTimer != null,
+      };
+    });
+    expect(now).toEqual({ next: 0, recheckDue: true });
+    await expect(page.locator('.tour-title')).toHaveText('Region presets');
+    await page.waitForFunction(() => window.__testTour._recheckTimer == null);
+    await expect(page.locator('.tour-footer .tour-btn-primary')).toHaveCount(1);
+    await page.evaluate(() => window.__testTour.skip());
+  });
 });
 
 test.describe('phone: page scrolling', () => {
