@@ -16,8 +16,11 @@ RUN uv sync --frozen --no-install-project --no-dev
 COPY src/ ./src/
 RUN uv sync --frozen --no-dev
 
-# Run as a non-root user (least privilege)
-RUN useradd --create-home --uid 10001 app && chown -R app:app /app
+# Run as a non-root user (least privilege). The code stays root-owned and
+# read-only for this user: the app writes nothing under /app, and a
+# recursive chown would copy the whole virtualenv into a new layer on
+# every build.
+RUN useradd --create-home --uid 10001 app
 USER app
 
 ENV PORT=8501
