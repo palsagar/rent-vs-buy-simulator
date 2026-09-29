@@ -29,11 +29,12 @@ export async function performCurrentAction(page) {
     case 3: // outlook pill click
       await page.locator('#outlook-pills .preset-btn').first().click();
       break;
-    case 4: { // core-inputs change
+    case 4: { // core-inputs change: a one-step drag, input then change
       await page.evaluate(() => {
         const input = document.querySelector('#core-inputs input');
         const step = Number(input.step || 1);
         input.value = String(Math.min(Number(input.max), Number(input.value) + step));
+        input.dispatchEvent(new Event('input', { bubbles: true }));
         input.dispatchEvent(new Event('change', { bubbles: true }));
       });
       break;

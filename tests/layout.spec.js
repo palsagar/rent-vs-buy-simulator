@@ -66,6 +66,18 @@ test.describe('phone: controls move into the inputs panel', () => {
   });
 });
 
+// Guard: the phone breakpoint is written twice, in style.css and as
+// PHONE_QUERY in layout.js; both must switch at the same width.
+test('the stylesheet and the layout script switch to the phone layout at the same width', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 700 });
+  await expect(page.locator('#preset-bar')).toBeHidden();
+  await expect(page.locator('#input-panel #region-pills')).toHaveCount(1);
+
+  await page.setViewportSize({ width: 901, height: 700 });
+  await expect(page.locator('#preset-bar')).toBeVisible();
+  await expect(page.locator('#preset-bar #region-pills')).toHaveCount(1);
+});
+
 /** Resolve once `id`'s slide transition has finished. */
 async function waitForSlideAtRest(page, id) {
   await page.waitForFunction((elId) => {

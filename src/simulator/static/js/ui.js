@@ -190,8 +190,8 @@ export function initUi(tour) {
   });
 
   // ── Share ────────────────────────────────────────────────────────────────
-  // The native share sheet where the browser has one (phones), else copy
-  // the link.
+  // The native share sheet wherever the browser has one (phones, but also
+  // desktop Safari and Edge or Chrome on Windows), else copy the link.
   const shareBtn = document.getElementById("share-btn");
   const shareLabel = shareBtn.textContent;
   // One timer: a second copy restarts the two seconds instead of letting

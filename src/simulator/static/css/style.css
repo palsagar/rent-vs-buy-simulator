@@ -603,6 +603,7 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
 /* Mobile: the left panel becomes a bottom sheet */
 #inputs-btn { display: none; }
 #sheet-header { display: none; }
+/* The phone breakpoint; PHONE_QUERY in js/layout.js must match it. */
 @media (max-width: 900px) {
   /* Pinned to the bottom; below the overlays (200) and the scrim (250),
      which cover it. */
