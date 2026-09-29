@@ -135,6 +135,8 @@ test.describe('phone: inputs sheet', () => {
   });
 
   test('Outlook is labelled once in the sheet, and the pills keep an accessible name', async ({ page }) => {
+    // A closed sheet is hidden from the accessibility tree.
+    await page.click('#inputs-btn');
     await expect(page.locator('#sheet-outlook .preset-label')).toBeHidden();
     await expect(page.locator('#sheet-outlook').getByRole('group', { name: 'Outlook' })).toHaveCount(1);
     // On a wide screen the group returns to the preset bar with its label.
@@ -157,6 +159,29 @@ test.describe('phone: inputs sheet', () => {
     // WebKit's Tab skips buttons, as Safari does by default; Option+Tab doesn't.
     await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
     expect(await page.evaluate(() => document.getElementById('input-panel').contains(document.activeElement))).toBe(true);
+  });
+
+  test('Tab skips the closed sheets, and reaches Done once the sheet is open', async ({ page, browserName }) => {
+    // WebKit's Tab skips buttons, as Safari does by default; Option+Tab doesn't.
+    const tab = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+    await page.evaluate(() => document.activeElement?.blur());
+    const inClosedSheet = [];
+    for (let i = 0; i < 15; i++) {
+      await page.keyboard.press(tab);
+      const where = await page.evaluate(() => {
+        const el = document.activeElement;
+        const sheets = ['input-panel', 'advanced-panel'].map((id) => document.getElementById(id));
+        return sheets.some((s) => s.contains(el)) ? el.id || el.className || el.tagName : null;
+      });
+      if (where) inClosedSheet.push(where);
+    }
+    expect(inClosedSheet).toEqual([]);
+
+    await page.locator('#inputs-btn').focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#input-panel')).toHaveClass(/visible/);
+    await page.keyboard.press(tab);
+    await expect(page.locator('#sheet-done')).toBeFocused();
   });
 
   test('widening past the phone size with the sheet open closes the sheet and its scrim', async ({ page }) => {

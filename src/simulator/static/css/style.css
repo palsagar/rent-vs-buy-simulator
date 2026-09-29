@@ -639,12 +639,21 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
     border-radius: 14px 14px 0 0;
     z-index: 260;
     transform: translateY(100%);
-    transition: transform 0.3s ease;
+    /* A closed sheet is hidden, so Tab and screen readers skip its
+       controls. It turns hidden only once it has slid out, and visible
+       as soon as it opens. */
+    visibility: hidden;
+    transition: transform 0.3s ease, visibility 0s linear 0.3s;
     /* A control scrolled into view lands below the sticky header (64px)
        plus the tour ring's 8px margin (PAD in tour.js). */
     scroll-padding-top: 72px;
   }
-  #input-panel.visible { transform: translateY(0); box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45); }
+  #input-panel.visible {
+    transform: translateY(0);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45);
+    visibility: visible;
+    transition: transform 0.3s ease, visibility 0s;
+  }
   /* 64px tall exactly (border box): the Advanced sheet is 64px shorter than
      this sheet so the verdict line stays in view above it. The 9px padding
      leaves 45px of content height for the 44px Done button. */
@@ -702,8 +711,16 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
     border-radius: 14px 14px 0 0;
     z-index: 270;
     transform: translateY(100%);
+    /* Hidden once closed, like the inputs sheet. */
+    visibility: hidden;
+    transition: transform 0.3s ease, visibility 0s linear 0.3s;
   }
-  #advanced-panel.visible { transform: translateY(0); box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45); }
+  #advanced-panel.visible {
+    transform: translateY(0);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45);
+    visibility: visible;
+    transition: transform 0.3s ease, visibility 0s;
+  }
   /* The document scrolls on a phone, not #results: Safari only collapses
      its toolbars on a document scroll, and 100vh is taller than the
      visible area while they show. */
