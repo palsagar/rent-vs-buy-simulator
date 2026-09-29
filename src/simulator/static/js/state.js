@@ -159,8 +159,8 @@ export function readUrl() {
   // this gate the migration would rewrite every European region link and
   // silently make that region's levy deductible.
   const isLegacy = !params.has("v");
-  // Validated against the real bundle list by the caller, which owns
-  // the region data; an unknown id simply derives as before.
+  // Validated against the real bundle list by inputs.js, which owns the
+  // region data; an unknown id is dropped there.
   regionId = params.get("r");
   const restored = {};
   for (const [key, def] of Object.entries(DEFAULT_CONFIG)) {

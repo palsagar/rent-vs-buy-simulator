@@ -2,11 +2,11 @@ import { test, expect } from '@playwright/test';
 
 /** Sharing a scenario, and what a shared link shows in a chat app. */
 
-async function load(page) {
+async function load(page, query = '') {
   await page.addInitScript(() => {
     try { localStorage.setItem('rvb.tour.v1', 'done'); } catch (e) {}
   });
-  await page.goto('/');
+  await page.goto(`/${query}`);
   await page.waitForFunction(
     () => document.getElementById('verdict-confidence').textContent.length > 0,
     null,
@@ -50,6 +50,22 @@ test('the shared link carries a typed price, not the slider position it snapped 
   await page.click('#share-btn');
   const shared = await page.evaluate(() => window.__shared);
   expect(new URL(shared.url).searchParams.get('propertyPrice')).toBe('437000');
+});
+
+test('a link whose region is unknown does not pass that text on', async ({ page }) => {
+  // The seller costs match no region, so nothing replaces the unknown id.
+  await load(page, '?closingCostSellerPct=5&r=Call%200800%20000%20000&v=2');
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: async (data) => { window.__shared = data; },
+    });
+  });
+  await page.click('#share-btn');
+  const shared = new URL(await page.evaluate(() => window.__shared.url));
+  expect(shared.searchParams.get('closingCostSellerPct')).toBe('5');
+  expect(shared.searchParams.has('r')).toBe(false);
+  await expect.poll(() => new URL(page.url()).searchParams.has('r')).toBe(false);
 });
 
 test('without a share sheet, Share copies the link', async ({ page, context }) => {
@@ -128,6 +144,15 @@ test('the page has a description and link-preview tags', async ({ page }) => {
   ]) {
     await expect(page.locator(sel)).toHaveAttribute('content', /.+/);
   }
+});
+
+test('the page sets no og:url, so a shared scenario link previews as itself', async ({ page }) => {
+  await page.goto('/');
+  // Chat apps treat og:url as the page's real address and would open the
+  // default scenario instead of the shared one.
+  await expect(page.locator('meta[property="og:url"]')).toHaveCount(0);
+  // Crawlers need the image as an absolute URL.
+  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', /^https:\/\//);
 });
 
 // Guard: the image already exists; this keeps the og:image path honest.

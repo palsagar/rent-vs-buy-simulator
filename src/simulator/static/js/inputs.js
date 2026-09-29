@@ -419,8 +419,9 @@ function buildPresetPills(regions) {
   // make the first FTB click apply the US delta to a UK config.
   selectedRegion = deriveSelectedRegion(regions);
   // Persist whatever was derived, so a legacy link upgrades to a stored
-  // id on first load and stops depending on the numbers matching.
-  if (selectedRegion) setRegionId(selectedRegion.id);
+  // id on first load and stops depending on the numbers matching. An `r`
+  // that names no region is dropped, so a shared link never repeats it.
+  setRegionId(selectedRegion?.id ?? null);
   // Only derive the flag from a region that actually enacts relief.
   // ftbMatchesConfig is false for an empty override set, so deriving it
   // from US or DE would latch the flag OFF and the next region WITH
