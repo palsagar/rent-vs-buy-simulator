@@ -51,19 +51,22 @@ export function onConfigChange(fn) {
 // listeners below, so the results froze mid-drag.
 const scheduleUrlWrite = debounce(writeUrl, 300);
 
-function emit() {
+function emit(drag) {
   scheduleUrlWrite();
-  for (const fn of listeners) fn(getConfig());
+  for (const fn of listeners) fn(getConfig(), { drag });
 }
 
-export function setParam(key, value) {
+// `drag` marks a change made by dragging a slider (its input events).
+// Listeners get it beside the config: main.js keeps the toss-up wording
+// through a drag but drops it on any other change (ADR-0010).
+export function setParam(key, value, { drag = false } = {}) {
   config[key] = value;
-  emit();
+  emit(drag);
 }
 
 export function applyPreset(partial) {
   Object.assign(config, partial);
-  emit();
+  emit(false);
 }
 
 // --- share URL codec: only non-default values are written ---

@@ -54,16 +54,17 @@ function buildSlider(def, container) {
     input.value = stored * scale;
     show(stored * scale);
   };
-  // Dragging and typing both store a value in displayed units here.
-  const apply = (displayed) => {
+  // Dragging and typing both store a value in displayed units here. Only
+  // a drag passes `drag`, which keeps a toss-up headline (state.js).
+  const apply = (displayed, drag = false) => {
     show(displayed);
-    setParam(def.key, displayed / scale);
+    setParam(def.key, displayed / scale, { drag });
     // Moving the price across a relief ceiling must withdraw the
     // relief, so the buyer-cost keys cannot stay latched at their FTB
     // values while the price says they no longer apply.
     if (def.key === "propertyPrice") syncFtbToPrice();
   };
-  input.addEventListener("input", () => apply(Number(input.value)));
+  input.addEventListener("input", () => apply(Number(input.value), true));
   value.addEventListener("click", () =>
     openTypedField(def, value, input, getConfig()[def.key] * scale, apply),
   );

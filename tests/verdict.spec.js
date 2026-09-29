@@ -49,6 +49,83 @@ test('the explanation stays hidden when both net values are positive', async ({ 
   await expect(page.locator('#net-note')).toBeHidden();
 });
 
+/**
+ * Keep Monte Carlo pending: the server answers each request, but the page
+ * receives the answer only when `release()` is called. Requests made after
+ * a release are held again.
+ */
+async function holdMonteCarlo(page) {
+  const held = [];
+  await page.route('**/api/monte-carlo', async (route) => {
+    const response = await route.fetch();
+    held.push(() => route.fulfill({ response }));
+  });
+  return {
+    count: () => held.length,
+    release: () => Promise.all(held.splice(0).map((answer) => answer())),
+  };
+}
+
+/** Move the home price slider the way a drag does: an input event. */
+async function dragPrice(page, value) {
+  await page.evaluate((v) => {
+    const price = document.querySelector('#core-inputs input[type=range]');
+    price.value = v;
+    price.dispatchEvent(new Event('input', { bubbles: true }));
+  }, value);
+}
+
+test('a region switch names the winner while its Monte Carlo run is pending', async ({ page }) => {
+  await load(page);
+  const line = page.locator('#verdict-line');
+  await expect(line).toContainText('Too close to call');
+  await holdMonteCarlo(page);
+
+  await page.locator('#region-pills .preset-btn', { hasText: 'UK' }).click();
+  // The UK result is shown; its Monte Carlo run has not answered.
+  await expect(line).toContainText('£');
+  await expect(page.locator('#verdict-confidence')).toHaveText('');
+  await expect(line).not.toContainText('Too close to call');
+  await expect(line).toContainText('leaves you');
+});
+
+// Guard: the carry-over for drags already works; it must keep working.
+test('a slider drag inside a toss-up keeps the toss-up wording until Monte Carlo reports', async ({ page }) => {
+  await load(page);
+  const line = page.locator('#verdict-line');
+  await expect(line).toContainText('~$1,248');
+  const mc = await holdMonteCarlo(page);
+
+  await dragPrice(page, 505000);
+  // The new result is shown; its Monte Carlo run has not answered.
+  await expect(line).not.toContainText('~$1,248');
+  await expect(page.locator('#verdict-confidence')).toHaveText('');
+  await expect(line).toContainText('Too close to call');
+
+  // The drag kept the result close: Monte Carlo still calls it a toss-up.
+  await expect.poll(mc.count).toBe(1);
+  await mc.release();
+  await expect(page.locator('#verdict-confidence')).toContainText('% of simulated futures');
+  await expect(line).toContainText('Too close to call');
+});
+
+test('a toss-up call still in flight does not carry over to a region switch', async ({ page }) => {
+  await load(page);
+  const line = page.locator('#verdict-line');
+  const mc = await holdMonteCarlo(page);
+  await dragPrice(page, 505000);
+  await expect.poll(mc.count).toBe(1);
+
+  // The toss-up answer for the dragged price lands after the switch but
+  // before the UK result.
+  await page.locator('#region-pills .preset-btn', { hasText: 'UK' }).click();
+  await mc.release();
+
+  await expect(line).toContainText('£');
+  await expect(page.locator('#verdict-confidence')).toHaveText('');
+  await expect(line).not.toContainText('Too close to call');
+});
+
 test('a failed Monte Carlo run clears the toss-up headline', async ({ page }) => {
   await load(page);
   await expect(page.locator('#verdict-line')).toContainText('Too close to call');

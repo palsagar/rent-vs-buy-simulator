@@ -5,7 +5,12 @@
 import { getRegions, postMonteCarlo, postSimulate } from "./api.js";
 import { initInputs, syncInputs } from "./inputs.js";
 import { initPhoneLayout } from "./layout.js";
-import { clearTossUp, renderMonteCarlo, renderSimulate } from "./results.js";
+import {
+  clearTossUp,
+  forgetTossUp,
+  renderMonteCarlo,
+  renderSimulate,
+} from "./results.js";
 import {
   configHash,
   debounce,
@@ -23,6 +28,10 @@ let mcAbort = null;
 let lastWinner = "rent";
 let lastWinnerHash = null;
 let simRun = null;
+// Counts config changes that are not slider drags. A Monte Carlo run
+// started before one judged a config the page has jumped away from, so it
+// must not render: its toss-up call would carry over to the new result.
+let jumps = 0;
 const errors = { simulate: null, monteCarlo: null };
 
 function syncBanner() {
@@ -77,6 +86,7 @@ async function runSimulate() {
 async function runMonteCarlo() {
   const cfg = getConfig();
   const hash = configHash(cfg);
+  const jumpsAtStart = jumps;
   mcAbort?.abort();
   const controller = new AbortController();
   mcAbort = controller;
@@ -86,13 +96,14 @@ async function runMonteCarlo() {
   // lastWinner are set as a side effect of the simulate path, and simRun is
   // awaited to ensure that path has settled first. Changing the hashing or
   // the simulate cache logic can therefore silently suppress MC rendering.
+  // A change that is not a drag (see `jumps`) also suppresses it.
   try {
     if (cached) {
       await simRun;
       if (mcAbort === controller) {
         errors.monteCarlo = null;
         syncBanner();
-        if (lastWinnerHash === hash) renderMonteCarlo(cached, lastWinner);
+        if (lastWinnerHash === hash && jumps === jumpsAtStart) renderMonteCarlo(cached, lastWinner);
       }
       return;
     }
@@ -102,7 +113,7 @@ async function runMonteCarlo() {
     if (mcAbort === controller) {
       errors.monteCarlo = null;
       syncBanner();
-      if (lastWinnerHash === hash) renderMonteCarlo(data, lastWinner);
+      if (lastWinnerHash === hash && jumps === jumpsAtStart) renderMonteCarlo(data, lastWinner);
     }
   } catch (err) {
     if (!controller.signal.aborted && mcAbort === controller) {
@@ -147,7 +158,13 @@ async function init() {
   initInputs(regions);
   initUi(tour);
   syncInputs();
-  onConfigChange(() => {
+  onConfigChange((_cfg, { drag }) => {
+    // Only a slider drag keeps the toss-up wording until Monte Carlo
+    // reports (ADR-0010).
+    if (!drag) {
+      jumps += 1;
+      forgetTossUp();
+    }
     scheduleSimulate();
     scheduleMonteCarlo();
   });

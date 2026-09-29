@@ -17,10 +17,11 @@ const TOSS_UP_MIN_PCT = 40;
 const TOSS_UP_MAX_PCT = 60;
 
 // The last simulate verdict, and whether the last Monte Carlo run called
-// it a toss-up. The flag survives a simulate re-render until the matching
-// Monte Carlo result replaces it, or a failed Monte Carlo run clears it
-// (clearTossUp), so dragging a slider inside a toss-up does not flash the
-// winner headline on every step.
+// it a toss-up. The flag carries over to the next simulate result only
+// while a slider is dragged, so a drag inside a toss-up does not flash the
+// winner headline on every step. Any other change drops it (forgetTossUp),
+// as does a failed Monte Carlo run (clearTossUp); the next Monte Carlo
+// result sets it again.
 let lastVerdict = null;
 let tossUp = false;
 
@@ -132,6 +133,15 @@ export function renderSimulate(data, cfg) {
   renderBreakdownChart(document.getElementById("breakdown-chart"), data, cfg);
   renderTable(data.series);
   document.getElementById("csv-btn").onclick = () => downloadCsv(data.series);
+}
+
+// A change that is not a slider drag (a region, a pill, a typed value) can
+// land far from the config the last Monte Carlo run judged, so the next
+// simulate result must name its winner until its own run says otherwise.
+// Nothing is repainted here: the headline on screen still belongs to the
+// judged config, and the next simulate result repaints it.
+export function forgetTossUp() {
+  tossUp = false;
 }
 
 // A failed Monte Carlo run leaves nothing to call the verdict a toss-up,

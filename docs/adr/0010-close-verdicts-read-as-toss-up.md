@@ -10,6 +10,6 @@ When the Verdict's winning strategy wins in 40% to 60% of simulated futures (the
 
 ## Consequences
 
-- The headline can change when Monte Carlo finishes, a few hundred milliseconds after the deterministic run. The toss-up state is kept across re-renders until the matching Monte Carlo result replaces it, so dragging a slider inside a toss-up does not flash the winner headline.
+- The headline can change when Monte Carlo finishes, a few hundred milliseconds after the deterministic run. While a slider is dragged, the toss-up state carries over to each new deterministic result until the matching Monte Carlo result replaces it, so a drag inside a toss-up does not flash the winner headline. Any other change (a region, an outlook, the first-time-buyer pill, a typed value, a checkbox, a dropdown, the mortgage-term buttons) can land far from the result Monte Carlo judged, so it drops the toss-up state: the new result names its winner until its own Monte Carlo result says otherwise. A Monte Carlo result that was still on its way when such a change happened is not shown.
 - Below 40% the deterministic winner loses in most simulated futures, and the headline still names it. That case is left for a separate decision.
 - The Verdict itself (winner, difference, breakeven) is unchanged and still computed server-side only (ADR-0008). Only the headline wording depends on Confidence.
