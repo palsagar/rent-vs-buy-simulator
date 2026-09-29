@@ -144,3 +144,29 @@ test('a failed Monte Carlo run clears the toss-up headline', async ({ page }) =>
   await expect(page.locator('#verdict-line')).toContainText('Renting leaves you');
   await expect(page.locator('#verdict-line')).not.toContainText('Too close to call');
 });
+
+test('when a drag fails in both requests, the verdict keeps the confidence beside it', async ({ page }) => {
+  await load(page);
+  const line = page.locator('#verdict-line');
+  const confidence = page.locator('#verdict-confidence');
+  await expect(line).toContainText('Too close to call');
+  const shownConfidence = await confidence.textContent();
+
+  const fail = (route) =>
+    route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ detail: 'boom' }) });
+  await page.route('**/api/simulate', fail);
+  await page.route('**/api/monte-carlo', fail);
+  const monteCarloFailed = page.waitForResponse('**/api/monte-carlo');
+  await dragPrice(page, 505000);
+  await monteCarloFailed;
+  // Let the page handle the failed Monte Carlo answer before looking.
+  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 100)));
+
+  // The default result is still on screen, so its toss-up wording stays
+  // beside its own confidence.
+  await expect(page.locator('#error-banner')).toContainText('Simulation failed: boom');
+  await expect(line).toHaveText(
+    'Too close to call: buying and renting end within ~$1,248 of each other after 10 years',
+  );
+  await expect(confidence).toHaveText(shownConfidence);
+});

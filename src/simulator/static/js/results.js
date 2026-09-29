@@ -21,8 +21,8 @@ const TOSS_UP_MAX_PCT = 60;
 // it a toss-up. The flag carries over to the next simulate result only
 // while a slider is dragged, so a drag inside a toss-up does not flash the
 // winner headline on every step. Any other change drops it (forgetTossUp),
-// as does a failed Monte Carlo run (clearTossUp); the next Monte Carlo
-// result sets it again.
+// as does a failed Monte Carlo run for the verdict on screen (clearTossUp);
+// the next Monte Carlo result sets it again.
 let lastVerdict = null;
 let tossUp = false;
 // The config the verdict on screen was computed for. Until the next

@@ -119,7 +119,11 @@ async function runMonteCarlo() {
     if (!controller.signal.aborted && mcAbort === controller) {
       errors.monteCarlo = `Monte Carlo failed: ${err.message}`;
       syncBanner();
-      clearTossUp();
+      // Repaint only the verdict this run was for, once its simulate run
+      // has settled. If that run failed too, the verdict on screen is an
+      // older one that still sits beside its own confidence, so it stays.
+      await simRun;
+      if (mcAbort === controller && lastWinnerHash === hash) clearTossUp();
     }
   }
 }
