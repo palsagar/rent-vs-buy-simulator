@@ -54,6 +54,45 @@ test('parseTypedNumber reads a k or M number with a decimal point, and dashes as
   expect(parsed).toEqual([1250000, 475000, 2500, -2500, -2500]);
 });
 
+test('parseTypedNumber rejects separators that do not group digits in threes', async ({ page }) => {
+  const parsed = await page.evaluate(async () => {
+    const { parseTypedNumber: p } = await import('./js/format.js');
+    return [
+      // Two separators in a row.
+      p('5..0', false), p('1,,000', true), p('1.,5', false),
+      // Grouping must split the digits into threes after a first group of
+      // one to three digits.
+      p('1.23.4', false), p('1,2,345', true), p('1234,000', true), p('1,2.5', false),
+      // A grouping separator at either end.
+      p('.500', true), p('1,000,', true),
+      // Well-formed grouping still reads.
+      p('1.234.567', false), p('1,234,567', true), p('1,234.56', true), p('-1.234,5', false),
+      // A lone separator at either end that is a decimal point still reads.
+      p('.5', false), p('5.', false), p(',5', false), p('500,', true),
+      p('1,000.', true), p('1.000,', true),
+    ];
+  });
+  expect(parsed).toEqual([
+    NaN, NaN, NaN,
+    NaN, NaN, NaN, NaN,
+    NaN, NaN,
+    1234567, 1234567, 1235, -1234.5,
+    0.5, 5, 0.5, 500,
+    1000, 1000,
+  ]);
+});
+
+test('a typed value with malformed separators keeps the old value', async ({ page }) => {
+  // "5..0" once read as 50, which the mortgage rate clamps to 10%.
+  const row = page.locator('#core-inputs .slider-row', { hasText: 'Mortgage rate' });
+  const before = await row.locator('.slider-value').textContent();
+  await row.locator('.slider-value').click();
+  const field = row.locator('.slider-typed');
+  await field.fill('5..0');
+  await field.press('Enter');
+  await expect(row.locator('.slider-value')).toHaveText(before);
+});
+
 test('a typed negative levy cap is stored as uncapped, with the thumb at its left end', async ({ page }) => {
   // Any negative cap means uncapped, but the slider shows that only at its
   // minimum; -500 would leave the thumb on 0, "levy not deductible".
