@@ -57,13 +57,15 @@ export function fmtPct(v, digits = 1) {
  * follow it and no "k" or "M" does, where it is digit grouping ("437,000",
  * "437.000"; "1.250M" is 1.25 million). Digit grouping must split the
  * whole part into threes after a first group of one to three digits, so
- * "1.23.4", "1234,000", ".500" and "1,000," are unreadable. A lone
- * separator at either end that is the decimal point still reads (".5",
- * "5.", "1,000."). A whole-number field rounds the result ("7.5" gives
- * 8). A trailing "k" or "M" (either case) multiplies by a thousand or a
- * million, before that rounding ("450k", "1.5M", "2,5k"). Returns NaN when any other letter is left ("12abc", "1e5"),
- * when two separators touch ("5..0", "1,,000"), when the grouping is
- * malformed, or when nothing numeric is left.
+ * "1.23.4" and "1,000," are unreadable in every field. In a whole-number
+ * field "1234,000" and ".500" are unreadable too; in a decimal field they
+ * read as 1234 and 0.5. A lone separator at either end that is the
+ * decimal point still reads (".5", "5.", "1,000."). A whole-number field
+ * rounds the result ("7.5" gives 8). A trailing "k" or "M" (either case)
+ * multiplies by a thousand or a million, before that rounding ("450k",
+ * "1.5M", "2,5k"). Returns NaN when any other letter is left ("12abc",
+ * "1e5"), when two separators touch ("5..0", "1,,000"), when the
+ * grouping is malformed, or when nothing numeric is left.
  */
 export function parseTypedNumber(text, integerField) {
   let s = String(text)

@@ -80,8 +80,14 @@ test('while the new result is loading, Share sends the link without the old verd
   await held[0].continue();
   const line = page.locator('#verdict-line');
   await expect(line).not.toContainText('~$1,248');
-  await page.click('#share-btn');
-  expect((await page.evaluate(() => window.__shared)).text).toBe(await line.textContent());
+  // Read the headline and click in one task, so a later repaint of the
+  // headline cannot come between the two.
+  const onScreen = await page.evaluate(() => {
+    const text = document.getElementById('verdict-line').textContent;
+    document.getElementById('share-btn').click();
+    return text;
+  });
+  expect((await page.evaluate(() => window.__shared)).text).toBe(onScreen);
 });
 
 test('after a failed simulation, Share sends the link without the old verdict', async ({ page }) => {
