@@ -150,11 +150,12 @@ test.describe('phone: inputs sheet', () => {
     await expect(page.locator('#drawer-scrim')).toBeHidden();
   });
 
-  test('after Enter opens the sheet, Tab moves into the sheet', async ({ page }) => {
+  test('after Enter opens the sheet, Tab moves into the sheet', async ({ page, browserName }) => {
     await page.locator('#inputs-btn').focus();
     await page.keyboard.press('Enter');
     await expect(page.locator('#input-panel')).toHaveClass(/visible/);
-    await page.keyboard.press('Tab');
+    // WebKit's Tab skips buttons, as Safari does by default; Option+Tab doesn't.
+    await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
     expect(await page.evaluate(() => document.getElementById('input-panel').contains(document.activeElement))).toBe(true);
   });
 

@@ -158,8 +158,8 @@ export function initUi(tour) {
     if (s) s.classList.toggle("hidden", !open);
   };
   // On a phone the Advanced sheet opens on top of the inputs sheet, so Done,
-  // Esc and a tap outside them close both. After Done or Esc, focus that was
-  // in a sheet goes to the button that reopens it, not off-screen.
+  // Esc and a tap outside them close both. After Esc, focus that was in a
+  // sheet goes to the button that reopens it, not off-screen.
   const closeSheets = (returnFocus) => {
     const active = document.activeElement;
     const focusInSheet = inputPanel.contains(active) || panel.contains(active);
@@ -168,7 +168,12 @@ export function initUi(tour) {
     if (returnFocus && focusInSheet) document.getElementById("inputs-btn").focus();
   };
   document.getElementById("inputs-btn").addEventListener("click", () => setDrawer(!inputPanel.classList.contains("visible")));
-  document.getElementById("sheet-done").addEventListener("click", () => closeSheets(true));
+  // Done always sits in the sheet it closes, so focus always goes back to the
+  // Edit button, even where a tap does not focus Done (WebKit, iOS Safari).
+  document.getElementById("sheet-done").addEventListener("click", () => {
+    closeSheets(false);
+    document.getElementById("inputs-btn").focus();
+  });
   // The scrim only shows on phones.
   document.addEventListener("click", (e) => {
     if (e.target && e.target.id === "drawer-scrim") closeSheets(false);
