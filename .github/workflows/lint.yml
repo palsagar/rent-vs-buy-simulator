@@ -22,10 +22,13 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
+      # Use the ruff pinned in uv.lock (the dev group), not the newest release
+      # that `uvx ruff` fetches, so CI checks exactly what `uv run ruff` checks
+      # locally. A new ruff version then arrives through a lockfile update.
       - name: Run linting checks
         run: |
-          uvx ruff check --output-format=github .
+          uv run --frozen --only-group dev ruff check --output-format=github .
 
       - name: Run formatting checks
         run: |
-          uvx ruff format --check .
+          uv run --frozen --only-group dev ruff format --check .
