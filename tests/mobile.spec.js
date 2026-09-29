@@ -2,7 +2,8 @@ import { test, expect } from '@playwright/test';
 
 /**
  * Phone-size regressions: the preset bar layout, share-URL writes while a
- * slider is dragged, touch gestures on the charts, and the slider thumb.
+ * slider is dragged, touch gestures on the charts and over an open overlay,
+ * and the slider thumb.
  *
  * The viewport is an iPhone 13 with Safari's toolbars showing. Touch swipes
  * go through CDP because Playwright's touchscreen API only taps, so this

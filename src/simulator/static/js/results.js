@@ -18,8 +18,9 @@ const TOSS_UP_MAX_PCT = 60;
 
 // The last simulate verdict, and whether the last Monte Carlo run called
 // it a toss-up. The flag survives a simulate re-render until the matching
-// Monte Carlo result replaces it, so dragging a slider inside a toss-up
-// does not flash the winner headline on every step.
+// Monte Carlo result replaces it, or a failed Monte Carlo run clears it
+// (clearTossUp), so dragging a slider inside a toss-up does not flash the
+// winner headline on every step.
 let lastVerdict = null;
 let tossUp = false;
 

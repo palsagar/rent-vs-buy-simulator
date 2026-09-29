@@ -1,6 +1,7 @@
-// Phone layout. Below the drawer breakpoint the preset controls move into
-// the inputs panel, next to the numbers they change, and the Guide button
-// moves to the title bar; above it everything returns to the preset bar.
+// Phone layout. At or below the phone breakpoint (where the inputs panel
+// becomes a bottom sheet) the preset controls move into the inputs panel,
+// next to the numbers they change, and the Guide button moves to the title
+// bar; above it everything returns to the preset bar.
 // Nodes are MOVED, never cloned, so listeners and ids survive: the tour
 // targets #region-pills, #ftb-pill, #outlook-pills, #advanced-btn and
 // #guide-btn by id, and opens the inputs panel when a target is inside it.

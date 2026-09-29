@@ -225,9 +225,10 @@ function maybeSymlog(layout, buyY, rentY) {
   return fwd;
 }
 
-// Past this fraction of the x-range the breakeven label moves to the left of
-// its line: the ~85px label no longer fits between the line and the plot's
-// right edge. At the midpoint it fits on either side down to a ~360px phone.
+// Past this fraction of the x-range the breakeven label sits to the left of
+// its line, so a breakeven near the horizon keeps its label inside the plot.
+// At the midpoint the ~85px label fits on either side of the line: 102px of
+// room each side on a 390px phone, 87px on a 360px one.
 const BREAKEVEN_FLIP_FRACTION = 0.5;
 
 export function renderDecisionChart(el, series, breakevenYear) {

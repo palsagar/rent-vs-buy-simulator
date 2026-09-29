@@ -366,7 +366,9 @@ export class Tour {
      * Make an off-viewport target frameable. A target hidden by a collapsed
      * drawer (mobile inputs, right-side advanced) is opened via its toggle
      * button (never ui.js internals); any target outside the viewport is then
-     * scrolled into view so the spotlight ring can frame it.
+     * scrolled into view so the spotlight ring can frame it. A target inside
+     * the phone inputs sheet is also scrolled when it is not fully below the
+     * sheet's sticky header.
      * Returns true when visibility work was performed — the caller re-renders
      * once the drawer/scroll transition settles.
      */

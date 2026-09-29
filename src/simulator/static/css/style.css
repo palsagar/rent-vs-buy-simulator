@@ -233,7 +233,7 @@ body {
      moving the next value button out from under the pointer. */
   margin-block: -5px;
 }
-/* The hidden attribute must win over the display Task 13 sets on phones. */
+/* The hidden attribute must win over the display the phone block sets. */
 .slider-value[hidden] { display: none; }
 input[type="range"] {
   -webkit-appearance: none;
@@ -641,7 +641,7 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
     transform: translateY(100%);
     transition: transform 0.3s ease;
     /* A control scrolled into view lands below the sticky header (64px)
-       plus the tour ring's 8px margin. */
+       plus the tour ring's 8px margin (PAD in tour.js). */
     scroll-padding-top: 72px;
   }
   #input-panel.visible { transform: translateY(0); box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45); }
