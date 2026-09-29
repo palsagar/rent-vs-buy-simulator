@@ -4,6 +4,7 @@
 
 import { Tour, currentActiveTour } from "./tour.js";
 import { moveFocusIn, restoreFocus, trapFocus } from "./focus.js";
+import { verdictIsCurrent } from "./results.js";
 import { shareUrl } from "./state.js";
 
 export function initUi(tour) {
@@ -200,12 +201,13 @@ export function initUi(tour) {
   shareBtn.addEventListener("click", async () => {
     const url = shareUrl();
     if (navigator.share) {
+      // The link is always the live config; the verdict on screen can still
+      // be the previous one (loading, or its request failed). Send it only
+      // when it matches the link.
+      const data = { title: "Rent or buy?", url };
+      if (verdictIsCurrent()) data.text = document.getElementById("verdict-line").textContent;
       try {
-        await navigator.share({
-          title: "Rent or buy?",
-          text: document.getElementById("verdict-line").textContent,
-          url,
-        });
+        await navigator.share(data);
         return;
       } catch (err) {
         // AbortError means the person closed the share sheet. Any other

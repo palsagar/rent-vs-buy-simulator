@@ -40,6 +40,8 @@ graph TD
     ui --> focus
     results --> charts["charts.js"]
     results --> format
+    results --> state
+    ui --> results
     charts --> fields
     charts --> format
     fields --> format
@@ -47,7 +49,7 @@ graph TD
 
 **`main.js`** — entry point (a module, no exports). Boots the app in order: `readUrl()` → `initPhoneLayout()` → `getRegions()` → `initInputs(regions)` → `initUi(tour)` → `syncInputs()` → `onConfigChange(...)`. `initPhoneLayout` runs before the regions request because it needs only static markup, so phones never show the moved controls in the preset bar first. Falls back to an inline US region if the API is unreachable, and exposes `window.__rvb = { tour }` for browser-driven tests.
 
-**`ui.js`** — `initUi`: welcome modal, guide overlay (accordion sections), the **Replay the Tour** entry point, the inputs and Advanced bottom sheets on small screens (Done button, scrim; one `closeSheets()` path closes both; Done always returns focus to **Edit your numbers**, because WebKit and iOS Safari do not focus a tapped button, and Esc returns it only when focus was inside a sheet), the **Share this scenario** button (the native share sheet where the browser has one, else copies the link), error banner and loading state. Depends on `tour.js` (layers the spotlight over the guide), `focus.js` (traps focus in the modal) and `state.js` (`shareUrl`).
+**`ui.js`** — `initUi`: welcome modal, guide overlay (accordion sections), the **Replay the Tour** entry point, the inputs and Advanced bottom sheets on small screens (Done button, scrim; one `closeSheets()` path closes both; Done always returns focus to **Edit your numbers**, because WebKit and iOS Safari do not focus a tapped button, and Esc returns it only when focus was inside a sheet), the **Share this scenario** button (the native share sheet where the browser has one, else copies the link), error banner and loading state. Depends on `tour.js` (layers the spotlight over the guide), `focus.js` (traps focus in the modal), `state.js` (`shareUrl`) and `results.js` (`verdictIsCurrent`: Share sends the verdict text only when the verdict on screen belongs to the linked config).
 
 **`layout.js`** — `initPhoneLayout`: at or below 900 px, moves the region, outlook and Advanced controls into the inputs sheet and the Guide button into the title bar, and moves them back above 900 px. When it moves them back it also closes an inputs sheet left open and hides its scrim (a large phone turned to landscape crosses 900 px). It moves nodes rather than cloning them, so ids, listeners and the tour's targets survive.
 

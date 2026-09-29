@@ -10,6 +10,7 @@ import {
   renderTornadoChart,
 } from "./charts.js";
 import { fmtMoney } from "./format.js";
+import { configHash, getConfig } from "./state.js";
 
 // A winner that wins in 40-60% of simulated futures (the confidence, as
 // displayed) is a toss-up, so the headline stops naming it (ADR-0010).
@@ -24,6 +25,9 @@ const TOSS_UP_MAX_PCT = 60;
 // result sets it again.
 let lastVerdict = null;
 let tossUp = false;
+// The config the verdict on screen was computed for. Until the next
+// simulate result lands (or when it fails), it differs from the live config.
+let verdictHash = null;
 
 function headlineHtml({ winner, difference, horizonYears }) {
   const amount = `~${fmtMoney(Math.abs(difference))}`;
@@ -126,6 +130,7 @@ export function downloadCsv(series) {
 }
 
 export function renderSimulate(data, cfg) {
+  verdictHash = configHash(cfg);
   renderVerdict(data);
   renderStats(data);
   renderDecisionChart(document.getElementById("decision-chart"), data.series, data.breakevenYear);
@@ -133,6 +138,12 @@ export function renderSimulate(data, cfg) {
   renderBreakdownChart(document.getElementById("breakdown-chart"), data, cfg);
   renderTable(data.series);
   document.getElementById("csv-btn").onclick = () => downloadCsv(data.series);
+}
+
+// Whether the verdict on screen belongs to the live config, so Share
+// never pairs a link with the verdict of a different scenario.
+export function verdictIsCurrent() {
+  return verdictHash === configHash(getConfig());
 }
 
 // A change that is not a slider drag (a region, a pill, a typed value) can

@@ -34,6 +34,71 @@ test('Share hands the current scenario to the native share sheet', async ({ page
   expect(new URL(shared.url).searchParams.get('propertyPrice')).toBe('750000');
 });
 
+/** Capture what Share hands to the native share sheet in window.__shared. */
+async function stubShareSheet(page) {
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: async (data) => { window.__shared = data; },
+    });
+  });
+}
+
+/** Move the home price slider the way a drag does: an input event. */
+async function dragPrice(page, value) {
+  await page.evaluate((v) => {
+    const price = document.querySelector('#core-inputs input[type=range]');
+    price.value = v;
+    price.dispatchEvent(new Event('input', { bubbles: true }));
+  }, value);
+}
+
+// Guard: the verdict text already travels with the link.
+test('Share sends the verdict on screen as the text beside the link', async ({ page }) => {
+  await load(page);
+  await stubShareSheet(page);
+  await page.click('#share-btn');
+  const shared = await page.evaluate(() => window.__shared);
+  expect(shared.text).toBe(await page.locator('#verdict-line').textContent());
+  expect(shared.text).toContain('Too close to call');
+});
+
+test('while the new result is loading, Share sends the link without the old verdict', async ({ page }) => {
+  await load(page);
+  await stubShareSheet(page);
+  const held = [];
+  await page.route('**/api/simulate', (route) => { held.push(route); });
+
+  await dragPrice(page, 750000);
+  await expect.poll(() => held.length).toBe(1);
+  await page.click('#share-btn');
+  const shared = await page.evaluate(() => window.__shared);
+  expect(new URL(shared.url).searchParams.get('propertyPrice')).toBe('750000');
+  expect(shared).not.toHaveProperty('text');
+
+  // Once the new result is on screen, its verdict travels with the link.
+  await held[0].continue();
+  const line = page.locator('#verdict-line');
+  await expect(line).not.toContainText('~$1,248');
+  await page.click('#share-btn');
+  expect((await page.evaluate(() => window.__shared)).text).toBe(await line.textContent());
+});
+
+test('after a failed simulation, Share sends the link without the old verdict', async ({ page }) => {
+  await load(page);
+  await stubShareSheet(page);
+  await page.route('**/api/simulate', (route) =>
+    route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ detail: 'boom' }) }),
+  );
+
+  await dragPrice(page, 750000);
+  await expect(page.locator('#error-banner')).toContainText('Simulation failed: boom');
+  await page.click('#share-btn');
+  const shared = await page.evaluate(() => window.__shared);
+  expect(new URL(shared.url).searchParams.get('propertyPrice')).toBe('750000');
+  expect(shared).not.toHaveProperty('text');
+});
+
 test('the shared link carries a typed price, not the slider position it snapped to', async ({ page }) => {
   await load(page);
   await page.evaluate(() => {
