@@ -101,7 +101,11 @@ function openTypedField(def, value, slider, shown, apply) {
     // An unedited field changes nothing: no re-run, and no re-reading of
     // a hand-edited link value such as "1234.567" as digit grouping.
     if (!cancelled && typed.value !== prefill && Number.isFinite(n)) {
-      const clamped = Math.min(def.max, Math.max(def.min, n));
+      let clamped = Math.min(def.max, Math.max(def.min, n));
+      // Every negative levy cap means "uncapped", but the slider shows that
+      // only at its min; -500 would put the thumb on 0, "not deductible".
+      // The same reason state.js restores legacy links as -1000.
+      if (def.key === "levyDeductionCap" && clamped < 0) clamped = def.min;
       slider.value = clamped;
       apply(clamped);
       // A typed value counts as a slider change (the tour's do-it step).

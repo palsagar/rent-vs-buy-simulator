@@ -40,6 +40,34 @@ test('parseTypedNumber reads grouping and decimal separators', async ({ page }) 
   ]);
 });
 
+test('parseTypedNumber reads a k or M number with a decimal point, and dashes as minus', async ({ page }) => {
+  const parsed = await page.evaluate(async () => {
+    const { parseTypedNumber: p } = await import('./js/format.js');
+    return [
+      // Before k or M, a lone separator is the decimal point, even with
+      // three digits after it.
+      p('1.250M', true), p('0.475M', true), p('2.500k', true),
+      // En dash and figure dash, as some keyboards type them.
+      p('\u20132500', true), p('\u20122500', true),
+    ];
+  });
+  expect(parsed).toEqual([1250000, 475000, 2500, -2500, -2500]);
+});
+
+test('a typed negative levy cap is stored as uncapped, with the thumb at its left end', async ({ page }) => {
+  // Any negative cap means uncapped, but the slider shows that only at its
+  // minimum; -500 would leave the thumb on 0, "levy not deductible".
+  await page.click('#advanced-btn');
+  const row = page.locator('#advanced-inputs .slider-row', { hasText: 'Levy deduction cap' });
+  await row.locator('.slider-value').click();
+  const field = row.locator('.slider-typed');
+  await field.fill('-500');
+  await field.press('Enter');
+  await expect(row.locator('.slider-value')).toHaveText('uncapped');
+  await expect(row.locator('input[type=range]')).toHaveValue('-1000');
+  await expect.poll(() => new URL(page.url()).searchParams.get('levyDeductionCap')).toBe('-1000');
+});
+
 test('tapping the price value lets you type an exact price', async ({ page }) => {
   const value = page.locator('#core-inputs .slider-value').first();
   await value.click();
