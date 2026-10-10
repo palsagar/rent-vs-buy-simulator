@@ -143,9 +143,12 @@ class UmamiInjectionMiddleware(BaseHTTPMiddleware):
         body = b""
         async for chunk in response.body_iterator:
             body += chunk
+        # data-before-send names the hook in analytics.js that keeps the
+        # app's own address-bar params out of page views.
         tag = (
             f'<script defer src="{UMAMI_DOMAIN}/script.js" '
-            f'data-website-id="{UMAMI_ID}"></script>'
+            f'data-website-id="{UMAMI_ID}" '
+            'data-before-send="umamiBeforeSend"></script>'
         ).encode()
         # Anchor: just before </body>, AFTER the app module tag. Deferred
         # scripts execute in document order, so a slow analytics fetch can

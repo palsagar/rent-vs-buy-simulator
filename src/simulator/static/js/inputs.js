@@ -7,6 +7,7 @@ import { trackEvent } from "./analytics.js";
 import { fmtMoney, parseTypedNumber, setCurrency } from "./format.js";
 import {
   applyPreset,
+  debounce,
   getConfig,
   getRegionId,
   setParam,
@@ -65,6 +66,20 @@ function buildSlider(def, container) {
     if (def.key === "propertyPrice") syncFtbToPrice();
   };
   input.addEventListener("input", () => apply(Number(input.value), true));
+  // Sent when the slider is released, or 500 ms after the last keyboard
+  // step (each arrow-key press is its own change). The typed path's
+  // synthetic change is not trusted, so openTypedField counts that one itself.
+  const sendSliderChange = () =>
+    trackEvent("value-changed", { field: def.key, via: "slider" });
+  const sendKeyboardChange = debounce(sendSliderChange, 500);
+  let keyboard = false;
+  input.addEventListener("keydown", () => { keyboard = true; });
+  input.addEventListener("pointerdown", () => { keyboard = false; });
+  input.addEventListener("change", (e) => {
+    if (!e.isTrusted) return;
+    if (keyboard) sendKeyboardChange();
+    else sendSliderChange();
+  });
   value.addEventListener("click", () =>
     openTypedField(def, value, input, getConfig()[def.key] * scale, apply),
   );
@@ -108,6 +123,7 @@ function openTypedField(def, value, slider, shown, apply) {
       if (def.key === "levyDeductionCap" && clamped < 0) clamped = def.min;
       slider.value = clamped;
       apply(clamped);
+      trackEvent("value-changed", { field: def.key, via: "typed" });
       // A typed value counts as a slider change (the tour's do-it step).
       slider.dispatchEvent(new Event("change", { bubbles: true }));
     }

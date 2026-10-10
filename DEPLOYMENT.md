@@ -13,11 +13,14 @@ driven by two runtime env vars — nothing about Umami lives in the repo or the
 image. `UmamiInjectionMiddleware` (see `server.py`) inserts:
 
 ```html
-<script defer src="${UMAMI_DOMAIN}/script.js" data-website-id="${UMAMI_ID}"></script>
+<script defer src="${UMAMI_DOMAIN}/script.js" data-website-id="${UMAMI_ID}" data-before-send="umamiBeforeSend"></script>
 ```
 
 into the HTML page just before `</body>`, with the values read from the
-container env at process start.
+container env at process start. `data-before-send` names a hook in
+`static/js/analytics.js` that Umami calls before it sends anything (see
+**Events** below). The hook requires Umami 2.18.0 or newer; older trackers
+ignore the attribute.
 
 ### One-time setup
 
@@ -54,7 +57,10 @@ UMAMI_DOMAIN="https://analytics.example.com" \
   UMAMI_ID="123e4567-e89b-42d3-a456-426614174000" \
   uv run uvicorn simulator.server:app --port 8011
 curl -s http://localhost:8011/ | grep -o '<script defer src="[^"]*"[^>]*>'
-# → <script defer src="https://analytics.example.com/script.js" data-website-id="123e4567-e89b-42d3-a456-426614174000">
+# → <script defer src="https://analytics.example.com/script.js" data-website-id="123e4567-e89b-42d3-a456-426614174000" data-before-send="umamiBeforeSend">
+
+# The Umami instance supports the hook (2.18.0 or newer). Use your UMAMI_DOMAIN.
+curl -s https://analytics.example.com/script.js | grep -c before-send   # must print 1
 ```
 
 Then load the site and confirm a hit appears in Umami's Realtime view. To see a
@@ -63,7 +69,22 @@ custom event, clear the `rvb.tour.v1` localStorage key, reload, and click
 
 ### Events
 
-Pageviews are automatic. Custom events:
+Umami records page views automatically, and it records a new one each time
+the address bar changes. The app rewrites the address bar after every change
+to the inputs, so the `umamiBeforeSend` hook does three things:
+
+- It removes the app's own parameters (the input values, `r` and `v`) from the
+  URL of every page view and event, and from every referrer. Other
+  parameters, such as `utm_*` and `ref`, stay.
+- It sends only the first page view for a path. Each page load therefore counts
+  as one view of `/` (or `/?utm_source=...` for a campaign link). That first
+  page view reports the URL the visitor landed on, saved when the page loads,
+  because the tracker can start after the app's first address-bar rewrite.
+- It sends `link-opened` when that landing URL carries the app's parameters.
+
+Custom events. Interaction events are sent only for real (trusted) user
+actions, so the tour's clicks do not count. The tour events are sent whenever
+the tour starts or ends.
 
 - `tour-started`
 - `tour-completed`
@@ -71,6 +92,14 @@ Pageviews are automatic. Custom events:
 - `region-changed` (`{ region }`)
 - `outlook-changed` (`{ outlook }`)
 - `ftb-toggled` (`{ on }`)
+- `inputs-opened` — the **Edit your numbers** button opens the phone inputs sheet
+- `advanced-opened` — the **Advanced** drawer opens (closing it is not sent)
+- `value-changed` (`{ field, via }`) — sent when a slider is released, or
+  500 ms after the last keyboard step (`via: "slider"`), or when an exact value
+  is typed (`via: "typed"`); `field` is the input's config key
+- `link-shared` — the **Share this scenario** button
+- `link-opened` — the visitor arrived through a link that carries the app's
+  parameters (a shared scenario); sent once per page load, after the page view
 
 ### Notes
 
