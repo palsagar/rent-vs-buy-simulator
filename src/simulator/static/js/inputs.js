@@ -1,4 +1,5 @@
-// Input rendering: left panel (core + assumptions), advanced drawer,
+// Input rendering: left panel (core + assumptions; advanced.js adds the
+// Advanced groups through buildField),
 // region and outlook preset pills. Slider `scale` converts between the
 // stored value and the displayed one (decimal rates display ×100).
 
@@ -23,7 +24,6 @@ const OUTLOOK_PRESETS = {
 const SECTION_CONTAINERS = {
   core: "core-inputs",
   assumptions: "assumption-inputs",
-  advanced: "advanced-inputs",
 };
 
 const widgets = []; // { def, refresh() } — refresh re-reads state into the widget
@@ -472,14 +472,20 @@ function buildPresetPills(regions) {
   }
 }
 
+/** Render one field's widget into `container`. advanced.js uses it too. */
+export function buildField(def, container) {
+  if (def.type === "segmented") buildSegmented(def, container);
+  else if (def.type === "checkbox") buildCheckbox(def, container);
+  else if (def.type === "select") buildSelect(def, container);
+  else buildSlider(def, container);
+}
+
 export function initInputs(regions) {
   regionsList = regions;
+  // advanced.js renders the Advanced fields into their groups.
   for (const def of INPUT_DEFS) {
-    const container = document.getElementById(SECTION_CONTAINERS[def.section]);
-    if (def.type === "segmented") buildSegmented(def, container);
-    else if (def.type === "checkbox") buildCheckbox(def, container);
-    else if (def.type === "select") buildSelect(def, container);
-    else buildSlider(def, container);
+    if (def.section === "advanced") continue;
+    buildField(def, document.getElementById(SECTION_CONTAINERS[def.section]));
   }
   buildPresetPills(regions);
   syncInputs();

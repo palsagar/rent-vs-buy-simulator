@@ -96,8 +96,8 @@ test('a typed value with malformed separators keeps the old value', async ({ pag
 test('a typed negative levy cap is stored as uncapped, with the thumb at its left end', async ({ page }) => {
   // Any negative cap means uncapped, but the slider shows that only at its
   // minimum; -500 would leave the thumb on 0, "levy not deductible".
-  await page.click('#advanced-btn');
-  const row = page.locator('#advanced-inputs .slider-row', { hasText: 'Levy is also deductible' });
+  await page.locator('details.adv-group[data-group="mortgage-relief"] summary').click();
+  const row = page.locator('.adv-field[data-key="levyDeductionCap"] .slider-row');
   await row.locator('.slider-value').click();
   const field = row.locator('.slider-typed');
   await field.fill('-500');

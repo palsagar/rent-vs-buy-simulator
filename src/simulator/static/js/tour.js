@@ -96,7 +96,6 @@ export class Tour {
         // we can hand focus back when the tour ends or is escaped.
         this._launcher = document.activeElement;
         document.getElementById('guide-overlay')?.classList.add('hidden');
-        document.getElementById('advanced-panel')?.classList.remove('visible');
         document.getElementById('input-panel')?.classList.remove('visible');
         document.getElementById('drawer-scrim')?.classList.add('hidden');
         this._snapshot = snapshotSettings();
@@ -141,7 +140,7 @@ export class Tour {
             this._scrollTimer = setTimeout(() => this._layout(), 80);
         };
         // Scroll events don't bubble; a capture-phase listener catches any
-        // scrollable descendant (results, input/advanced drawers, preset-bar).
+        // scrollable descendant (results, the inputs drawer, preset-bar).
         document.addEventListener('scroll', this._onScroll, { capture: true, passive: true });
         this._goTo(0);
     }
@@ -178,11 +177,10 @@ export class Tour {
             clearTimeout(this._scrollTimer);
             clearTimeout(this._recheckTimer);
             this._detachTargetRelayoutListener();
-            // Leave any drawer the tour opened (mobile inputs, advanced)
+            // Leave any drawer the tour opened (mobile inputs)
             // closed, matching the state tour start() set up, and drop its
             // scrim if one was shown.
             document.getElementById('input-panel')?.classList.remove('visible');
-            document.getElementById('advanced-panel')?.classList.remove('visible');
             document.getElementById('drawer-scrim')?.classList.add('hidden');
             Tour.writeFlag(result);
             this._removeDom();
@@ -339,7 +337,7 @@ export class Tour {
         this._installAction(step);
 
         this._layout();
-        // Targets with CSS transitions (the Advanced panel slides in over
+        // Targets with CSS transitions (the phone inputs sheet slides in over
         // 0.3 s) get one deferred pass so the ring lands on their final rect.
         clearTimeout(this._relayoutTimer);
         this._relayoutTimer = setTimeout(() => this._layout(), 350);
@@ -384,7 +382,7 @@ export class Tour {
 
     /**
      * Make an off-viewport target frameable. A target hidden by a collapsed
-     * drawer (mobile inputs, right-side advanced) is opened via its toggle
+     * drawer (mobile inputs) is opened via its toggle
      * button (never ui.js internals); any target outside the viewport is then
      * scrolled into view so the spotlight ring can frame it. A target inside
      * the phone inputs sheet is also scrolled when it is not fully below the
@@ -406,7 +404,6 @@ export class Tour {
         // never toggle closed — and reuse the app's toggle button so we stay
         // decoupled from ui.js (it also re-shows the scrim).
         const inputPanel = document.getElementById('input-panel');
-        const advancedPanel = document.getElementById('advanced-panel');
         let reopened = false;
         // #input-panel is only a closeable drawer in the mobile regime, where
         // the #inputs-btn toggle is actually shown (see style.css max-width:900px
@@ -419,12 +416,6 @@ export class Tour {
         const drawerRegime = inputsBtn && window.getComputedStyle(inputsBtn).display !== 'none';
         if (drawerRegime && inputPanel && inputPanel.contains(el) && !inputPanel.classList.contains('visible')) {
             inputsBtn.click();
-            reopened = true;
-        } else if (advancedPanel && advancedPanel.contains(el) && !advancedPanel.classList.contains('visible')) {
-            // #advanced-panel is a true overlay drawer at every width (a
-            // right-side panel on desktop, a bottom sheet on phones), so its
-            // class-based reopen stays ungated.
-            document.getElementById('advanced-btn')?.click();
             reopened = true;
         }
 
@@ -526,7 +517,7 @@ export class Tour {
 
     /**
      * Re-layout when the current target's CSS transition finishes, so a
-     * target that slides off-screen (e.g. the Advanced panel) falls back to the
+     * target that slides off-screen (e.g. a phone sheet that slides shut) falls back to the
      * centered-card layout instead of framing a hidden element.
      */
     _attachTargetRelayoutListener(el) {
@@ -644,10 +635,9 @@ export const STEPS = [
     { target: '#verdict-hero', title: 'The verdict', body: 'The headline: which strategy leaves you wealthier at your horizon, by how much, the breakeven year, and the Monte Carlo confidence. Four stat cards break down year-1 costs.' },
     { target: '#decision-chart', title: 'Net value over time', body: 'What you’d walk away with minus everything you put in, at every year — hover or tap for exact figures. Where the orange line crosses the blue is your breakeven.' },
     { target: '#fan-chart', title: 'How sure is this?', body: '500 simulated futures with randomized year-by-year returns. The fan shows the range of outcomes; the tornado below ranks which assumptions swing the result most.' },
-    { target: '#advanced-btn', title: 'Advanced assumptions', body: 'Open the drawer: tax deductibility, capital gains, levies, maintenance — every default follows the selected region. Open it now, then press Next.', onLeave: () => {
-        document.getElementById('advanced-panel')?.classList.remove('visible');
-        // On a phone the Advanced button lives in the inputs sheet, which the
-        // tour opened to reach it; the next steps frame the results.
+    { target: '#advanced-section', title: 'Advanced', body: 'Fine-tune the details: open a group to change buying costs, yearly costs and taxes. A dot marks anything you changed from the region default.', onLeave: () => {
+        // On a phone the section lives in the inputs sheet, which the tour
+        // opened to reach it; the next steps frame the results.
         document.getElementById('input-panel')?.classList.remove('visible');
         document.getElementById('drawer-scrim')?.classList.add('hidden');
     } },

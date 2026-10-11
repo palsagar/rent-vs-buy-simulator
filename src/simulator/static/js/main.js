@@ -2,6 +2,7 @@
 // deterministic run and a slower Monte Carlo run, each debounced,
 // aborted when superseded, and cached by config hash.
 
+import { initAdvanced } from "./advanced.js";
 import { getRegions, postMonteCarlo, postSimulate } from "./api.js";
 import { initInputs, syncInputs } from "./inputs.js";
 import { initPhoneLayout } from "./layout.js";
@@ -160,6 +161,8 @@ async function init() {
     ];
   }
   initInputs(regions);
+  // After initInputs: the groups reuse its builders and its region state.
+  initAdvanced();
   initUi(tour);
   syncInputs();
   onConfigChange((_cfg, { drag }) => {
