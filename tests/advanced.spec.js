@@ -337,3 +337,46 @@ test('a UK price above the relief ceiling does not mark the buying costs as chan
   await expect(summaries(page).first()).toHaveText(`Buy 5% ${MINUS} £6,900 · Sell 1.75%`);
   await expect(changedCount(page, 'transaction')).toHaveText('');
 });
+
+test('the region default line shows the exact default when the rounded one would match the field', async ({ page }) => {
+  await boot(page);
+  await page.locator('#region-pills .preset-btn', { hasText: 'NL' }).click();
+  await openGroup(page, 'mortgage-relief');
+  await typeAdvanced(page, 'marginalTaxRatePct', '38');
+  // The field shows 0 decimals, so a rounded default would also read "38%".
+  await expect(field(page, 'marginalTaxRatePct').locator('.adv-changed-note')).toHaveText('Region default: 37.56%');
+});
+
+test('a keyboard reset leaves focus on the group header', async ({ page }) => {
+  await boot(page);
+  await openGroup(page, 'transaction');
+  await typeAdvanced(page, 'closingCostSellerPct', '4.5');
+  await resetButton(page, 'transaction').focus();
+  await page.keyboard.press('Enter');
+  await expect(resetButton(page, 'transaction')).toBeHidden();
+  await expect(group(page, 'transaction').locator('summary')).toBeFocused();
+});
+
+test('the levy choice buttons are labelled as one group', async ({ page }) => {
+  await boot(page);
+  await openGroup(page, 'mortgage-relief');
+  const choices = page.getByRole('group', { name: 'Levy is also deductible' });
+  await expect(choices.getByRole('button')).toHaveText(['No cap', 'Capped at…', 'Not deductible']);
+});
+
+test.describe('phone text size', () => {
+  test.use(PHONE);
+
+  test('the Advanced summaries, notes, reset and levy choice are at least 12px', async ({ page }) => {
+    await boot(page);
+    await page.click('#inputs-btn');
+    await openGroup(page, 'transaction');
+    await typeAdvanced(page, 'closingCostSellerPct', '4.5');
+    const tiny = await page.evaluate(() =>
+      [...document.querySelectorAll('.adv-group-summary, .adv-changed-note, .adv-reset, .seg-picker--text .seg-btn')]
+        .filter((el) => parseFloat(getComputedStyle(el).fontSize) < 12)
+        .map((el) => el.className),
+    );
+    expect(tiny).toEqual([]);
+  });
+});

@@ -85,6 +85,20 @@ function formatStored(def, stored) {
   return def.fmt(stored * (def.scale ?? 1));
 }
 
+/**
+ * The default for the "Region default" line. Several region rates have
+ * more decimals than their field shows (NL top tax rate 37.56% in a 0-decimal
+ * field), so where the rounded default reads the same as the current value,
+ * a rate shows its exact value instead.
+ */
+function formatDefault(def, fallback, current) {
+  const text = formatStored(def, fallback);
+  if (typeof fallback !== "number" || text !== formatStored(def, current) || !text.endsWith("%")) {
+    return text;
+  }
+  return `${Number((fallback * (def.scale ?? 1)).toFixed(4))}%`;
+}
+
 // One entry per group: { group, values, changed, reset, fields: [{ def, el, dot, note }] }.
 const rendered = [];
 
@@ -149,6 +163,9 @@ function buildGroup(group, host) {
     const keys = fields.map(({ def }) => def.key).filter((key) => key in defaults);
     applyPreset(Object.fromEntries(keys.map((key) => [key, defaults[key]])));
     syncInputs();
+    // The reset hides itself once nothing differs; keep keyboard focus in
+    // the group rather than dropping it to the page.
+    summary.focus();
     if (e.isTrusted) trackEvent("advanced-reset", { group: group.id });
   });
   body.appendChild(reset);
@@ -174,7 +191,9 @@ function refresh() {
       el.hidden = !visible;
       dot.hidden = !isChanged;
       note.hidden = !isChanged;
-      note.textContent = isChanged ? `Region default: ${formatStored(def, defaults[def.key])}` : "";
+      note.textContent = isChanged
+        ? `Region default: ${formatDefault(def, defaults[def.key], cfg[def.key])}`
+        : "";
       if (isChanged) {
         any = true;
         if (visible) shown += 1;

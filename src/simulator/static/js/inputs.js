@@ -233,6 +233,9 @@ function levyCapChoice(stored) {
 function buildLevyCap(def, container) {
   const picker = document.createElement("div");
   picker.className = "seg-picker seg-picker--text";
+  // Screen readers announce the field with each choice.
+  picker.setAttribute("role", "group");
+  picker.setAttribute("aria-label", def.label);
   const next = { none: def.min, zero: 0, capped: LEVY_CAP_START };
   const buttons = LEVY_CAP_CHOICES.map(([choice, text]) => {
     const btn = document.createElement("button");

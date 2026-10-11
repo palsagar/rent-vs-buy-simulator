@@ -728,6 +728,11 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   .seg-btn { min-height: 44px; }
   .adv-group summary { min-height: 44px; justify-content: center; }
   .adv-reset { min-height: 44px; }
+  /* The phone text floor, as for .slider-hint. */
+  .adv-group-summary,
+  .adv-changed-note,
+  .adv-reset,
+  .seg-picker--text .seg-btn { font-size: 12px; }
   .checkbox-row { min-height: 44px; }
   .checkbox-row input { width: 20px; height: 20px; }
   /* height, not min-height: WebKit ignores min-height on a native select. */
