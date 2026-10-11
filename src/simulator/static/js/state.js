@@ -80,7 +80,7 @@ const URL_SCHEMA_VERSION = "2";
 // Which region the user picked is state in its own right, NOT something
 // recoverable from the numbers. Reverse-matching a config against every
 // bundle's taxPrimitives fails the moment any one of them is edited --
-// and the Advanced drawer exists to be edited, with the bundle notes
+// and the Advanced inputs exist to be edited, with the bundle notes
 // actively telling users to do it. When the match failed, the currency
 // silently fell back to "$" and every modelling note vanished, so a
 // GBP simulation rendered in dollars with none of its caveats.
@@ -167,10 +167,8 @@ export function readUrl() {
     if (!params.has(key)) continue;
     const raw = params.get(key);
     if (isLegacy && key === "levyDeductionCap" && Number(raw) === 0) {
-      // -1000, not -1: the slider is min -1000 / step 1000, so -1 snaps
-      // the thumb to 0 -- which under v2 means "not deductible", the
-      // exact opposite of the uncapped value being restored. -1000 is
-      // on the grid, so the thumb agrees with the config.
+      // -1000 is the field's min and the canonical "no cap" value that
+      // the levy choice stores, so the restored link matches a click.
       restored[key] = -1000; // uncapped, new encoding
       continue;
     }

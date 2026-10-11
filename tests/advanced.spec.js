@@ -347,6 +347,36 @@ test('the region default line shows the exact default when the rounded one would
   await expect(field(page, 'marginalTaxRatePct').locator('.adv-changed-note')).toHaveText('Region default: 37.56%');
 });
 
+test('the region default line shows the exact amount when the compact one would match the field', async ({ page }) => {
+  await boot(page);
+  await openGroup(page, 'home-sale');
+  await typeAdvanced(page, 'saleCgExemptAmount', '250400');
+  // The field shows "$250k", so a compact default would also read "$250k".
+  await expect(field(page, 'saleCgExemptAmount').locator('.adv-changed-note')).toHaveText('Region default: $250,000');
+});
+
+test('two different negative levy caps both mean no cap, so neither counts as a change', async ({ page }) => {
+  // No shipped region defaults to "no cap", so give the US bundle one.
+  await page.route('**/api/regions', async (route) => {
+    const regions = await (await route.fetch()).json();
+    regions.find((r) => r.id === 'us').taxPrimitives.levyDeductionCap = -1000;
+    await route.fulfill({ json: regions });
+  });
+  await boot(page, '/?v=2&r=us&levyDeductionCap=-500');
+  await openGroup(page, 'mortgage-relief');
+  await expect(capButton(page, 'No cap')).toHaveAttribute('aria-pressed', 'true');
+  await expect(field(page, 'levyDeductionCap').locator('.adv-changed-note')).toBeHidden();
+  await expect(changedCount(page, 'mortgage-relief')).toHaveText('');
+});
+
+test('a one-year home-sale rule reads "1 yr"', async ({ page }) => {
+  await boot(page);
+  await openGroup(page, 'home-sale');
+  await field(page, 'saleCgRegime').locator('select').selectOption('exempt_after_years');
+  await typeAdvanced(page, 'saleCgExemptAfterYears', '1');
+  await expect(summaries(page).nth(3)).toHaveText('Tax-free after 1 yr');
+});
+
 test('a keyboard reset leaves focus on the group header', async ({ page }) => {
   await boot(page);
   await openGroup(page, 'transaction');

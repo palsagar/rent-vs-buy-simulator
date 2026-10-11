@@ -43,7 +43,7 @@ function summarizeMortgageRelief(c) {
 
 function summarizeHomeSale(c) {
   if (c.saleCgRegime === "exempt_amount") return `Tax-free up to ${fmtCompact(c.saleCgExemptAmount)}`;
-  if (c.saleCgRegime === "exempt_after_years") return `Tax-free after ${c.saleCgExemptAfterYears} yrs`;
+  if (c.saleCgRegime === "exempt_after_years") return `Tax-free after ${c.saleCgExemptAfterYears} ${c.saleCgExemptAfterYears === 1 ? "yr" : "yrs"}`;
   return "Always tax-free";
 }
 
@@ -69,6 +69,10 @@ const PAIR_NOTES = {
   annualMaintenanceAmount: "Both apply. The total is the % of the home's value plus the fixed amount.",
 };
 
+// Every negative levy cap means "no cap", and a share link may carry any
+// of them, so two negative caps are the same setting.
+const levyCapSetting = (v) => (v < 0 ? -1 : v);
+
 function differs(value, fallback) {
   if (typeof value === "number" && typeof fallback === "number") {
     return Math.abs(value - fallback) > FLOAT_TOLERANCE;
@@ -86,17 +90,18 @@ function formatStored(def, stored) {
 }
 
 /**
- * The default for the "Region default" line. Several region rates have
- * more decimals than their field shows (NL top tax rate 37.56% in a 0-decimal
- * field), so where the rounded default reads the same as the current value,
- * a rate shows its exact value instead.
+ * The default for the "Region default" line. A field can show less than the
+ * region's value: a rate has more decimals than its field (NL top tax rate
+ * 37.56% in a 0-decimal field), and a compact amount drops digits ($250,400
+ * reads "$250k"). Where the field's text would read the same as the current
+ * value, the line shows the exact default instead: a rate to 4 decimals, an
+ * amount in full.
  */
-function formatDefault(def, fallback, current) {
-  const text = formatStored(def, fallback);
-  if (typeof fallback !== "number" || text !== formatStored(def, current) || !text.endsWith("%")) {
-    return text;
-  }
-  return `${Number((fallback * (def.scale ?? 1)).toFixed(4))}%`;
+function formatDefault(def, regionValue, current) {
+  const text = formatStored(def, regionValue);
+  if (typeof regionValue !== "number" || text !== formatStored(def, current)) return text;
+  const exact = regionValue * (def.scale ?? 1);
+  return text.endsWith("%") ? `${Number(exact.toFixed(4))}%` : fmtMoney(exact);
 }
 
 // One entry per group: { group, values, changed, reset, fields: [{ def, el, dot, note }] }.
@@ -186,8 +191,11 @@ function refresh() {
       const visible = def.visibleWhen ? def.visibleWhen(cfg) : true;
       // A key missing from the defaults (the offline fallback region has
       // no bundle) has nothing to compare against.
+      const asSetting = def.type === "levyCap" ? levyCapSetting : (v) => v;
       const isChanged =
-        defaults !== null && def.key in defaults && differs(cfg[def.key], defaults[def.key]);
+        defaults !== null &&
+        def.key in defaults &&
+        differs(asSetting(cfg[def.key]), asSetting(defaults[def.key]));
       el.hidden = !visible;
       dot.hidden = !isChanged;
       note.hidden = !isChanged;
