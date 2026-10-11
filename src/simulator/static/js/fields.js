@@ -20,7 +20,9 @@
 // region values -- so a value here is a contract, not a local default.
 //
 // Advanced entries are listed in display order. `group` names the
-// collapsible group advanced.js renders them into.
+// collapsible group advanced.js renders them into; `visibleWhen` hides a
+// field while another field switches it off in the engine. Hiding is
+// display only: the value is still sent and still in the share link.
 
 import { fmtCompact, fmtMoney, fmtPct } from "./format.js";
 
@@ -45,12 +47,12 @@ export const INPUT_DEFS = [
   { key: "annualMaintenanceAmount", label: "Maintenance (fixed per year)", min: 0, max: 10000, step: 50, fmt: fmtMoney, section: "advanced", group: "yearly", hint: "Upkeep as a fixed amount, such as charges for a shared building." },
   { key: "costInflationRate", label: "Cost inflation", min: 0, max: 10, step: 0.1, scale: 100, fmt: (v) => fmtPct(v), section: "advanced", group: "yearly", hint: "How fast the fixed amounts in this group rise each year. The % amounts follow the home's value instead." },
   { key: "interestDeductionEnabled", label: "Deduct mortgage interest from income tax", type: "checkbox", section: "advanced", group: "mortgage-relief", hint: "On where homeowners can deduct mortgage interest, as in the US and the Netherlands." },
-  { key: "marginalTaxRatePct", label: "Your top income-tax rate", min: 0, max: 60, step: 0.01, fmt: (v) => fmtPct(v, 0), section: "advanced", group: "mortgage-relief", hint: "The rate on the top slice of your income. Each 1,000 you deduct saves you this % of it." },
-  { key: "levyDeductionCap", label: "Levy is also deductible", min: -1000, max: 50000, step: 1000, fmt: (v) => (v < 0 ? "uncapped" : fmtMoney(v)), section: "advanced", group: "mortgage-relief", hint: "Whether the property levy can be deducted too, and up to what amount per year." },
+  { key: "marginalTaxRatePct", label: "Your top income-tax rate", min: 0, max: 60, step: 0.01, fmt: (v) => fmtPct(v, 0), section: "advanced", group: "mortgage-relief", visibleWhen: (c) => c.interestDeductionEnabled, hint: "The rate on the top slice of your income. Each 1,000 you deduct saves you this % of it." },
+  { key: "levyDeductionCap", label: "Levy is also deductible", min: -1000, max: 50000, step: 1000, fmt: (v) => (v < 0 ? "uncapped" : fmtMoney(v)), section: "advanced", group: "mortgage-relief", visibleWhen: (c) => c.interestDeductionEnabled, hint: "Whether the property levy can be deducted too, and up to what amount per year." },
   { key: "saleCgRegime", label: "When is profit on the home taxed?", type: "select", options: [["exempt_amount", "Tax-free up to a fixed amount"], ["exempt_after_years", "Tax-free after you've owned it N years"], ["fully_exempt", "Always tax-free"]], section: "advanced", group: "home-sale" },
-  { key: "saleCgExemptAmount", label: "Tax-free profit", min: 0, max: 1000000, step: 10000, fmt: fmtCompact, section: "advanced", group: "home-sale", hint: "Profit up to this amount is tax-free. The US allows $250,000 for a single person." },
-  { key: "saleCgExemptAfterYears", label: "Tax-free after (years owned)", min: 0, max: 30, step: 1, fmt: (v) => `${v} yrs`, section: "advanced", group: "home-sale", hint: "If you sell sooner, the whole profit is taxed." },
-  { key: "saleCgRatePct", label: "Tax rate on taxable profit", min: 0, max: 40, step: 0.1, fmt: (v) => fmtPct(v), section: "advanced", group: "home-sale" },
+  { key: "saleCgExemptAmount", label: "Tax-free profit", min: 0, max: 1000000, step: 10000, fmt: fmtCompact, section: "advanced", group: "home-sale", visibleWhen: (c) => c.saleCgRegime === "exempt_amount", hint: "Profit up to this amount is tax-free. The US allows $250,000 for a single person." },
+  { key: "saleCgExemptAfterYears", label: "Tax-free after (years owned)", min: 0, max: 30, step: 1, fmt: (v) => `${v} yrs`, section: "advanced", group: "home-sale", visibleWhen: (c) => c.saleCgRegime === "exempt_after_years", hint: "If you sell sooner, the whole profit is taxed." },
+  { key: "saleCgRatePct", label: "Tax rate on taxable profit", min: 0, max: 40, step: 0.1, fmt: (v) => fmtPct(v), section: "advanced", group: "home-sale", visibleWhen: (c) => c.saleCgRegime !== "fully_exempt" },
   { key: "portfolioCgRatePct", label: "Tax on investment profit", min: 0, max: 40, step: 0.025, fmt: (v) => fmtPct(v), section: "advanced", group: "investments", hint: "Charged on the profit when the investments are cashed in. It applies to whichever side invests." },
   { key: "portfolioDeemedReturnPct", label: "Wealth tax: assumed return", min: 0, max: 15, step: 0.05, fmt: (v) => fmtPct(v, 2), section: "advanced", group: "investments", hint: "Some countries tax an assumed return instead of real profit, such as the Netherlands (box 3). Leave it at 0 elsewhere." },
   { key: "portfolioDragRatePct", label: "Wealth tax: rate", min: 0, max: 60, step: 0.5, fmt: (v) => fmtPct(v, 1), section: "advanced", group: "investments", hint: "Charged every year on the assumed return, or on your real return if that is lower." },

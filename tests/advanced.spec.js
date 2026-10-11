@@ -107,3 +107,91 @@ test.describe('phone', () => {
     await expect(page.locator('#sheet-verdict')).toBeInViewport();
   });
 });
+
+const MINUS = '−';
+const summaries = (page) => page.locator('.adv-group-values');
+
+test('closed groups summarise the US values', async ({ page }) => {
+  await boot(page);
+  await expect(summaries(page)).toHaveText([
+    'Buy 3% · Sell 6%',
+    '≈ $12,200 in year 1',
+    'On · 24% tax rate',
+    'Tax-free up to $250k',
+    '15% on gains',
+  ]);
+});
+
+test('closed groups summarise the UK values, with and without the relief', async ({ page }) => {
+  await boot(page);
+  await page.locator('#region-pills .preset-btn', { hasText: 'UK' }).click();
+  await expect(summaries(page)).toHaveText([
+    'Buy 0% + £3,100 · Sell 1.75%',
+    '≈ £3,602 in year 1',
+    'Off',
+    'Always tax-free',
+    '24% on gains',
+  ]);
+  await page.locator('#ftb-pill .preset-btn').click();
+  await expect(summaries(page).first()).toHaveText(`Buy 5% ${MINUS} £6,900 · Sell 1.75%`);
+});
+
+test('the Netherlands summary shows the yearly wealth tax', async ({ page }) => {
+  await boot(page);
+  await page.locator('#region-pills .preset-btn', { hasText: 'NL' }).click();
+  await expect(summaries(page).last()).toHaveText('0% on gains · wealth tax 2.16%/yr');
+});
+
+test('a summary follows a typed value', async ({ page }) => {
+  await boot(page);
+  await openGroup(page, 'transaction');
+  const row = field(page, 'closingCostSellerPct').locator('.slider-row');
+  await row.locator('.slider-value').click();
+  await row.locator('.slider-typed').fill('4.5');
+  await row.locator('.slider-typed').press('Enter');
+  await expect(summaries(page).first()).toHaveText('Buy 3% · Sell 4.5%');
+});
+
+test('switching the deduction off hides the two fields it controls', async ({ page }) => {
+  await boot(page);
+  await openGroup(page, 'mortgage-relief');
+  await expect(field(page, 'marginalTaxRatePct')).toBeVisible();
+  await expect(field(page, 'levyDeductionCap')).toBeVisible();
+  await page.getByLabel('Deduct mortgage interest from income tax').uncheck();
+  await expect(field(page, 'marginalTaxRatePct')).toBeHidden();
+  await expect(field(page, 'levyDeductionCap')).toBeHidden();
+  await expect(summaries(page).nth(2)).toHaveText('Off');
+});
+
+test('each home-sale rule shows only the fields it uses, and hidden values are still sent', async ({ page }) => {
+  await boot(page);
+  await openGroup(page, 'home-sale');
+  const select = field(page, 'saleCgRegime').locator('select');
+  const visible = async () => ({
+    amount: await field(page, 'saleCgExemptAmount').isVisible(),
+    years: await field(page, 'saleCgExemptAfterYears').isVisible(),
+    rate: await field(page, 'saleCgRatePct').isVisible(),
+  });
+  expect(await visible()).toEqual({ amount: true, years: false, rate: true });
+  await select.selectOption('exempt_after_years');
+  await expect(field(page, 'saleCgExemptAfterYears')).toBeVisible();
+  expect(await visible()).toEqual({ amount: false, years: true, rate: true });
+  const sent = page.waitForRequest(
+    (req) => req.url().endsWith('/api/simulate') && req.postDataJSON().saleCgRegime === 'fully_exempt',
+  );
+  await select.selectOption('fully_exempt');
+  await expect(field(page, 'saleCgRatePct')).toBeHidden();
+  expect(await visible()).toEqual({ amount: false, years: false, rate: false });
+  expect((await sent).postDataJSON().saleCgRatePct).toBe(15);
+});
+
+test('each percentage-plus-fixed pair has one note under its fixed half', async ({ page }) => {
+  await boot(page);
+  const notes = page.locator('.adv-pair-note');
+  await expect(notes).toHaveCount(3);
+  for (const key of ['closingCostBuyerAmount', 'annualPropertyLevy', 'annualMaintenanceAmount']) {
+    const next = await field(page, key).evaluate((el) => el.nextElementSibling?.className);
+    expect(next).toContain('adv-pair-note');
+  }
+  await expect(notes.first()).toHaveText('Both apply. The total is the % of the price plus the fixed amount.');
+});
