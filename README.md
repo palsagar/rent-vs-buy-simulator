@@ -6,9 +6,18 @@
 
 </div>
 
-![Rent or Buy? verdict — how far apart buying and renting end at your horizon, how often each wins across simulated futures, and when it is too close to call](src/simulator/static/screenshots/verdict.png)
+![Rent or Buy? verdict — how far apart buying and renting end at your horizon, how often each wins across simulated futures, and when it is too close to call](https://raw.githubusercontent.com/palsagar/rent-vs-buy-simulator/main/src/simulator/static/screenshots/verdict.png)
 
 ## Run it
+
+Install from PyPI and start the app:
+
+```bash
+pip install rent-vs-buy-simulator
+rent-vs-buy            # serves the app at http://localhost:8501 (set PORT to change it)
+```
+
+Or run it from a clone of the repo:
 
 ```bash
 uv run uvicorn simulator.server:app --port 8000
@@ -27,16 +36,16 @@ Open http://localhost:8000.
 
 Every slider input updates the charts live, and the address bar is always a shareable link to your exact scenario.
 
-![Rent or Buy? guide — built-in documentation with the Replay the Tour entry point](src/simulator/static/screenshots/guide.png)
+![Rent or Buy? guide — built-in documentation with the Replay the Tour entry point](https://raw.githubusercontent.com/palsagar/rent-vs-buy-simulator/main/src/simulator/static/screenshots/guide.png)
 
 ## Understanding & hacking Rent or Buy?
 
-- [docs/README.md](docs/README.md) — full annotated index
-- [docs/architecture.md](docs/architecture.md) — system + module map
-- [docs/formulas.md](docs/formulas.md) — the math behind the engine (Net Value, Monte Carlo, tax primitives)
-- [docs/adr/README.md](docs/adr/README.md) — 9 design decisions
-- [CONTEXT.md](CONTEXT.md) — project vocabulary
-- [DEPLOYMENT.md](DEPLOYMENT.md) — Docker + analytics wiring
+- [docs/README.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/docs/README.md) — full annotated index
+- [docs/architecture.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/docs/architecture.md) — system + module map
+- [docs/formulas.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/docs/formulas.md) — the math behind the engine (Net Value, Monte Carlo, tax primitives)
+- [docs/adr/README.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/docs/adr/README.md) — 9 design decisions
+- [CONTEXT.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/CONTEXT.md) — project vocabulary
+- [DEPLOYMENT.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/DEPLOYMENT.md) — Docker + analytics wiring
 
 ## Numbers
 
@@ -55,4 +64,4 @@ Verified from source, not asserted:
 - `npx playwright test` — headless E2E (the config leaves Playwright's default headless mode) over the welcome modal, 12-step tour, analytics contract, a11y, and share/restore specs.
 - `Dockerfile` for deploy (FastAPI + static files, `PORT` selects the listen port).
 
-See [docs/formulas.md](docs/formulas.md) for the mathematical reference and [CONTEXT.md](CONTEXT.md) for the vocabulary.
+See [docs/formulas.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/docs/formulas.md) for the mathematical reference and [CONTEXT.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/CONTEXT.md) for the vocabulary.
