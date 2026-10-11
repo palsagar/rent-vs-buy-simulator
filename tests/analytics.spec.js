@@ -239,17 +239,35 @@ test.describe('real tracker', () => {
     expect(views[0].referrer).toBe('https://news.example/');
   });
 
-  test('advanced-opened fires on a real open only', async ({ page }) => {
+  test('advanced-group-opened fires when a real click opens a group', async ({ page }) => {
     const sent = await fakeUmami(page);
     await openTracked(page);
-    // The tour opens the drawer the same way: a programmatic click.
-    await page.evaluate(() => document.getElementById('advanced-btn').click());
-    await page.locator('#advanced-close').click();
-    await page.locator('#advanced-btn').click();
-    await page.locator('#advanced-close').click();
-    await expect.poll(() => named(sent, 'advanced-opened').length).toBe(1);
+    const summary = page.locator('details.adv-group[data-group="mortgage-relief"] summary');
+    // The tour clicks programmatically; that open is not counted.
+    await summary.evaluate((el) => el.click());
+    await summary.click(); // a real click that closes it: not counted
+    await summary.click(); // a real click that opens it: counted
+    await expect.poll(() => named(sent, 'advanced-group-opened').length).toBe(1);
     await settle(page);
-    expect(named(sent, 'advanced-opened')).toEqual([['advanced-opened', undefined]]);
+    expect(named(sent, 'advanced-group-opened')).toEqual([
+      ['advanced-group-opened', { group: 'mortgage-relief' }],
+    ]);
+  });
+
+  test('advanced-reset fires on a real click only', async ({ page }) => {
+    const sent = await fakeUmami(page);
+    await openTracked(page);
+    const group = page.locator('details.adv-group[data-group="mortgage-relief"]');
+    await group.locator('summary').click();
+    const deduct = group.getByLabel('Deduct mortgage interest from income tax');
+    const reset = group.locator('.adv-reset');
+    await deduct.uncheck();
+    await reset.evaluate((el) => el.click()); // programmatic: not counted
+    await deduct.uncheck();
+    await reset.click();
+    await expect.poll(() => named(sent, 'advanced-reset').length).toBe(1);
+    await settle(page);
+    expect(named(sent, 'advanced-reset')).toEqual([['advanced-reset', { group: 'mortgage-relief' }]]);
   });
 
   test('value-changed fires once per slider release and per typed value', async ({ page }) => {

@@ -293,46 +293,59 @@ input[type="range"]::-moz-range-thumb {
   cursor: pointer;
 }
 .seg-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* Word labels (the levy cap choice) instead of the mono numbers. */
+.seg-picker--text .seg-btn { font-family: inherit; font-size: 11px; line-height: 1.2; padding: 4px 2px; }
 
-/* Advanced drawer (ported) */
-#advanced-panel {
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 280px;
-  background: var(--surface);
-  border-left: 1px solid var(--border);
-  padding: 16px;
-  transform: translateX(100%);
-  transition: transform 0.3s ease;
-  z-index: 260;
-  overflow-y: auto;
-}
-#advanced-panel.visible { transform: translateX(0); }
-.panel-header {
-  font-weight: 600;
-  font-size: 14px;
-  color: #f0f6fc;
-  margin-bottom: 16px;
+/* Advanced: collapsible groups at the end of the inputs panel */
+.adv-intro { margin-bottom: 8px; }
+.adv-group { border-top: 1px solid var(--border); }
+.adv-group:last-child { border-bottom: 1px solid var(--border); }
+.adv-group summary {
+  position: relative;
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0 8px 16px;
+  cursor: pointer;
+  list-style: none;
 }
-.panel-header button {
+.adv-group summary::-webkit-details-marker { display: none; }
+.adv-group summary::before {
+  content: "▸";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.adv-group[open] summary::before { content: "▾"; }
+.adv-group summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.adv-group-title { font-size: 12px; font-weight: 600; color: #c9d1d9; }
+.adv-group-summary { font-size: 11px; font-family: var(--mono); color: var(--muted); }
+.adv-group-body { padding: 4px 0 8px; }
+/* A display rule below must not override a hidden marker, note or field. */
+.adv-group [hidden] { display: none; }
+.adv-pair-note { margin: -4px 0 10px; }
+.adv-changed-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--accent-text);
+  vertical-align: middle;
+}
+.adv-changed-note { font-size: 10px; color: var(--accent-text); margin: -6px 0 10px; }
+.adv-group-changed { color: var(--accent-text); }
+.adv-reset {
+  padding: 0;
   background: none;
   border: none;
-  color: var(--muted);
+  font-size: 11px;
+  color: var(--accent-text);
+  text-decoration: underline;
   cursor: pointer;
-  font-size: 16px;
-  width: 44px;
-  height: 44px;
-  margin: -14px -14px 0 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
 }
-.panel-header button:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
 
 /* Drawer scrim — translucent backdrop above the page content, below the drawers
    (z 260) so the drawers stay fully interactive, and below the tour overlay
@@ -655,8 +668,7 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
     visibility: visible;
     transition: transform 0.3s ease, visibility 0s;
   }
-  /* 64px tall exactly (border box): the Advanced sheet is 64px shorter than
-     this sheet so the verdict line stays in view above it. The 9px padding
+  /* 64px tall exactly (border box). The 9px padding
      leaves 45px of content height for the 44px Done button. */
   #sheet-header {
     display: flex;
@@ -694,34 +706,6 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   #sheet-outlook .preset-group { flex-wrap: wrap; margin: 0 0 12px; }
   /* The section title above already names the outlook pills. */
   #sheet-outlook .preset-label { display: none; }
-  #sheet-advanced { margin-top: 16px; }
-  #sheet-advanced .btn { width: 100%; }
-  /* Advanced is a second bottom sheet above the inputs sheet, 64px
-     shorter so the inputs sheet's verdict line (#sheet-header) shows. */
-  #advanced-panel {
-    position: fixed;
-    left: 0;
-    right: 0;
-    top: auto;
-    bottom: 0;
-    width: auto;
-    height: calc(60vh - 64px);
-    height: calc(60dvh - 64px);
-    border-left: none;
-    border-top: 1px solid var(--border);
-    border-radius: 14px 14px 0 0;
-    z-index: 270;
-    transform: translateY(100%);
-    /* Hidden once closed, like the inputs sheet. */
-    visibility: hidden;
-    transition: transform 0.3s ease, visibility 0s linear 0.3s;
-  }
-  #advanced-panel.visible {
-    transform: translateY(0);
-    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45);
-    visibility: visible;
-    transition: transform 0.3s ease, visibility 0s;
-  }
   /* The document scrolls on a phone, not #results: Safari only collapses
      its toolbars on a document scroll, and 100vh is taller than the
      visible area while they show. */
@@ -738,11 +722,17 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
      automatic minimum, so a wide chart or table would widen the page. */
   #results { overflow: visible; min-width: 0; }
   /* A scroll that starts in a sheet (or on the scrim) stays there. */
-  #input-panel,
-  #advanced-panel { overscroll-behavior: contain; }
+  #input-panel { overscroll-behavior: contain; }
   #drawer-scrim { touch-action: none; }
   /* Finger-sized controls. */
   .seg-btn { min-height: 44px; }
+  .adv-group summary { min-height: 44px; justify-content: center; }
+  .adv-reset { min-height: 44px; }
+  /* The phone text floor, as for .slider-hint. */
+  .adv-group-summary,
+  .adv-changed-note,
+  .adv-reset,
+  .seg-picker--text .seg-btn { font-size: 12px; }
   .checkbox-row { min-height: 44px; }
   .checkbox-row input { width: 20px; height: 20px; }
   /* height, not min-height: WebKit ignores min-height on a native select. */

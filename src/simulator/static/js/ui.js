@@ -9,18 +9,12 @@ import { verdictIsCurrent } from "./results.js";
 import { shareUrl } from "./state.js";
 
 export function initUi(tour) {
-  const panel = document.getElementById("advanced-panel");
-  // Analytics count only real clicks: the tour opens drawers with .click().
-  document.getElementById("advanced-btn").addEventListener("click", (e) => {
-    if (panel.classList.toggle("visible") && e.isTrusted) trackEvent("advanced-opened");
-  });
-  const advancedClose = document.getElementById("advanced-close");
-  advancedClose.addEventListener("click", () => {
-    panel.classList.remove("visible");
-    // On a phone the close button slides off-screen with the sheet; the
-    // Advanced button that opened it stays in view in the inputs sheet.
-    const mobile = window.getComputedStyle(document.getElementById("inputs-btn")).display !== "none";
-    if (mobile && document.activeElement === advancedClose) document.getElementById("advanced-btn").focus();
+  // Desktop only: on a phone the preset bar is hidden, and the groups sit
+  // in the inputs sheet right below the outlook section.
+  document.getElementById("advanced-btn").addEventListener("click", () => {
+    const section = document.getElementById("advanced-section");
+    section.scrollIntoView({ block: "start" });
+    section.querySelector("summary")?.focus({ preventScroll: true });
   });
 
   // ── Guide overlay ────────────────────────────────────────────────────────
@@ -162,14 +156,12 @@ export function initUi(tour) {
     const s = scrim();
     if (s) s.classList.toggle("hidden", !open);
   };
-  // On a phone the Advanced sheet opens on top of the inputs sheet, so Done,
-  // Esc and a tap outside them close both. After Esc, focus that was in a
-  // sheet goes to the button that reopens it, not off-screen.
+  // Done, Esc and a tap outside close the phone inputs sheet. After Esc,
+  // focus that was in the sheet goes to the button that reopens it, not
+  // off-screen.
   const closeSheets = (returnFocus) => {
-    const active = document.activeElement;
-    const focusInSheet = inputPanel.contains(active) || panel.contains(active);
+    const focusInSheet = inputPanel.contains(document.activeElement);
     setDrawer(false);
-    panel.classList.remove("visible");
     if (returnFocus && focusInSheet) document.getElementById("inputs-btn").focus();
   };
   document.getElementById("inputs-btn").addEventListener("click", (e) => {

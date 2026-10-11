@@ -3,7 +3,7 @@
 // next to the numbers they change, and the Guide button moves to the title
 // bar; above it everything returns to the preset bar.
 // Nodes are MOVED, never cloned, so listeners and ids survive: the tour
-// targets #region-pills, #ftb-pill, #outlook-pills, #advanced-btn and
+// targets #region-pills, #ftb-pill, #outlook-pills and
 // #guide-btn by id, and opens the inputs panel when a target is inside it.
 
 // Must match the max-width of the phone blocks in style.css.
@@ -13,7 +13,6 @@ const PHONE_QUERY = "(max-width: 900px)";
 const PHONE_MOVES = [
   ["region-group", "sheet-region"],
   ["outlook-group", "sheet-outlook"],
-  ["advanced-btn", "sheet-advanced"],
   ["guide-btn", "title-bar"],
 ];
 

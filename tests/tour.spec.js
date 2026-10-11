@@ -481,7 +481,7 @@ test('desktop: a real pointer on the spotlighted core slider works — no scrim 
   await expect(page.locator('#drawer-scrim')).toBeHidden();
 });
 
-test('step 8 keeps the Advanced drawer open while active and closes it on Next', async ({ page }) => {
+test('step 8 frames the Advanced section in the inputs panel', async ({ page }) => {
   await waitForPills(page);
   await startRealTour(page);
 
@@ -493,16 +493,8 @@ test('step 8 keeps the Advanced drawer open while active and closes it on Next',
     await page.waitForTimeout(100);
   }
   await expect(page.locator('.tour-counter')).toHaveText('9 / 12');
-
-  // Click the Advanced button: the drawer opens and STAYS open while active.
-  await page.click('#advanced-btn');
-  await expect(page.locator('#advanced-panel')).toHaveClass(/visible/);
-  await expect(page.locator('.tour-counter')).toHaveText('9 / 12'); // still on step 8
-
-  // Advancing with Next runs onLeave, which closes the drawer.
-  await page.locator('.tour-footer .tour-btn-primary').click();
-  await expect(page.locator('.tour-counter')).toHaveText('10 / 12');
-  await expect(page.locator('#advanced-panel')).not.toHaveClass(/visible/);
+  await expect(page.locator('.tour-tooltip')).toContainText('Fine-tune the details');
+  await expect(page.locator('#advanced-section')).toBeInViewport();
 });
 
 test('restoring a priced-out FTB intent re-enables relief when the price drops', async ({ page }) => {

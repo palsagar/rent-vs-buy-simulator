@@ -47,7 +47,7 @@ test.describe('phone: controls move into the inputs panel', () => {
       '#input-panel #region-pills',
       '#input-panel #ftb-pill',
       '#input-panel #outlook-pills',
-      '#input-panel #advanced-btn',
+      '#input-panel #advanced-section',
       '#title-bar #guide-btn',
     ]) {
       await expect(page.locator(sel)).toHaveCount(1);
@@ -182,7 +182,7 @@ test.describe('phone: inputs sheet', () => {
       await page.keyboard.press(tab);
       const where = await page.evaluate(() => {
         const el = document.activeElement;
-        const sheets = ['input-panel', 'advanced-panel'].map((id) => document.getElementById(id));
+        const sheets = ['input-panel'].map((id) => document.getElementById(id));
         return sheets.some((s) => s.contains(el)) ? el.id || el.className || el.tagName : null;
       });
       if (where) inClosedSheet.push(where);
@@ -236,62 +236,13 @@ test.describe('phone: live verdict in the sheet', () => {
   });
 });
 
-test.describe('phone: Advanced sheet', () => {
+test.describe('phone: tour through the inputs sheet', () => {
   test.use(PHONE);
-
-  async function openBothSheets(page) {
-    await page.click('#inputs-btn');
-    await waitForSlideAtRest(page, 'input-panel');
-    await page.locator('#advanced-btn').scrollIntoViewIfNeeded();
-    await page.click('#advanced-btn');
-    await expect(page.locator('#advanced-panel')).toHaveClass(/visible/);
-    await waitForSlideAtRest(page, 'advanced-panel');
-  }
-
-  test('Advanced opens above the inputs sheet and leaves the live verdict in view', async ({ page }) => {
-    await openBothSheets(page);
-    const hit = await page.evaluate(() => {
-      const adv = document.getElementById('advanced-panel');
-      const verdict = document.getElementById('sheet-verdict');
-      const a = adv.getBoundingClientRect();
-      const v = verdict.getBoundingClientRect();
-      return {
-        width: a.width,
-        onAdvanced: adv.contains(document.elementFromPoint(a.left + a.width / 2, a.top + a.height / 2)),
-        verdictInView: verdict.contains(document.elementFromPoint(v.left + 10, v.top + v.height / 2)),
-      };
-    });
-    expect(hit).toEqual({ width: 390, onAdvanced: true, verdictInView: true });
-  });
-
-  test('a tap on the scrim closes both sheets', async ({ page }) => {
-    await openBothSheets(page);
-    await page.mouse.click(195, 60);
-    await expect(page.locator('#input-panel')).not.toHaveClass(/visible/);
-    await expect(page.locator('#advanced-panel')).not.toHaveClass(/visible/);
-  });
-
-  test('Done closes both sheets and returns focus to the Edit your numbers button', async ({ page }) => {
-    await openBothSheets(page);
-    await page.click('#sheet-done');
-    await expect(page.locator('#input-panel')).not.toHaveClass(/visible/);
-    await expect(page.locator('#advanced-panel')).not.toHaveClass(/visible/);
-    expect(await page.evaluate(() => document.activeElement.id)).toBe('inputs-btn');
-  });
-
-  test('the Advanced close button hands focus to the Advanced button', async ({ page }) => {
-    await openBothSheets(page);
-    await page.locator('#advanced-close').focus();
-    await page.keyboard.press('Enter');
-    await expect(page.locator('#advanced-panel')).not.toHaveClass(/visible/);
-    await expect(page.locator('#input-panel')).toHaveClass(/visible/);
-    await expect(page.locator('#advanced-btn')).toBeFocused();
-  });
 
   test('the tour closes the inputs sheet when it leaves the Advanced step', async ({ page }) => {
     await startRealTour(page);
     await walkTo(page, 8);
-    // The Advanced step opens the inputs sheet, where the Advanced button lives.
+    // The Advanced step opens the inputs sheet, where the Advanced section lives.
     await expect(page.locator('#input-panel')).toHaveClass(/visible/);
     await walkTo(page, 9);
     await expect(page.locator('.tour-counter')).toHaveText('10 / 12');
@@ -446,10 +397,9 @@ test.describe('phone: page scrolling', () => {
   test('a scroll inside an open sheet does not move the page behind it', async ({ page }) => {
     const style = await page.evaluate(() => ({
       inputs: getComputedStyle(document.getElementById('input-panel')).overscrollBehaviorY,
-      advanced: getComputedStyle(document.getElementById('advanced-panel')).overscrollBehaviorY,
       scrim: getComputedStyle(document.getElementById('drawer-scrim')).touchAction,
     }));
-    expect(style).toEqual({ inputs: 'contain', advanced: 'contain', scrim: 'none' });
+    expect(style).toEqual({ inputs: 'contain', scrim: 'none' });
   });
 });
 
@@ -467,7 +417,11 @@ test.describe('phone: touch targets and text size', () => {
 
   test('the typed-value buttons are at least 28px tall', async ({ page }) => {
     const heights = await page.evaluate(() =>
-      [...document.querySelectorAll('.slider-value')].map((el) => el.getBoundingClientRect().height),
+      // A field hidden by the Advanced rules (e.g. a home-sale rule that
+      // does not use it) is not a touch target.
+      [...document.querySelectorAll('.slider-value')]
+        .filter((el) => !el.closest('[hidden]'))
+        .map((el) => el.getBoundingClientRect().height),
     );
     expect(Math.min(...heights)).toBeGreaterThanOrEqual(28);
   });

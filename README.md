@@ -32,7 +32,7 @@ Open http://localhost:8000.
 - **Region presets** — United States, France (Lyon), Germany (Köln), Netherlands, United Kingdom (England & NI) — fill in tax rules, buyer costs and typical prices, rendered in each market's currency.
 - **First-time-buyer relief** where a region enacts it — on by default, withdrawing itself above the statutory price cap.
 - **Market outlook** — conservative, historical, or optimistic growth and inflation assumptions.
-- **Advanced drawer** — tax deductibility, capital gains, levies, maintenance; every default follows the selected region.
+- **Advanced** — five groups at the end of the inputs panel (buying and selling costs, yearly costs of owning, mortgage tax relief, tax when you sell, tax on investments); every default follows the selected region.
 
 Every slider input updates the charts live, and the address bar is always a shareable link to your exact scenario.
 
