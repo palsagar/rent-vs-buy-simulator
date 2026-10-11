@@ -97,7 +97,7 @@ test('a typed negative levy cap is stored as uncapped, with the thumb at its lef
   // Any negative cap means uncapped, but the slider shows that only at its
   // minimum; -500 would leave the thumb on 0, "levy not deductible".
   await page.click('#advanced-btn');
-  const row = page.locator('#advanced-inputs .slider-row', { hasText: 'Levy deduction cap' });
+  const row = page.locator('#advanced-inputs .slider-row', { hasText: 'Levy is also deductible' });
   await row.locator('.slider-value').click();
   const field = row.locator('.slider-typed');
   await field.fill('-500');
