@@ -43,6 +43,7 @@ test('Advanced fields appear in group order with plain labels', async ({ page })
     'Deduct mortgage interest from income tax',
     'Your top income-tax rate',
     'Levy is also deductible',
+    'Capped at',
     'When is profit on the home taxed?',
     'Tax-free profit',
     'Tax-free after (years owned)',
@@ -194,4 +195,48 @@ test('each percentage-plus-fixed pair has one note under its fixed half', async 
     expect(next).toContain('adv-pair-note');
   }
   await expect(notes.first()).toHaveText('Both apply. The total is the % of the price plus the fixed amount.');
+});
+
+const capButton = (page, name) => field(page, 'levyDeductionCap').getByRole('button', { name, exact: true });
+const capQuery = (page) => new URL(page.url()).searchParams.get('levyDeductionCap');
+
+test('the levy deduction choice stores no cap, a cap or not deductible', async ({ page }) => {
+  await boot(page);
+  await openGroup(page, 'mortgage-relief');
+  const amount = field(page, 'levyDeductionCap').locator('.slider-row');
+  // The US default is a $10,000 cap.
+  await expect(capButton(page, 'Capped at…')).toHaveAttribute('aria-pressed', 'true');
+  await expect(amount.locator('.slider-value')).toHaveText('$10,000');
+
+  await capButton(page, 'No cap').click();
+  await expect(amount).toBeHidden();
+  await expect.poll(() => capQuery(page)).toBe('-1000');
+
+  // 10,000 is the default config value, so the link leaves it out; the
+  // last step reads the stored value instead.
+  const stored = () => page.evaluate(async () => (await import('./js/state.js')).getConfig().levyDeductionCap);
+  await capButton(page, 'Not deductible').click();
+  await expect.poll(() => capQuery(page)).toBe('0');
+  await expect.poll(stored).toBe(0);
+
+  await capButton(page, 'Capped at…').click();
+  await expect(amount.locator('.slider-value')).toHaveText('$10,000');
+  await expect.poll(stored).toBe(10000);
+});
+
+for (const [value, choice] of [['-1000', 'No cap'], ['0', 'Not deductible'], ['25000', 'Capped at…']]) {
+  test(`a shared link with levyDeductionCap=${value} opens on "${choice}"`, async ({ page }) => {
+    await boot(page, `/?v=2&r=us&levyDeductionCap=${value}`);
+    await openGroup(page, 'mortgage-relief');
+    await expect(capButton(page, choice)).toHaveAttribute('aria-pressed', 'true');
+    if (value === '25000') {
+      await expect(field(page, 'levyDeductionCap').locator('.slider-value')).toHaveText('$25,000');
+    }
+  });
+}
+
+test('an old link with levyDeductionCap=0 and no version opens on "No cap"', async ({ page }) => {
+  await boot(page, '/?levyDeductionCap=0');
+  await openGroup(page, 'mortgage-relief');
+  await expect(capButton(page, 'No cap')).toHaveAttribute('aria-pressed', 'true');
 });

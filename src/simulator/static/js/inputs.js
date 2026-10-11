@@ -116,11 +116,7 @@ function openTypedField(def, value, slider, shown, apply) {
     // An unedited field changes nothing: no re-run, and no re-reading of
     // a hand-edited link value such as "1234.567" as digit grouping.
     if (!cancelled && typed.value !== prefill && Number.isFinite(n)) {
-      let clamped = Math.min(def.max, Math.max(def.min, n));
-      // Every negative levy cap means "uncapped", but the slider shows that
-      // only at its min; -500 would put the thumb on 0, "not deductible".
-      // The same reason state.js restores legacy links as -1000.
-      if (def.key === "levyDeductionCap" && clamped < 0) clamped = def.min;
+      const clamped = Math.min(def.max, Math.max(def.min, n));
       slider.value = clamped;
       apply(clamped);
       trackEvent("value-changed", { field: def.key, via: "typed" });
@@ -210,6 +206,64 @@ function buildSelect(def, container) {
   row.className = "select-row";
   row.appendChild(select);
   container.appendChild(labeledRow(def, row));
+  widgets.push({ refresh });
+}
+
+// The levy cap is one stored number with three meanings, so it shows as a
+// three-way choice plus an amount slider used only by "Capped at…".
+// Negative is "no cap" (the def's min, -1000, is the value state.js
+// restores legacy links to), 0 is "not deductible", positive is the cap.
+const LEVY_CAP_CHOICES = [
+  ["none", "No cap"],
+  ["capped", "Capped at…"],
+  ["zero", "Not deductible"],
+];
+// Where "Capped at…" starts: the cap the US bundle ships.
+const LEVY_CAP_START = 10000;
+// The amount slider's floor. The def itself keeps min -1000, because
+// state.js validates share links against it.
+const LEVY_CAP_MIN_AMOUNT = 1000;
+
+function levyCapChoice(stored) {
+  if (stored < 0) return "none";
+  return stored > 0 ? "capped" : "zero";
+}
+
+function buildLevyCap(def, container) {
+  const picker = document.createElement("div");
+  picker.className = "seg-picker seg-picker--text";
+  const next = { none: def.min, zero: 0, capped: LEVY_CAP_START };
+  const buttons = LEVY_CAP_CHOICES.map(([choice, text]) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "seg-btn";
+    btn.textContent = text;
+    btn.addEventListener("click", () => {
+      if (levyCapChoice(getConfig()[def.key]) === choice) return;
+      setParam(def.key, next[choice]);
+      syncInputs();
+    });
+    picker.appendChild(btn);
+    return btn;
+  });
+  const controls = document.createElement("div");
+  controls.appendChild(picker);
+  const amount = document.createElement("div");
+  buildSlider(
+    { ...def, label: "Capped at", min: LEVY_CAP_MIN_AMOUNT, fmt: fmtMoney, hint: undefined },
+    amount,
+  );
+  controls.appendChild(amount);
+  const refresh = () => {
+    const choice = levyCapChoice(getConfig()[def.key]);
+    for (const [i, btn] of buttons.entries()) {
+      const on = LEVY_CAP_CHOICES[i][0] === choice;
+      btn.classList.toggle("active", on);
+      btn.setAttribute("aria-pressed", String(on));
+    }
+    amount.hidden = choice !== "capped";
+  };
+  container.appendChild(labeledRow(def, controls));
   widgets.push({ refresh });
 }
 
@@ -477,6 +531,7 @@ export function buildField(def, container) {
   if (def.type === "segmented") buildSegmented(def, container);
   else if (def.type === "checkbox") buildCheckbox(def, container);
   else if (def.type === "select") buildSelect(def, container);
+  else if (def.type === "levyCap") buildLevyCap(def, container);
   else buildSlider(def, container);
 }
 

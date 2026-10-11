@@ -93,18 +93,16 @@ test('a typed value with malformed separators keeps the old value', async ({ pag
   await expect(row.locator('.slider-value')).toHaveText(before);
 });
 
-test('a typed negative levy cap is stored as uncapped, with the thumb at its left end', async ({ page }) => {
-  // Any negative cap means uncapped, but the slider shows that only at its
-  // minimum; -500 would leave the thumb on 0, "levy not deductible".
+test('a typed levy cap below the amount range is clamped to its minimum', async ({ page }) => {
   await page.locator('details.adv-group[data-group="mortgage-relief"] summary').click();
-  const row = page.locator('.adv-field[data-key="levyDeductionCap"] .slider-row');
+  const cap = page.locator('.adv-field[data-key="levyDeductionCap"]');
+  const row = cap.locator('.slider-row');
   await row.locator('.slider-value').click();
   const field = row.locator('.slider-typed');
   await field.fill('-500');
   await field.press('Enter');
-  await expect(row.locator('.slider-value')).toHaveText('uncapped');
-  await expect(row.locator('input[type=range]')).toHaveValue('-1000');
-  await expect.poll(() => new URL(page.url()).searchParams.get('levyDeductionCap')).toBe('-1000');
+  await expect(row.locator('.slider-value')).toHaveText('$1,000');
+  await expect.poll(() => new URL(page.url()).searchParams.get('levyDeductionCap')).toBe('1000');
 });
 
 test('tapping the price value lets you type an exact price', async ({ page }) => {
