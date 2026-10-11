@@ -67,7 +67,7 @@ graph TD
 
 **`charts.js`** — the five Plotly charts: decision (Net Value over time, with breakeven marker), fan (simulated futures), tornado (sensitivity), outflows, and the ownership-cost breakdown.
 
-**`analytics.js`** — `trackEvent` wrapper around `window.umami`, no-ops when analytics is unconfigured.
+**`analytics.js`** — `trackEvent` wrapper around `window.umami`, no-ops when analytics is unconfigured. Also defines `window.umamiBeforeSend`, the hook that strips the app's own URL params, keeps one page view per load, and sends `link-opened` for a shared link.
 
 **`api.js`** — `serializeForWire` + `postSimulate`/`postMonteCarlo` fetch wrappers; turns a non-2xx FastAPI `detail` into a readable error.
 
@@ -79,7 +79,7 @@ Two `BaseHTTPMiddleware` layers in `server.py`, added to every request:
 
 1. **`NoCacheMiddleware`** — writes security headers (`X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`, a Content-Security-Policy that allows `'self'` plus the Plotly CDN) on every response, and `no-cache` headers on `*.js`/`*.css`/`*.html` and `/` so frontend edits show up live. Also rejects bodies over 64 KiB.
 
-2. **`UmamiInjectionMiddleware`** — splices a `<script defer src="${UMAMI_DOMAIN}/script.js" data-website-id="${UMAMI_ID}">` tag before `</body>` on HTML responses, but only when both env vars are configured and valid. With either var unset, it is a pass-through — local dev and CI are never tracked (see [DEPLOYMENT.md](../DEPLOYMENT.md)). When Umami is enabled, its origin is also added to the CSP `script-src` and `connect-src`.
+2. **`UmamiInjectionMiddleware`** — splices a `<script defer src="${UMAMI_DOMAIN}/script.js" data-website-id="${UMAMI_ID}" data-before-send="umamiBeforeSend">` tag before `</body>` on HTML responses, but only when both env vars are configured and valid. With either var unset, it is a pass-through — local dev and CI are never tracked (see [DEPLOYMENT.md](../DEPLOYMENT.md)). When Umami is enabled, its origin is also added to the CSP `script-src` and `connect-src`.
 
 Static files are served by `StaticFiles` from `src/simulator/static/` (no-cache, live reload).
 
@@ -100,14 +100,14 @@ Monte Carlo is CPU-bound (~500 engine runs), so `/api/monte-carlo` is guarded by
 
 **Tour.** On first visit, `main.js` starts the `Tour` unless `rvb.tour.v1` is set. The welcome modal offers **Take the Tour** / **Skip to Simulator** / **Read the Guide**. Each spotlight step highlights a live control; click/change steps are detected purely from DOM events, and the tour snapshots settings at start and restores them at the end. `Esc` or the close button exits early. **Replay the Tour** in the guide footer restarts it any time.
 
-**Analytics.** `window.umami` drives pageviews automatically (injected server-side). Custom events fire from `tour.js` (`tour-started`, `tour-completed`, `tour-skipped`), `inputs.js` (`region-changed`, `ftb-toggled`), and the outlook preset handler (`outlook-changed`) — all routed through `analytics.js.trackEvent`, which no-ops when Umami is not configured.
+**Analytics.** `window.umami` drives pageviews automatically (injected server-side). Umami sends a page view whenever the address bar changes, and `state.js` rewrites it after every input change, so `analytics.js` gives the tag a `umamiBeforeSend` hook: it strips the app's own params (config keys, `r`, `v`) from every URL and drops all page views after the first for the same path. The first page view reports the landing URL, which `analytics.js` saves before the app's first (debounced) address-bar write, because the tracker can start after that write. When the landing URL carries the app's params (a shared link), the hook also sends `link-opened`. Custom events fire from `tour.js` (`tour-started`, `tour-completed`, `tour-skipped`), `inputs.js` (`region-changed`, `ftb-toggled`, `outlook-changed`, `value-changed`), and `ui.js` (`inputs-opened`, `advanced-opened`, `link-shared`) — all routed through `analytics.js.trackEvent`, which no-ops when Umami is not configured. Click-driven events are sent only for trusted (real user) events, so the tour's programmatic clicks are not counted.
 
 ## 6. Test Layout
 
 - `tests/test_*.py` (**12 files**) — pytest over the engine primitives, core, taxes and models; the API serialization (`test_api.py`); region bundles and US regression (`test_regions.py`, `test_us_regression.py`); Monte Carlo calibration and tornado bounds (`test_monte_carlo.py`, `test_tornado_bounds.py`); Umami env validation (`test_umami.py`).
 - `tests/*.spec.js` (**12 files**) — Playwright, headless on port 8323 (the config leaves Playwright's default headless mode):
   - `a11y.spec.js` — overlay focus management, dialog semantics, the keyboard accordion and the inputs scrim.
-  - `analytics.spec.js` — the Umami event contract.
+  - `analytics.spec.js` — the Umami event contract, plus tests that run the real Umami script (`tests/fixtures/umami-script.js`) against a second server on port 8324 with analytics on.
   - `charts.spec.js` — chart geometry and readouts.
   - `copy.spec.js` — plain-language and touch-friendly wording.
   - `layout.spec.js` — the phone layout: moved controls, the bottom sheets, the tour inside the inputs sheet, page scrolling and touch targets.

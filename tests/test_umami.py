@@ -106,7 +106,8 @@ def test_umami_tag_injected_when_configured(
     assert response.status_code == 200
     expected_tag = (
         '<script defer src="https://analytics.example.com/script.js" '
-        'data-website-id="123e4567-e89b-42d3-a456-426614174000"></script></body>'
+        'data-website-id="123e4567-e89b-42d3-a456-426614174000" '
+        'data-before-send="umamiBeforeSend"></script></body>'
     )
     assert expected_tag in response.text
     assert "etag" not in response.headers

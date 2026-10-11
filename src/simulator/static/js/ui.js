@@ -3,13 +3,17 @@
 // management, dialog semantics, keyboard accordion, and scrim dismissal.
 
 import { Tour, currentActiveTour } from "./tour.js";
+import { trackEvent } from "./analytics.js";
 import { moveFocusIn, restoreFocus, trapFocus } from "./focus.js";
 import { verdictIsCurrent } from "./results.js";
 import { shareUrl } from "./state.js";
 
 export function initUi(tour) {
   const panel = document.getElementById("advanced-panel");
-  document.getElementById("advanced-btn").addEventListener("click", () => panel.classList.toggle("visible"));
+  // Analytics count only real clicks: the tour opens drawers with .click().
+  document.getElementById("advanced-btn").addEventListener("click", (e) => {
+    if (panel.classList.toggle("visible") && e.isTrusted) trackEvent("advanced-opened");
+  });
   const advancedClose = document.getElementById("advanced-close");
   advancedClose.addEventListener("click", () => {
     panel.classList.remove("visible");
@@ -168,7 +172,11 @@ export function initUi(tour) {
     panel.classList.remove("visible");
     if (returnFocus && focusInSheet) document.getElementById("inputs-btn").focus();
   };
-  document.getElementById("inputs-btn").addEventListener("click", () => setDrawer(!inputPanel.classList.contains("visible")));
+  document.getElementById("inputs-btn").addEventListener("click", (e) => {
+    const open = !inputPanel.classList.contains("visible");
+    setDrawer(open);
+    if (open && e.isTrusted) trackEvent("inputs-opened");
+  });
   // Done always sits in the sheet it closes, so focus always goes back to the
   // Edit button, even where a tap does not focus Done (WebKit, iOS Safari).
   document.getElementById("sheet-done").addEventListener("click", () => {
@@ -198,7 +206,8 @@ export function initUi(tour) {
   // One timer: a second copy restarts the two seconds instead of letting
   // the first copy's timer put the label back early.
   let shareLabelTimer = null;
-  shareBtn.addEventListener("click", async () => {
+  shareBtn.addEventListener("click", async (e) => {
+    if (e.isTrusted) trackEvent("link-shared");
     const url = shareUrl();
     if (navigator.share) {
       // The link is always the live config; the verdict on screen can still
