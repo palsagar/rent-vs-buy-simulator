@@ -240,3 +240,100 @@ test('an old link with levyDeductionCap=0 and no version opens on "No cap"', asy
   await openGroup(page, 'mortgage-relief');
   await expect(capButton(page, 'No cap')).toHaveAttribute('aria-pressed', 'true');
 });
+
+const changedCount = (page, id) => group(page, id).locator('.adv-group-changed');
+const resetButton = (page, id) => group(page, id).locator('.adv-reset');
+
+/** Type an exact value into an Advanced slider (its group must be open). */
+async function typeAdvanced(page, key, text) {
+  const row = field(page, key).locator('.slider-row').first();
+  await row.locator('.slider-value').click();
+  await row.locator('.slider-typed').fill(text);
+  await row.locator('.slider-typed').press('Enter');
+}
+
+test('a changed field gets a dot, a default line and a count, and reset undoes it', async ({ page }) => {
+  await boot(page);
+  await openGroup(page, 'transaction');
+  await expect(resetButton(page, 'transaction')).toBeHidden();
+  await typeAdvanced(page, 'closingCostSellerPct', '4.5');
+  const seller = field(page, 'closingCostSellerPct');
+  await expect(seller.locator('.adv-changed-dot')).toBeVisible();
+  await expect(seller.locator('.adv-changed-note')).toHaveText('Region default: 6.0%');
+  await expect(changedCount(page, 'transaction')).toHaveText(' · 1 changed');
+  await resetButton(page, 'transaction').click();
+  await expect(seller.locator('.slider-value')).toHaveText('6.0%');
+  await expect(seller.locator('.adv-changed-dot')).toBeHidden();
+  await expect(changedCount(page, 'transaction')).toHaveText('');
+  await expect(resetButton(page, 'transaction')).toBeHidden();
+});
+
+test('the first-time-buyer relief, on or off, never counts as a change', async ({ page }) => {
+  await boot(page);
+  await page.locator('#region-pills .preset-btn', { hasText: 'UK' }).click();
+  await expect(changedCount(page, 'transaction')).toHaveText('');
+  await page.locator('#ftb-pill .preset-btn').click();
+  await expect(summaries(page).first()).toHaveText(`Buy 5% ${MINUS} £6,900 · Sell 1.75%`);
+  await expect(changedCount(page, 'transaction')).toHaveText('');
+});
+
+test('switching region clears the markers', async ({ page }) => {
+  await boot(page);
+  await openGroup(page, 'transaction');
+  await typeAdvanced(page, 'closingCostSellerPct', '4.5');
+  await expect(changedCount(page, 'transaction')).toHaveText(' · 1 changed');
+  await page.locator('#region-pills .preset-btn', { hasText: 'FR' }).click();
+  await expect(changedCount(page, 'transaction')).toHaveText('');
+});
+
+test('a link that matches no region shows no markers and no reset', async ({ page }) => {
+  await boot(page, '/?closingCostSellerPct=4.5&marginalTaxRatePct=33');
+  await expect(page.locator('.adv-group-changed')).toHaveText(['', '', '', '', '']);
+  for (const id of ['transaction', 'mortgage-relief']) {
+    await openGroup(page, id);
+    await expect(resetButton(page, id)).toBeHidden();
+  }
+  await expect(page.locator('.adv-changed-dot:visible')).toHaveCount(0);
+});
+
+test('a changed field that gets hidden is not counted, but reset restores it', async ({ page }) => {
+  await boot(page);
+  await openGroup(page, 'mortgage-relief');
+  await typeAdvanced(page, 'marginalTaxRatePct', '33');
+  await expect(changedCount(page, 'mortgage-relief')).toHaveText(' · 1 changed');
+  await page.getByLabel('Deduct mortgage interest from income tax').uncheck();
+  // Only the switch counts now; the hidden rate has no effect.
+  await expect(changedCount(page, 'mortgage-relief')).toHaveText(' · 1 changed');
+  await resetButton(page, 'mortgage-relief').click();
+  await expect(page.getByLabel('Deduct mortgage interest from income tax')).toBeChecked();
+  await expect(field(page, 'marginalTaxRatePct').locator('.slider-value')).toHaveText('24%');
+  await expect(changedCount(page, 'mortgage-relief')).toHaveText('');
+});
+
+test('the tour restore re-derives the markers from the restored relief', async ({ page }) => {
+  await boot(page);
+  await page.locator('#region-pills .preset-btn', { hasText: 'UK' }).click();
+  await page.locator('#ftb-pill .preset-btn').click(); // relief off
+  await page.evaluate(async () => {
+    const { snapshotSettings } = await import('./js/inputs.js');
+    window.__snap = snapshotSettings();
+  });
+  await page.locator('#ftb-pill .preset-btn').click(); // relief on
+  await page.evaluate(async () => {
+    const { restoreSettings } = await import('./js/inputs.js');
+    restoreSettings(window.__snap);
+  });
+  await expect(summaries(page).first()).toHaveText(`Buy 5% ${MINUS} £6,900 · Sell 1.75%`);
+  await expect(changedCount(page, 'transaction')).toHaveText('');
+});
+
+test('a UK price above the relief ceiling does not mark the buying costs as changed', async ({ page }) => {
+  await boot(page);
+  await page.locator('#region-pills .preset-btn', { hasText: 'UK' }).click();
+  const price = page.locator('#core-inputs .slider-row', { hasText: 'Home price' });
+  await price.locator('.slider-value').click();
+  await price.locator('.slider-typed').fill('650000');
+  await price.locator('.slider-typed').press('Enter');
+  await expect(summaries(page).first()).toHaveText(`Buy 5% ${MINUS} £6,900 · Sell 1.75%`);
+  await expect(changedCount(page, 'transaction')).toHaveText('');
+});

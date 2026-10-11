@@ -254,6 +254,22 @@ test.describe('real tracker', () => {
     ]);
   });
 
+  test('advanced-reset fires on a real click only', async ({ page }) => {
+    const sent = await fakeUmami(page);
+    await openTracked(page);
+    const group = page.locator('details.adv-group[data-group="mortgage-relief"]');
+    await group.locator('summary').click();
+    const deduct = group.getByLabel('Deduct mortgage interest from income tax');
+    const reset = group.locator('.adv-reset');
+    await deduct.uncheck();
+    await reset.evaluate((el) => el.click()); // programmatic: not counted
+    await deduct.uncheck();
+    await reset.click();
+    await expect.poll(() => named(sent, 'advanced-reset').length).toBe(1);
+    await settle(page);
+    expect(named(sent, 'advanced-reset')).toEqual([['advanced-reset', { group: 'mortgage-relief' }]]);
+  });
+
   test('value-changed fires once per slider release and per typed value', async ({ page }) => {
     const sent = await fakeUmami(page);
     await openTracked(page);

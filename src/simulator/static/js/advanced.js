@@ -1,15 +1,18 @@
 // Advanced inputs: the fields that tailor the model to one situation, in
 // five collapsible groups at the end of the inputs panel. Every group
-// starts closed and summarises its values, and a field that another field
-// has switched off in the engine is hidden. Both are derived from the
-// config on every change, so nothing here is stored. Field metadata
-// (label, help line, group, visibleWhen) lives in fields.js.
+// starts closed and summarises its values. A field that another field has
+// switched off in the engine is hidden, and a field that differs from the
+// selected region's default gets a dot and a "Region default" line; each
+// group can be reset to those defaults. All of it is derived from the
+// config and the region, so nothing here is stored or put in the share
+// link. Field metadata (label, help line, group, visibleWhen) lives in
+// fields.js.
 
 import { trackEvent } from "./analytics.js";
 import { INPUT_DEFS } from "./fields.js";
 import { fmtCompact, fmtMoney, MINUS } from "./format.js";
-import { buildField } from "./inputs.js";
-import { getConfig, onConfigChange } from "./state.js";
+import { buildField, regionDefaults, registerWidget, syncInputs } from "./inputs.js";
+import { applyPreset, getConfig, onConfigChange } from "./state.js";
 
 const FLOAT_TOLERANCE = 1e-9;
 
@@ -66,7 +69,23 @@ const PAIR_NOTES = {
   annualMaintenanceAmount: "Both apply. The total is the % of the home's value plus the fixed amount.",
 };
 
-// One entry per group: { group, values, changed, fields: [{ def, el }] }.
+function differs(value, fallback) {
+  if (typeof value === "number" && typeof fallback === "number") {
+    return Math.abs(value - fallback) > FLOAT_TOLERANCE;
+  }
+  return value !== fallback;
+}
+
+/** A stored value as its own widget would show it. */
+function formatStored(def, stored) {
+  if (def.type === "checkbox") return stored ? "on" : "off";
+  if (def.type === "select") {
+    return def.options.find(([value]) => value === stored)?.[1] ?? String(stored);
+  }
+  return def.fmt(stored * (def.scale ?? 1));
+}
+
+// One entry per group: { group, values, changed, reset, fields: [{ def, el, dot, note }] }.
 const rendered = [];
 
 function buildGroup(group, host) {
@@ -100,28 +119,71 @@ function buildGroup(group, host) {
     el.className = "adv-field";
     el.dataset.key = def.key;
     buildField(def, el);
+    // The field's own label comes first in its markup; the levy cap's
+    // amount slider has a second one further down.
+    const dot = document.createElement("span");
+    dot.className = "adv-changed-dot";
+    dot.setAttribute("aria-hidden", "true");
+    el.querySelector(".slider-name, .checkbox-row").appendChild(dot);
+    const note = document.createElement("div");
+    note.className = "adv-changed-note";
+    el.appendChild(note);
     body.appendChild(el);
     if (PAIR_NOTES[def.key]) {
-      const note = document.createElement("div");
-      note.className = "slider-hint adv-pair-note";
-      note.textContent = PAIR_NOTES[def.key];
-      body.appendChild(note);
+      const pair = document.createElement("div");
+      pair.className = "slider-hint adv-pair-note";
+      pair.textContent = PAIR_NOTES[def.key];
+      body.appendChild(pair);
     }
-    fields.push({ def, el });
+    fields.push({ def, el, dot, note });
   }
+
+  const reset = document.createElement("button");
+  reset.type = "button";
+  reset.className = "adv-reset";
+  reset.textContent = "Reset to region defaults";
+  reset.addEventListener("click", (e) => {
+    const defaults = regionDefaults();
+    if (!defaults) return;
+    // Every field in the group, hidden ones included.
+    const keys = fields.map(({ def }) => def.key).filter((key) => key in defaults);
+    applyPreset(Object.fromEntries(keys.map((key) => [key, defaults[key]])));
+    syncInputs();
+    if (e.isTrusted) trackEvent("advanced-reset", { group: group.id });
+  });
+  body.appendChild(reset);
 
   details.append(summary, body);
   host.appendChild(details);
-  return { group, values, changed, fields };
+  return { group, values, changed, reset, fields };
 }
 
 function refresh() {
   const cfg = getConfig();
-  for (const { group, values, fields } of rendered) {
+  const defaults = regionDefaults();
+  for (const { group, values, changed, reset, fields } of rendered) {
     values.textContent = group.summarize(cfg);
-    for (const { def, el } of fields) {
-      el.hidden = def.visibleWhen ? !def.visibleWhen(cfg) : false;
+    let shown = 0;
+    let any = false;
+    for (const { def, el, dot, note } of fields) {
+      const visible = def.visibleWhen ? def.visibleWhen(cfg) : true;
+      // A key missing from the defaults (the offline fallback region has
+      // no bundle) has nothing to compare against.
+      const isChanged =
+        defaults !== null && def.key in defaults && differs(cfg[def.key], defaults[def.key]);
+      el.hidden = !visible;
+      dot.hidden = !isChanged;
+      note.hidden = !isChanged;
+      note.textContent = isChanged ? `Region default: ${formatStored(def, defaults[def.key])}` : "";
+      if (isChanged) {
+        any = true;
+        if (visible) shown += 1;
+      }
     }
+    // A hidden field has no effect, so only visible ones count; reset
+    // still restores the hidden ones.
+    changed.textContent = shown > 0 ? ` · ${shown} changed` : "";
+    reset.hidden = !any;
   }
 }
 
@@ -130,4 +192,7 @@ export function initAdvanced() {
   for (const group of GROUPS) rendered.push(buildGroup(group, host));
   refresh();
   onConfigChange(refresh);
+  // syncInputs also runs after changes that move the region or the relief
+  // without a config change of their own (the tour's restore).
+  registerWidget({ refresh });
 }

@@ -7,6 +7,7 @@ import { INPUT_DEFS } from "./fields.js";
 import { trackEvent } from "./analytics.js";
 import { fmtMoney, parseTypedNumber, setCurrency } from "./format.js";
 import {
+  DEFAULT_CONFIG,
   applyPreset,
   debounce,
   getConfig,
@@ -322,6 +323,21 @@ function ftbMatchesConfig(region) {
 }
 
 /**
+ * The selected region's value for every Advanced field, with the
+ * first-time-buyer relief applied while it is in effect, or null when no
+ * region is selected (a link whose numbers match no bundle). Cost
+ * inflation is in no bundle, so its default is the app-wide one.
+ */
+export function regionDefaults() {
+  if (!selectedRegion) return null;
+  return {
+    costInflationRate: DEFAULT_CONFIG.costInflationRate,
+    ...selectedRegion.taxPrimitives,
+    ...(ftbOn && reliefApplies(selectedRegion) ? selectedRegion.firstTimeBuyerOverrides : {}),
+  };
+}
+
+/**
  * The selected region: its stored id when the link carries one, else
  * reverse-matched from the numbers for links written before `r` existed.
  */
@@ -548,6 +564,11 @@ export function initInputs(regions) {
 
 export function syncInputs() {
   for (const widget of widgets) widget.refresh();
+}
+
+/** Add a widget that syncInputs() refreshes (advanced.js's markers). */
+export function registerWidget(widget) {
+  widgets.push(widget);
 }
 
 /**

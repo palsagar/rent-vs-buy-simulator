@@ -326,6 +326,26 @@ input[type="range"]::-moz-range-thumb {
 /* A display rule below must not override a hidden marker, note or field. */
 .adv-group [hidden] { display: none; }
 .adv-pair-note { margin: -4px 0 10px; }
+.adv-changed-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--accent-text);
+  vertical-align: middle;
+}
+.adv-changed-note { font-size: 10px; color: var(--accent-text); margin: -6px 0 10px; }
+.adv-group-changed { color: var(--accent-text); }
+.adv-reset {
+  padding: 0;
+  background: none;
+  border: none;
+  font-size: 11px;
+  color: var(--accent-text);
+  text-decoration: underline;
+  cursor: pointer;
+}
 
 /* Drawer scrim — translucent backdrop above the page content, below the drawers
    (z 260) so the drawers stay fully interactive, and below the tour overlay
@@ -707,6 +727,7 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   /* Finger-sized controls. */
   .seg-btn { min-height: 44px; }
   .adv-group summary { min-height: 44px; justify-content: center; }
+  .adv-reset { min-height: 44px; }
   .checkbox-row { min-height: 44px; }
   .checkbox-row input { width: 20px; height: 20px; }
   /* height, not min-height: WebKit ignores min-height on a native select. */
