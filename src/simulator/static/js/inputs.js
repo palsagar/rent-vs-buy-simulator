@@ -117,7 +117,9 @@ function openTypedField(def, value, slider, shown, apply) {
     // An unedited field changes nothing: no re-run, and no re-reading of
     // a hand-edited link value such as "1234.567" as digit grouping.
     if (!cancelled && typed.value !== prefill && Number.isFinite(n)) {
-      const clamped = Math.min(def.max, Math.max(def.min, n));
+      // A typed value is not snapped to the slider's grid, so a field may
+      // allow typed values below the slider's floor (the levy cap).
+      const clamped = Math.min(def.max, Math.max(def.typedMin ?? def.min, n));
       slider.value = clamped;
       apply(clamped);
       trackEvent("value-changed", { field: def.key, via: "typed" });
@@ -224,6 +226,9 @@ const LEVY_CAP_START = 10000;
 // The amount slider's floor. The def itself keeps min -1000, because
 // state.js validates share links against it.
 const LEVY_CAP_MIN_AMOUNT = 1000;
+// The smallest cap a typed amount can set. Share links accept caps below
+// the slider's floor, so typing must reach them too.
+const LEVY_CAP_MIN_TYPED = 1;
 
 function levyCapChoice(stored) {
   if (stored < 0) return "none";
@@ -254,7 +259,14 @@ function buildLevyCap(def, container) {
   controls.appendChild(picker);
   const amount = document.createElement("div");
   buildSlider(
-    { ...def, label: "Capped at", min: LEVY_CAP_MIN_AMOUNT, fmt: fmtMoney, hint: undefined },
+    {
+      ...def,
+      label: "Capped at",
+      min: LEVY_CAP_MIN_AMOUNT,
+      typedMin: LEVY_CAP_MIN_TYPED,
+      fmt: fmtMoney,
+      hint: undefined,
+    },
     amount,
   );
   controls.appendChild(amount);

@@ -93,7 +93,19 @@ test('a typed value with malformed separators keeps the old value', async ({ pag
   await expect(row.locator('.slider-value')).toHaveText(before);
 });
 
-test('a typed levy cap below the amount range is clamped to its minimum', async ({ page }) => {
+test('a typed levy cap below the slider range is kept', async ({ page }) => {
+  await page.locator('details.adv-group[data-group="mortgage-relief"] summary').click();
+  const cap = page.locator('.adv-field[data-key="levyDeductionCap"]');
+  const row = cap.locator('.slider-row');
+  await row.locator('.slider-value').click();
+  const field = row.locator('.slider-typed');
+  await field.fill('600');
+  await field.press('Enter');
+  await expect(row.locator('.slider-value')).toHaveText('$600');
+  await expect.poll(() => new URL(page.url()).searchParams.get('levyDeductionCap')).toBe('600');
+});
+
+test('a typed levy cap below zero is clamped to the smallest cap', async ({ page }) => {
   await page.locator('details.adv-group[data-group="mortgage-relief"] summary').click();
   const cap = page.locator('.adv-field[data-key="levyDeductionCap"]');
   const row = cap.locator('.slider-row');
@@ -101,8 +113,8 @@ test('a typed levy cap below the amount range is clamped to its minimum', async 
   const field = row.locator('.slider-typed');
   await field.fill('-500');
   await field.press('Enter');
-  await expect(row.locator('.slider-value')).toHaveText('$1,000');
-  await expect.poll(() => new URL(page.url()).searchParams.get('levyDeductionCap')).toBe('1000');
+  await expect(row.locator('.slider-value')).toHaveText('$1');
+  await expect.poll(() => new URL(page.url()).searchParams.get('levyDeductionCap')).toBe('1');
 });
 
 test('tapping the price value lets you type an exact price', async ({ page }) => {
