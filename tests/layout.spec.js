@@ -417,7 +417,11 @@ test.describe('phone: touch targets and text size', () => {
 
   test('the typed-value buttons are at least 28px tall', async ({ page }) => {
     const heights = await page.evaluate(() =>
-      [...document.querySelectorAll('.slider-value')].map((el) => el.getBoundingClientRect().height),
+      // A field hidden by the Advanced rules (e.g. a home-sale rule that
+      // does not use it) is not a touch target.
+      [...document.querySelectorAll('.slider-value')]
+        .filter((el) => !el.closest('[hidden]'))
+        .map((el) => el.getBoundingClientRect().height),
     );
     expect(Math.min(...heights)).toBeGreaterThanOrEqual(28);
   });
