@@ -13,28 +13,37 @@ permissions:
 
 jobs:
   test:
+    name: pytest (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.12 is the minimum (requires-python) and the Docker image; 3.14 has
+        # numpy/pandas wheels in uv.lock and the suite passes on it.
+        python-version: ["3.12", "3.13", "3.14"]
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
-
-      - name: Set up Python
-        run: |
-          uv venv --seed
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
 
       - name: Install dependencies
-        run: |
-          uv sync
+        run: uv sync --frozen
 
       - name: Run tests with coverage
         run: |
           uv run pytest tests/ -v --tb=short --cov=src/simulator --cov-branch --cov-report=xml --cov-report=html
 
+      # Coverage is identical across versions; report it once (also avoids
+      # artifact-name collisions between matrix legs).
       - name: Upload coverage reports to Codecov
+        if: matrix.python-version == '3.12'
         uses: codecov/codecov-action@v4
         with:
           file: ./coverage.xml
@@ -43,6 +52,7 @@ jobs:
           fail_ci_if_error: false
 
       - name: Upload coverage HTML report as artifact
+        if: matrix.python-version == '3.12'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
