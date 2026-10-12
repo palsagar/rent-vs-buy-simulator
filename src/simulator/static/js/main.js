@@ -22,7 +22,7 @@ import {
   setCached,
 } from "./state.js";
 import { Tour, STEPS } from "./tour.js";
-import { hideError, initUi, setLoading, showError } from "./ui.js";
+import { hideError, initUi, paintBusy, showError } from "./ui.js";
 
 let simAbort = null;
 let mcAbort = null;
@@ -33,12 +33,36 @@ let simRun = null;
 // started before one judged a config the page has jumped away from, so it
 // must not render: its toss-up call would carry over to the new result.
 let jumps = 0;
+// Each failed source holds { message, hash }: the error and the config
+// hash it failed for.
 const errors = { simulate: null, monteCarlo: null };
+// The config hash each source last rendered.
+const shown = { simulate: null, monteCarlo: null };
 
 function syncBanner() {
-  const message = errors.simulate ?? errors.monteCarlo;
-  if (message) showError(message);
+  const failed = errors.simulate ?? errors.monteCarlo;
+  if (failed) showError(failed.message);
   else hideError();
+}
+
+// Which result sections are out of date for the live config, and whether
+// a request that could update them is still possible.
+function syncBusy() {
+  const live = configHash(getConfig());
+  const simFailed = errors.simulate?.hash === live;
+  const mcFailed = simFailed || errors.monteCarlo?.hash === live;
+  const simStale = shown.simulate !== live;
+  const mcStale = shown.monteCarlo !== live;
+  paintBusy({
+    simulate: { stale: simStale, working: simStale && !simFailed },
+    monteCarlo: { stale: mcStale, working: mcStale && !mcFailed },
+    // The verdict on screen has no confidence yet, and one is still coming.
+    checkingConfidence:
+      shown.simulate !== null &&
+      shown.monteCarlo !== shown.simulate &&
+      !simFailed &&
+      errors.monteCarlo?.hash !== shown.simulate,
+  });
 }
 
 async function runSimulate() {
@@ -50,13 +74,14 @@ async function runSimulate() {
     lastWinner = cached.verdict.winner;
     lastWinnerHash = hash;
     renderSimulate(cached, cfg);
+    shown.simulate = hash;
     errors.simulate = null;
     syncBanner();
+    syncBusy();
     return;
   }
   const controller = new AbortController();
   simAbort = controller;
-  setLoading(true);
   simRun = (async () => {
     try {
       const data = await postSimulate(cfg, controller.signal);
@@ -65,8 +90,10 @@ async function runSimulate() {
       lastWinner = data.verdict.winner;
       lastWinnerHash = hash;
       renderSimulate(data, cfg);
+      shown.simulate = hash;
       errors.simulate = null;
       syncBanner();
+      syncBusy();
     } catch (err) {
       // A superseded/aborted request must never surface as the error banner:
       // the abort can reject as AbortError, but under a connection teardown
@@ -74,11 +101,10 @@ async function runSimulate() {
       // controller's own signal rather than the error's name. A genuinely
       // failed (non-aborted) request still shows the banner.
       if (!controller.signal.aborted && simAbort === controller) {
-        errors.simulate = `Simulation failed: ${err.message}`;
+        errors.simulate = { message: `Simulation failed: ${err.message}`, hash };
         syncBanner();
+        syncBusy();
       }
-    } finally {
-      if (simAbort === controller) setLoading(false);
     }
   })();
   await simRun;
@@ -104,7 +130,11 @@ async function runMonteCarlo() {
       if (mcAbort === controller) {
         errors.monteCarlo = null;
         syncBanner();
-        if (lastWinnerHash === hash && jumps === jumpsAtStart) renderMonteCarlo(cached, lastWinner);
+        if (lastWinnerHash === hash && jumps === jumpsAtStart) {
+          renderMonteCarlo(cached, lastWinner);
+          shown.monteCarlo = hash;
+        }
+        syncBusy();
       }
       return;
     }
@@ -114,12 +144,17 @@ async function runMonteCarlo() {
     if (mcAbort === controller) {
       errors.monteCarlo = null;
       syncBanner();
-      if (lastWinnerHash === hash && jumps === jumpsAtStart) renderMonteCarlo(data, lastWinner);
+      if (lastWinnerHash === hash && jumps === jumpsAtStart) {
+        renderMonteCarlo(data, lastWinner);
+        shown.monteCarlo = hash;
+      }
+      syncBusy();
     }
   } catch (err) {
     if (!controller.signal.aborted && mcAbort === controller) {
-      errors.monteCarlo = `Monte Carlo failed: ${err.message}`;
+      errors.monteCarlo = { message: `Monte Carlo failed: ${err.message}`, hash };
       syncBanner();
+      syncBusy();
       // Repaint only the verdict this run was for, once its simulate run
       // has settled. If that run failed too, the verdict on screen is an
       // older one that still sits beside its own confidence, so it stays.
@@ -174,7 +209,9 @@ async function init() {
     }
     scheduleSimulate();
     scheduleMonteCarlo();
+    syncBusy();
   });
+  syncBusy();
   await runSimulate();
   runMonteCarlo();
 }

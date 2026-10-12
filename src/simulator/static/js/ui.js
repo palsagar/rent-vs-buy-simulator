@@ -1,4 +1,4 @@
-// Chrome behavior: drawer, overlays, error banner, loading indicator.
+// Chrome behavior: drawer, overlays, error banner, busy state.
 // Also owns the accessibility wiring for the overlays and drawer: focus
 // management, dialog semantics, keyboard accordion, and scrim dismissal.
 
@@ -242,6 +242,16 @@ export function hideError() {
   document.getElementById("error-banner").classList.remove("visible");
 }
 
-export function setLoading(on) {
-  document.getElementById("results-spinner").style.display = on ? "flex" : "none";
+// Fades the out-of-date result sections, marks the ones still updating as
+// busy, and shows the Updating chip while any update can still land.
+export function paintBusy({ simulate, monteCarlo, checkingConfidence }) {
+  for (const el of document.querySelectorAll("[data-result]")) {
+    const s = el.dataset.result === "simulate" ? simulate : monteCarlo;
+    el.classList.toggle("stale", s.stale);
+    el.setAttribute("aria-busy", String(s.working));
+  }
+  document
+    .getElementById("results-spinner")
+    .classList.toggle("visible", simulate.working || monteCarlo.working);
+  document.getElementById("verdict-pending").hidden = !checkingConfidence;
 }

@@ -183,12 +183,60 @@ body {
   flex-direction: column;
   gap: 16px;
 }
+/* Floats over the top of the results and stays in view when they scroll.
+   It is always in the layout (zero height, negative margin cancelling the
+   column gap), so showing it never moves the cards. The sticky offset
+   counts from inside #results' 20px top padding: the chip's centre sits
+   21px below the top of the visible results, its top edge 8px below. */
 #results-spinner {
-  display: none;
+  position: sticky;
+  top: 1px;
+  z-index: 5;
+  height: 0;
+  margin-bottom: -16px;
+  display: flex;
   justify-content: center;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--green-text);
+  pointer-events: none;
+}
+.busy-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 12px;
+  transform: translateY(-50%);
+  border-radius: 13px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0s linear 0.15s;
+}
+/* Shown only when an update takes long enough to notice. */
+#results-spinner.visible .busy-chip {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.15s ease 0.4s, visibility 0s linear 0.4s;
+}
+.busy-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green-text);
+  animation: busyPulse 1s ease-in-out infinite;
+}
+@keyframes busyPulse { 50% { opacity: 0.3; } }
+
+/* Out-of-date numbers fade back while their update runs. */
+[data-result] :is(.chart, #verdict-line, #verdict-breakeven, #verdict-confidence, #stat-row, #tornado-summary, #data-table) {
+  transition: opacity 0.15s ease;
+}
+[data-result].stale :is(.chart, #verdict-line, #verdict-breakeven, #verdict-confidence, #stat-row, #tornado-summary, #data-table) {
+  opacity: 0.45;
+  transition: opacity 0.2s ease 0.4s;
 }
 
 /* Inputs (ported slider system) */
@@ -621,6 +669,12 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   .overlay, .overlay.hidden { transition: none; }
   .guide-section-body, .guide-section.open .guide-section-body { transition: none; }
   .guide-chevron { transition: none; }
+  /* No fades, but the same 0.4 s wait, so a fast update still never flickers. */
+  .busy-chip,
+  [data-result] :is(.chart, #verdict-line, #verdict-breakeven, #verdict-confidence, #stat-row, #tornado-summary, #data-table) { transition: none; }
+  #results-spinner.visible .busy-chip { transition: opacity 0s linear 0.4s, visibility 0s linear 0.4s; }
+  [data-result].stale :is(.chart, #verdict-line, #verdict-breakeven, #verdict-confidence, #stat-row, #tornado-summary, #data-table) { transition: opacity 0s linear 0.4s; }
+  .busy-dot { animation: none; }
 }
 
 /* Mobile: the left panel becomes a bottom sheet */
@@ -705,6 +759,8 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   #verdict-line { font-size: 20px; }
   /* Bottom room so the pinned Edit button never covers the footer. */
   #results { padding: 14px 14px 88px; }
+  /* The page scrolls here, so the offset is from the top of the screen. */
+  #results-spinner { top: 21px; }
   /* One line: the name and (from layout.js) the Guide button. The author
      and repo links live in the footer. */
   #title-bar .badge,
