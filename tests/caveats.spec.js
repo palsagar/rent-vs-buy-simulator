@@ -14,22 +14,29 @@ async function load(page, query = '') {
   );
 }
 
+async function regionNotes(page, id) {
+  const regions = await (await page.request.get('/api/regions')).json();
+  return regions.find((r) => r.id === id);
+}
+
 test('the caveats are one tap away under the verdict', async ({ page }) => {
   await load(page);
+  const us = await regionNotes(page, 'us');
   const caveats = page.locator('#verdict-hero #region-caveats');
   await expect(caveats).toBeVisible();
-  await expect(caveats.locator('summary')).toHaveText('1 thing to know about the United States numbers');
-  const item = caveats.locator('li');
-  await expect(item).toBeHidden();
+  const count = us.notes.length;
+  await expect(caveats.locator('summary')).toHaveText(
+    `${count} ${count === 1 ? 'thing' : 'things'} to know about the United States numbers`,
+  );
+  const items = caveats.locator('li');
+  await expect(items.first()).toBeHidden();
   await caveats.locator('summary').click();
-  await expect(item).toBeVisible();
-  await expect(item).toContainText('401(k)');
+  await expect(items).toHaveText(us.notes);
 });
 
 test('the summary counts the selected region’s caveats', async ({ page }) => {
   await load(page);
-  const regions = await (await page.request.get('/api/regions')).json();
-  const uk = regions.find((r) => r.id === 'uk');
+  const uk = await regionNotes(page, 'uk');
   expect(uk.notes.length).toBeGreaterThan(1);
   await page.locator('#region-pills .preset-btn', { hasText: 'UK' }).click();
   await expect(page.locator('#region-caveats summary')).toHaveText(

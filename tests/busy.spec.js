@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
  * The busy state: while a result on screen is out of date for the live
  * config, its section fades back and an "Updating…" chip floats at the
  * top of the visible results. Seeded Monte Carlo makes the configs stable:
- *   ?propertyPrice=1295000 -> Renting ahead by ~$739,670
+ *   ?propertyPrice=1295000 -> Renting ahead by ~$643,253
  */
 
 async function load(page) {
@@ -58,7 +58,7 @@ test('a pending Monte Carlo run dims its section and says the confidence is comi
   await expect(chip(page)).toBeVisible();
 
   // The new verdict is on screen (a drag keeps the toss-up wording).
-  await expect(page.locator('#verdict-line')).toContainText('~$739,670');
+  await expect(page.locator('#verdict-line')).toContainText('~$643,253');
   await expect(page.locator('#verdict-hero')).not.toHaveClass(/stale/);
   await expect(page.locator('#verdict-pending')).toBeVisible();
   await expect(page.locator('#verdict-pending')).toHaveText(' · Checking how sure this is…');

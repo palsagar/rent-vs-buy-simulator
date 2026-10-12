@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
  * The error banner: a busy server (HTTP 503) is asked again on its own,
  * and a failure that remains says what failed and offers a retry that
  * does not reload the page. Seeded Monte Carlo makes the configs stable:
- *   ?propertyPrice=1295000 -> Renting leaves you ~$739,670 wealthier
+ *   ?propertyPrice=1295000 -> Renting leaves you ~$643,253 wealthier
  */
 
 const BUSY = { status: 503, contentType: 'application/json', body: JSON.stringify({ detail: 'Server busy — try again shortly' }) };
