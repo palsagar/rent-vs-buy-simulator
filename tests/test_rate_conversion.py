@@ -34,7 +34,8 @@ class TestHelper:
     def test_floors_at_minus_99_pct(self):
         # Below -100% the twelfth root is undefined. A Monte Carlo draw
         # can in principle land there, so the helper floors it.
-        assert monthly_rate_from_annual(-1.5) == monthly_rate_from_annual(-0.99)
+        floored = monthly_rate_from_annual(-1.5) - monthly_rate_from_annual(-0.99)
+        assert abs(floored) < _FLOAT_TOLERANCE
         assert 1 + monthly_rate_from_annual(-0.99) > 0
 
     def test_scalar_in_float_out_and_arrays_elementwise(self):

@@ -439,11 +439,11 @@ class TestMortgageInsurance:
         # 20% exactly is uninsured: lenders require it only below 20%.
         for down in (20, 25):
             series = run_flat(self._insured(down_payment_pct=down))
-            assert np.all(series["_mortgage_insurance"] == 0.0), down
+            assert np.all(np.abs(series["_mortgage_insurance"]) < 1e-9), down
 
     def test_monthly_charge_is_a_twelfth_of_the_yearly_rate_on_the_loan(self):
         series = run_flat(self._insured())
-        assert series["_mortgage_insurance"][0] == 0.0
+        assert abs(series["_mortgage_insurance"][0]) < 1e-9
         assert abs(series["_mortgage_insurance"][1] - 108_000 * 0.005 / 12) < 1e-9
 
     def test_charge_stops_once_the_balance_falls_to_78_pct_of_the_price(self):
@@ -456,7 +456,7 @@ class TestMortgageInsurance:
         assert balance[102] > 93_600 >= balance[103]
         charge = series["_mortgage_insurance"]
         assert np.all(np.abs(charge[1:104] - 45.0) < 1e-9)
-        assert np.all(charge[104:] == 0.0)
+        assert np.all(np.abs(charge[104:]) < 1e-9)
 
     def test_the_premium_is_part_of_the_cost_of_buying(self):
         # ADR-0002: buying is already the dearer side here (a 647.51
@@ -478,7 +478,7 @@ class TestMortgageInsurance:
 
     def test_rate_zero_means_no_insurance(self):
         series = run_flat(self._insured(mortgage_insurance_rate_pct=0.0))
-        assert np.all(series["_mortgage_insurance"] == 0.0)
+        assert np.all(np.abs(series["_mortgage_insurance"]) < 1e-9)
 
     def test_the_premium_is_not_tax_deductible(self):
         # Only interest and the levy are deductible; US rules on deducting

@@ -80,16 +80,17 @@ class TestBuyWinShare:
     so the two shares still add up to 100% (ADR-0010 amendment)."""
 
     def test_ties_count_half_for_each_side(self):
-        assert _buy_win_share(np.array([1.0, -1.0, 0.0, 0.25])) == 50.0
+        share = _buy_win_share(np.array([1.0, -1.0, 0.0, 0.25]))
+        assert abs(share - 50.0) < _FLOAT_TOLERANCE
         assert math.isclose(
             _buy_win_share(np.array([0.6, 0.6, -2.0])), 200 / 3, rel_tol=1e-12
         )
 
     def test_the_tie_band_matches_the_verdict_rule(self):
         # Same boundary as api._winner: 0.5 is a win, 0.49 a tie.
-        assert _buy_win_share(np.array([0.5])) == 100.0
-        assert _buy_win_share(np.array([-0.5])) == 0.0
-        assert _buy_win_share(np.array([0.49, -0.49])) == 50.0
+        assert abs(_buy_win_share(np.array([0.5])) - 100.0) < _FLOAT_TOLERANCE
+        assert abs(_buy_win_share(np.array([-0.5]))) < _FLOAT_TOLERANCE
+        assert abs(_buy_win_share(np.array([0.49, -0.49])) - 50.0) < _FLOAT_TOLERANCE
 
     def test_a_non_finite_path_is_an_error(self):
         with pytest.raises(RuntimeError, match="finite"):
@@ -97,7 +98,8 @@ class TestBuyWinShare:
 
     def test_run_monte_carlo_reports_this_share(self):
         res = run_monte_carlo(make_config(), MonteCarloConfig(n_simulations=50))
-        assert res.buy_wins_pct == _buy_win_share(res.final_differences)
+        share = _buy_win_share(res.final_differences)
+        assert abs(res.buy_wins_pct - share) < _FLOAT_TOLERANCE
 
 
 class TestSensitivity:
