@@ -147,6 +147,14 @@ export function verdictIsCurrent() {
   return verdictHash === configHash(getConfig());
 }
 
+// The sentence above the tornado reads the same toss-up flag as the
+// headline. Whenever that flag is dropped, the sentence goes too, rather
+// than keep calling a toss-up beside a headline that names a winner. The
+// next Monte Carlo result writes it again.
+function clearTornadoSummary() {
+  document.getElementById("tornado-summary").textContent = "";
+}
+
 // A change that is not a slider drag (a region, a pill, a typed value) can
 // land far from the config the last Monte Carlo run judged, so the next
 // simulate result must name its winner until its own run says otherwise.
@@ -154,12 +162,14 @@ export function verdictIsCurrent() {
 // judged config, and the next simulate result repaints it.
 export function forgetTossUp() {
   tossUp = false;
+  clearTornadoSummary();
 }
 
 // A failed Monte Carlo run leaves nothing to call the verdict a toss-up,
 // so the carried-over flag must not keep the headline from naming the winner.
 export function clearTossUp() {
   tossUp = false;
+  clearTornadoSummary();
   if (lastVerdict) document.getElementById("verdict-line").innerHTML = headlineHtml(lastVerdict);
   paintSheetVerdict();
 }

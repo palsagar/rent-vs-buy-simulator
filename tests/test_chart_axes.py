@@ -229,7 +229,10 @@ class TestTornadoRangeHover:
         # Reordering is only safe on those rows: a per-array reverse or
         # sort of the payload is the shape that desyncs them.
         live = _strip_comments(_source())
-        assert not re.search(r"\[\.\.\.tornado\.\w+\]\.(reverse|sort)\(", live), (
+        payload_array = (
+            r"tornado\.(params|fields|low|high|baseInput|lowInput|highInput)\b"
+        )
+        assert not re.search(payload_array + r"[^;]*?\.(reverse|sort)\(", live), (
             "a payload array is reordered on its own, outside its row"
         )
         guard = re.search(
@@ -242,40 +245,38 @@ class TestTornadoRangeHover:
             assert f"tornado.{key}" in guard.group("body"), (
                 f"tornado.{key} is not gathered with the other range arrays"
             )
-        assert "const slots = [...order].reverse();" in _tornado_body(), (
-            "the rows are not reversed as whole rows"
-        )
+        assert re.search(
+            r"const slots\s*=\s*\[\.\.\.order\]\.reverse\(\)", _tornado_body()
+        ), "the rows are not reversed as whole rows"
 
     def test_the_lower_side_gets_the_low_range_and_the_higher_the_high(self):
         # Swapping these renders a "lower" side whose tested value is an
         # increase -- the end label and hover contradicting each other.
         live = _strip_comments(_source())
-        assert re.search(
-            r"end:\s*tornado\.low\[i\],\s*tested:\s*tested\(lowIn\[i\]\),"
-            r"\s*direction:\s*\"lower\"",
-            live,
-        ), "the lower side is not paired with the low range"
-        assert re.search(
-            r"end:\s*tornado\.high\[i\],\s*tested:\s*tested\(highIn\[i\]\),"
-            r"\s*direction:\s*\"higher\"",
-            live,
-        ), "the higher side is not paired with the high range"
+        for side, arr in (("lower", "low"), ("higher", "high")):
+            assert re.search(
+                rf"end:\s*tornado\.{arr}\[i\],"
+                rf"\s*tested:\s*fmtFieldValue\(fields\[i\],\s*{arr}In\[i\]\),"
+                rf"\s*untested:\s*untested\({arr}In\[i\]\),"
+                rf"\s*direction:\s*\"{side}\"",
+                live,
+            ), f"the {side} side is not paired with the {arr} range"
 
-    def test_bars_are_drawn_as_the_result_so_the_axis_matches_its_title(self):
-        # The axis is the Buy - Rent result itself, titled like the fan
+    def test_bars_are_drawn_as_the_verdict_so_the_axis_matches_its_title(self):
+        # The axis is the verdict itself, Buy - Rent, titled like the fan
         # chart's, so $0 is the tie in both. That holds only while each
-        # bar pivots on the trace `base` (your result) and the hover
+        # bar pivots on the trace `base` (your verdict) and the hover
         # reads its own pre-formatted text: %{x} on a based bar resolves
         # to base + size, which is easy to misread as a change.
         body = _tornado_body()
         assert 'baseLayout("Buy − Rent")' in body, (
-            "the tornado axis is not titled as the Buy - Rent result"
+            "the tornado axis is not titled as the Buy - Rent verdict"
         )
-        assert re.search(r"\bbase,\s*x:", body), "the bars do not pivot on your result"
+        assert re.search(r"\bbase,\s*x:", body), "the bars do not pivot on your verdict"
         assert "%{x}" not in body, "the hover reads %{x} instead of its own text"
         assert re.search(r"x0:\s*0,\s*x1:\s*0", body), "the tie line is not at $0"
         assert re.search(r"x0:\s*base,\s*x1:\s*base", body), (
-            "your result is not marked at the base"
+            "your verdict is not marked at the base"
         )
 
     def test_the_range_is_rendered_in_display_units(self):

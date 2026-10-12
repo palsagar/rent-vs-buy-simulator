@@ -35,14 +35,14 @@ test.describe('the summary sentence', () => {
   test('a toss-up says so instead of naming bars', async ({ page }) => {
     await load(page);
     await expect(page.locator('#tornado-summary')).toHaveText(
-      'Your result is too close to call, so small changes can tip it either way.',
+      'The answer is too close to call, so small changes can tip it either way.',
     );
   });
 
   test('names each bar that flips the answer, with its tested value', async ({ page }) => {
     await load(page, '?monthlyRent=1800');
     await expect(page.locator('#tornado-summary')).toHaveText(
-      /^Two of these could flip the answer to buying on their own: equity growth \(CAGR\) at \d+\.\d% instead of 7\.0%, or property appreciation at \d+\.\d% instead of 3\.0%\.$/,
+      /^Two of these could flip the answer to buying on their own: equity growth at \d+\.\d% instead of 7\.0%, or property appreciation at \d+\.\d% instead of 3\.0%\.$/,
     );
   });
 
@@ -61,6 +61,20 @@ test.describe('the summary sentence', () => {
   });
 });
 
+test('the sentence goes when a failed run drops the toss-up from the headline', async ({ page }) => {
+  await load(page);
+  await expect(page.locator('#tornado-summary')).toContainText('too close to call');
+  await page.route('**/api/monte-carlo', (route) =>
+    route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ detail: 'boom' }) }),
+  );
+  const input = page.locator('#core-inputs .slider-row', { hasText: 'Home price' }).locator('input');
+  await input.fill('1295000');
+  await input.evaluate((el) => el.dispatchEvent(new Event('input', { bubbles: true })));
+  await expect(page.locator('#verdict-line')).toContainText('Renting leaves you');
+  await expect(page.locator('#tornado-summary')).toHaveText('');
+  await expect(page.locator('#tornado-summary')).toBeHidden();
+});
+
 test.describe('the chart', () => {
   test('has a plain-language title and no colour key to decode', async ({ page }) => {
     await load(page);
@@ -70,11 +84,11 @@ test.describe('the chart', () => {
     await expect(card).not.toContainText('stress-test');
   });
 
-  test('$0 is the tie, on screen, with your result marked', async ({ page }) => {
+  test('$0 is the tie, on screen, with your verdict marked', async ({ page }) => {
     await load(page, '?monthlyRent=3200'); // buying ahead by ~$153k
     const { range, base, yourResult, labels } = await page.evaluate(() => {
       const el = document.getElementById('tornado-chart');
-      const line = el.layout.shapes.find((s) => s.type === 'line' && s.name === 'your-result');
+      const line = el.layout.shapes.find((s) => s.type === 'line' && s.name === 'you-are-here');
       return {
         range: el._fullLayout.xaxis.range,
         base: el.data[0].base,
@@ -86,7 +100,7 @@ test.describe('the chart', () => {
     expect(range[1]).toBeGreaterThan(0);
     expect(base).toBeGreaterThan(100_000);
     expect(yourResult).toBeCloseTo(base, 0);
-    expect(labels).toContain('Your result');
+    expect(labels).toContain('You are here');
     expect(labels.some((t) => t.includes('Renting ahead'))).toBe(true);
     expect(labels.some((t) => t.includes('Buying ahead'))).toBe(true);
   });
@@ -115,6 +129,17 @@ test.describe('the chart', () => {
       return el.data.map((t) => t.text[row]);
     });
     expect(ends.sort()).toEqual(['$400k', '$600k']);
+  });
+
+  test('a side stopped at its slider limit draws nothing', async ({ page }) => {
+    await load(page, '?downPaymentPct=50'); // the slider maximum: it can only go down
+    const sides = await page.evaluate(() => {
+      const el = document.getElementById('tornado-chart');
+      const row = el.data[0].y.indexOf('Down payment');
+      return el.data.map((t) => ({ x: t.x[row], text: t.text[row], hover: t.customdata[row] }));
+    });
+    expect(sides[0].text).toBe('45%');
+    expect(sides[1]).toEqual({ x: null, text: '', hover: '' });
   });
 
   test('both sides of a bar share one neutral colour', async ({ page }) => {
@@ -177,10 +202,13 @@ test.describe('on a phone', () => {
     const out = await page.evaluate(() => {
       const el = document.getElementById('tornado-chart');
       const box = el.getBoundingClientRect();
-      return [...el.querySelectorAll('.bars .textpoint text')]
-        .map((t) => t.getBoundingClientRect())
-        .filter((r) => r.left < box.left || r.right > box.right).length;
+      const labels = [...el.querySelectorAll('text.bartext')].map((t) => t.getBoundingClientRect());
+      return {
+        count: labels.length,
+        outside: labels.filter((r) => r.left < box.left || r.right > box.right).length,
+      };
     });
-    expect(out).toBe(0);
+    expect(out.count).toBe(16); // two ends on each of the 8 bars
+    expect(out.outside).toBe(0);
   });
 });
