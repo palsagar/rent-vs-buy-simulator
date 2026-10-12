@@ -84,3 +84,16 @@ test('the CSV carries the region currency and name', async ({ page }) => {
   expect(text.split('\n')[0]).toContain('Home value (GBP)');
   expect(name).toMatch(/^rent-or-buy-uk-10-years-\d+\.csv$/);
 });
+
+test('the CSV names the scenario on screen, not a switch that failed', async ({ page }) => {
+  await load(page);
+  await page.route('**/api/simulate', (route) =>
+    route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ detail: 'boom' }) }),
+  );
+  await page.locator('#region-pills .preset-btn', { hasText: 'UK' }).click();
+  await expect(page.locator('#error-banner')).toBeVisible();
+  await page.locator('#numbers summary').click();
+  const { name, text } = await download(page);
+  expect(name).toBe('rent-or-buy-us-10-years-500000.csv');
+  expect(text.split('\n')[0]).toContain('Home value (USD)');
+});

@@ -12,7 +12,7 @@ import {
 } from "./charts.js";
 import { trackEvent } from "./analytics.js";
 import { fmtMoney, getCurrencySymbol } from "./format.js";
-import { configHash, debounce, getConfig, getRegionId } from "./state.js";
+import { configHash, debounce, getConfig, getFtb, getRegionId } from "./state.js";
 
 // A winner that wins in 40-60% of simulated futures (the confidence, as
 // displayed) is a toss-up, so the headline stops naming it (ADR-0010).
@@ -31,7 +31,10 @@ let tossUp = false;
 // simulate result lands (or when it fails), it differs from the live config.
 let verdictHash = null;
 // The payloads on screen, so the charts can be drawn again at a new size.
-// The tornado's is `tornado`, below.
+// The tornado's is `tornado`, below. `lastSim` also keeps the scenario the
+// result was computed for (config, region, currency, relief setting), so
+// the CSV and the printout describe the numbers on screen even when a
+// later change failed to update them.
 let lastSim = null;
 let lastFan = null;
 
@@ -186,11 +189,12 @@ function renderTable(series) {
     `<table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-// `cfg` is the config the table on screen was computed for, so the file
-// name always matches the rows in the file.
-export function downloadCsv(series, cfg) {
+// Takes the scenario the table on screen was computed for, so the
+// headers and the file name always match the rows in the file.
+export function downloadCsv({ data, cfg, regionId, symbol }) {
+  const { series } = data;
   // A link that matches no region keeps its symbol.
-  const code = REGION_CURRENCY[getRegionId()] ?? getCurrencySymbol();
+  const code = REGION_CURRENCY[regionId] ?? symbol;
   const lines = [
     ["Month", "Year", ...NUMBER_COLUMNS.map((c) => c.csv(code))].join(","),
     ...series.year.map((year, i) =>
@@ -200,7 +204,7 @@ export function downloadCsv(series, cfg) {
   // The byte-order mark makes Excel read the file as UTF-8.
   const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
-  const name = `rent-or-buy-${getRegionId() ?? "custom"}-${cfg.horizonYears}-years-${cfg.propertyPrice}.csv`;
+  const name = `rent-or-buy-${regionId ?? "custom"}-${cfg.horizonYears}-years-${cfg.propertyPrice}.csv`;
   const link = Object.assign(document.createElement("a"), { href: url, download: name });
   link.click();
   URL.revokeObjectURL(url);
@@ -208,7 +212,8 @@ export function downloadCsv(series, cfg) {
 
 export function renderSimulate(data, cfg) {
   verdictHash = configHash(cfg);
-  lastSim = { data, cfg };
+  lastSim = { data, cfg, regionId: getRegionId(), symbol: getCurrencySymbol(), ftb: getFtb() };
+  const shown = lastSim;
   renderVerdict(data);
   renderStats(data);
   renderDecisionChart(document.getElementById("decision-chart"), data.series, data.breakevenYear);
@@ -216,7 +221,7 @@ export function renderSimulate(data, cfg) {
   renderBreakdownChart(document.getElementById("breakdown-chart"), data, cfg);
   renderTable(data.series);
   document.getElementById("csv-btn").onclick = (e) => {
-    downloadCsv(data.series, cfg);
+    downloadCsv(shown);
     if (e.isTrusted) trackEvent("csv-downloaded");
   };
 }
