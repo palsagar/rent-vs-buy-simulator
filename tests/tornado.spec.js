@@ -6,7 +6,7 @@ import { test, expect } from '@playwright/test';
  * tested values printed at the bar ends.
  *
  * Scenarios are US defaults with one share-link override each:
- *   - defaults:          a toss-up (buying wins in 46% of futures);
+ *   - defaults:          a toss-up (buying wins in 49% of futures);
  *   - monthlyRent=1800:  renting ahead, two bars cross to buying;
  *   - monthlyRent=2000:  renting ahead, four bars cross to buying;
  *   - monthlyRent=3200:  buying ahead, no bar crosses.
@@ -167,8 +167,8 @@ test.describe('the chart', () => {
     await load(page);
     expect(await rowsTopToBottom(page)).toEqual([
       'Guesses about the future',
-      'Equity growth (CAGR)',
       'Property appreciation',
+      'Equity growth (per year)',
       'Rent inflation',
       'Your numbers',
       'Monthly rent',
@@ -254,7 +254,7 @@ test.describe('the chart', () => {
     await load(page, '?equityGrowthAnnual=13'); // the higher test stops at the 15% maximum
     const hover = await page.evaluate(() => {
       const el = document.getElementById('tornado-chart');
-      return el.data[1].customdata[el.data[1].y.indexOf('Equity growth (CAGR)')];
+      return el.data[1].customdata[el.data[1].y.indexOf('Equity growth (per year)')];
     });
     expect(hover).toMatch(/^Equity growth at 15\.0% instead of 13\.0% \(the slider maximum\)<br>/);
 
@@ -288,8 +288,9 @@ test.describe('the chart', () => {
 
   test('a clamped side that flips the verdict is named without its mark', async ({ page }) => {
     // Buying is ahead in 68% of futures. +20% on the home price would be
-    // $2.04M; the slider stops at $2.0M, and there renting is ahead.
-    await load(page, '?propertyPrice=1700000&monthlyRent=9750');
+    // $2.04M; the slider stops at $2.0M, and there renting is ahead. It is
+    // the third-widest of four flips, so the summary still names it.
+    await load(page, '?propertyPrice=1700000&monthlyRent=9500');
     const summary = page.locator('#tornado-summary');
     await expect(summary).toContainText('could flip the answer to renting');
     await expect(summary).toContainText('home price at $2.0M instead of $1.7M');

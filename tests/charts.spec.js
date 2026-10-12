@@ -22,7 +22,7 @@ test('the net value chart x-axis ends at the horizon', async ({ page }) => {
 });
 
 test('the Buy and Rent end labels never overprint', async ({ page }) => {
-  await load(page); // the two end values are $1,248 apart
+  await load(page); // the two end values are $4,060 apart
   const overlap = await page.evaluate(() => {
     const [a, b] = [...document.querySelectorAll('#decision-chart .annotation-text')]
       .filter((t) => t.textContent === 'Buy' || t.textContent === 'Rent')
@@ -45,7 +45,7 @@ test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 664 } });
 
   test('the breakeven label stays inside the plot when it falls near the horizon', async ({ page }) => {
-    await load(page); // default config: breakeven at 9.985 years, on a 10-year horizon
+    await load(page); // default config: breakeven at 9.0 years, on a 10-year horizon
     const { labelRight, plotRight } = await page.evaluate(() => {
       const el = document.getElementById('decision-chart');
       const label = [...el.querySelectorAll('.annotation-text')]

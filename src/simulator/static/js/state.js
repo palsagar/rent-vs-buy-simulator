@@ -32,6 +32,7 @@ export const DEFAULT_CONFIG = {
   saleCgExemptAfterYears: 10,
   saleCgRatePct: 15.0,
   portfolioCgRatePct: 15.0,
+  mortgageInsuranceRatePct: 0.5,
 };
 
 let config = { ...DEFAULT_CONFIG };
@@ -75,7 +76,23 @@ export function applyPreset(partial) {
 // link written before the change from one written after. v2 moved the
 // levyDeductionCap "uncapped" sentinel from 0 to negative, which made 0 a
 // real value (the levy is not deductible) that four region bundles ship.
-const URL_SCHEMA_VERSION = "2";
+// v3 added mortgageInsuranceRatePct. A link carries only the values that
+// differ from DEFAULT_CONFIG, so a v3 link without the key means the US
+// default, but an older link without it says nothing about it: the value
+// must come from the link's region instead (inputs.js).
+const URL_SCHEMA_VERSION = "3";
+
+// Keys a link older than v3 cannot carry.
+export const KEYS_ADDED_IN_V3 = ["mortgageInsuranceRatePct"];
+
+// The KEYS_ADDED_IN_V3 that the link the page opened with was too old to
+// carry. Set by readUrl.
+let omittedKeys = new Set();
+
+/** Whether the link the page opened with was too old to carry `key`. */
+export function urlOmitted(key) {
+  return omittedKeys.has(key);
+}
 
 // Which region the user picked is state in its own right, NOT something
 // recoverable from the numbers. Reverse-matching a config against every
@@ -178,6 +195,8 @@ export function readUrl() {
   // this gate the migration would rewrite every European region link and
   // silently make that region's levy deductible.
   const isLegacy = !params.has("v");
+  const predatesV3 = isLegacy || Number(params.get("v")) < 3;
+  omittedKeys = new Set(predatesV3 ? KEYS_ADDED_IN_V3.filter((k) => !params.has(k)) : []);
   // Validated against the real bundle list by inputs.js, which owns the
   // region data; an unknown id is dropped there.
   regionId = params.get("r");

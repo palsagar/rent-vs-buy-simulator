@@ -24,7 +24,7 @@ _FIELDS_JS = Path(__file__).parent.parent / "src/simulator/static/js/fields.js"
 
 # Every INPUT_DEFS entry that declares min/max. Update deliberately when
 # a slider is added or removed -- see the canary test below.
-_EXPECTED_BOUNDED_FIELDS = 25
+_EXPECTED_BOUNDED_FIELDS = 26
 
 
 def _field_steps() -> dict[str, tuple[Fraction, Fraction]]:

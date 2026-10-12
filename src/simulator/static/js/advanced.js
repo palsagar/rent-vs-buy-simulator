@@ -27,13 +27,17 @@ function summarizeTransaction(c) {
 }
 
 // Year-1 owning costs at today's price: the % parts of the levy and of
-// maintenance, plus every fixed amount.
+// maintenance, every fixed amount, and mortgage insurance, a % of the
+// loan charged only below 20% down (engine.py).
 function summarizeYearly(c) {
+  const loan = c.propertyPrice * (1 - c.downPaymentPct / 100);
+  const mortgageInsurance = c.downPaymentPct < 20 ? (loan * c.mortgageInsuranceRatePct) / 100 : 0;
   const total =
     (c.propertyPrice * (c.propertyTaxRate + c.annualMaintenancePct)) / 100 +
     c.annualPropertyLevy +
     c.annualHomeInsurance +
-    c.annualMaintenanceAmount;
+    c.annualMaintenanceAmount +
+    mortgageInsurance;
   return `≈ ${fmtMoney(total)} in year 1`;
 }
 

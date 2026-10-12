@@ -373,8 +373,20 @@ function tornadoRows(tornado) {
   });
 }
 
+// A Buy - Rent gap under half a unit of currency is a tie: it would print
+// as "~$0". Mirrors engine.TIE_TOLERANCE.
+const TIE_TOLERANCE = 0.5;
+
+// The server's verdict rule (api._winner) for one Buy - Rent gap.
+function winnerOf(diff) {
+  if (Math.abs(diff) < TIE_TOLERANCE) return "tie";
+  return diff > 0 ? "buy" : "rent";
+}
+
 function aheadBy(diff) {
-  return diff > 0 ? `Buying ahead by ${fmtMoney(diff)}` : `Renting ahead by ${fmtMoney(-diff)}`;
+  const winner = winnerOf(diff);
+  if (winner === "tie") return "Buying and renting level";
+  return winner === "buy" ? `Buying ahead by ${fmtMoney(diff)}` : `Renting ahead by ${fmtMoney(-diff)}`;
 }
 
 function lowerFirst(text) {
@@ -410,15 +422,18 @@ function listPhrase(items, conjunction) {
 }
 
 // The sentence above the tornado: which single changes would flip the
-// answer. A side flips it when its verdict lands on the other side of the
-// tie from yours. The winner follows the server's own rule (buy only when
-// Buy - Rent is above zero), and a toss-up gets its own line, decided by
-// the same flag as the headline, so the two never disagree.
+// answer. A side flips it when its verdict names the other strategy. The
+// winner follows the server's own rule (winnerOf), so an exact tie gets
+// its own line, and a toss-up gets one too, decided by the same flag as
+// the headline, so the two never disagree.
 export function tornadoSummary(tornado, tossUp) {
+  const winner = winnerOf(tornado.base);
+  if (winner === "tie") return "Buying and renting are level, so any change here would put one of them ahead.";
   if (tossUp) return "The answer is too close to call, so small changes can tip it either way.";
-  const buyAhead = tornado.base > 0;
+  const buyAhead = winner === "buy";
+  const other = buyAhead ? "rent" : "buy";
   const flips = tornadoRows(tornado).flatMap((row) => {
-    const side = row.sides.find((s) => !s.untested && s.end > 0 !== buyAhead);
+    const side = row.sides.find((s) => !s.untested && winnerOf(s.end) === other);
     const named = { ...row, label: shortLabel(row.label) };
     return side === undefined ? [] : [lowerFirst(testedPhrase(named, side))];
   });
@@ -703,6 +718,8 @@ export function renderBreakdownChart(el, payload, cfg) {
     ["Property levy", t.propertyTaxPaid],
     ["Maintenance", t.maintenancePaid],
     ["Insurance", t.insurancePaid],
+    // Zero at 20% down or more; a response from before the field had none.
+    ["Mortgage insurance", t.mortgageInsurancePaid ?? 0],
     ["Buyer closing", t.closingCostsBuyer],
     ["Seller closing", t.closingCostsSeller],
   ].sort((a, b) => b[1] - a[1]);

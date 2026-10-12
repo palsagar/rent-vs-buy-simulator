@@ -8,6 +8,7 @@ import { trackEvent } from "./analytics.js";
 import { fmtMoney, parseTypedNumber, setCurrency } from "./format.js";
 import {
   DEFAULT_CONFIG,
+  KEYS_ADDED_IN_V3,
   applyPreset,
   debounce,
   getConfig,
@@ -16,6 +17,7 @@ import {
   setFtb,
   setParam,
   setRegionId,
+  urlOmitted,
 } from "./state.js";
 
 const OUTLOOK_PRESETS = {
@@ -426,11 +428,16 @@ function deriveSelectedRegion(regions) {
     if (named) return named;
   }
   const cfg = getConfig();
+  // A key the link was too old to carry still holds the US default, so it
+  // says nothing about the region and must not rule one out.
+  const carried = ([k]) => !urlOmitted(k);
   return (
     regions.find(
       (region) =>
         region.available &&
-        Object.entries(region.taxPrimitives).every(([k, v]) => cfg[k] === v),
+        Object.entries(region.taxPrimitives)
+          .filter(carried)
+          .every(([k, v]) => cfg[k] === v),
     ) ??
     // A config matching no bundle is legitimate -- a hand-edited or
     // FTB-modified share URL. Fall back to matching on the keys the FTB
@@ -440,10 +447,24 @@ function deriveSelectedRegion(regions) {
         region.available &&
         Object.entries(region.taxPrimitives)
           .filter(([k]) => !(k in region.firstTimeBuyerOverrides))
+          .filter(carried)
           .every(([k, v]) => cfg[k] === v),
     ) ??
     null
   );
+}
+
+/**
+ * Give each key the opening link was too old to carry the selected
+ * region's value, rather than the US default the config started from.
+ */
+function fillKeysTheLinkPredates() {
+  const primitives = selectedRegion?.taxPrimitives ?? {};
+  const cfg = getConfig();
+  const keys = KEYS_ADDED_IN_V3.filter(
+    (k) => urlOmitted(k) && k in primitives && cfg[k] !== primitives[k],
+  );
+  if (keys.length > 0) applyPreset(Object.fromEntries(keys.map((k) => [k, primitives[k]])));
 }
 
 /** Move ONLY the override keys. Never re-applies the whole bundle. */
@@ -593,6 +614,7 @@ function buildPresetPills(regions) {
   // may be any region's. Marking the first pill active regardless would
   // make the first FTB click apply the US delta to a UK config.
   selectedRegion = deriveSelectedRegion(regions);
+  fillKeysTheLinkPredates();
   // Persist whatever was derived, so a legacy link upgrades to a stored
   // id on first load and stops depending on the numbers matching. An `r`
   // that names no region is dropped, so a shared link never repeats it.
