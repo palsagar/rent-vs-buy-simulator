@@ -97,3 +97,31 @@ test('the CSV names the scenario on screen, not a switch that failed', async ({ 
   expect(name).toBe('rent-or-buy-us-10-years-500000.csv');
   expect(text.split('\n')[0]).toContain('Home value (USD)');
 });
+
+test('a result that lands after a region switch keeps the region it was asked for', async ({ page }) => {
+  await load(page);
+  // The $550k request is held until the UK switch, then answered inside
+  // the switch's 300 ms wait; the UK request that follows fails.
+  let held = null;
+  await page.route('**/api/simulate', async (route) => {
+    if (held === null) {
+      const response = await route.fetch();
+      held = () => route.fulfill({ response });
+      return;
+    }
+    await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ detail: 'boom' }) });
+  });
+  await page.evaluate(() => {
+    const price = document.querySelector('#core-inputs input[type=range]');
+    price.value = 550000;
+    price.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect.poll(() => held !== null).toBe(true);
+  await page.locator('#region-pills .preset-btn', { hasText: 'UK' }).click();
+  await held();
+  await expect(page.locator('#error-banner')).toBeVisible();
+  await page.locator('#numbers summary').click();
+  const { name, text } = await download(page);
+  expect(name).toBe('rent-or-buy-us-10-years-550000.csv');
+  expect(text.split('\n')[0]).toContain('Home value (USD)');
+});

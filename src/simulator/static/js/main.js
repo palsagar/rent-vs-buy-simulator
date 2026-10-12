@@ -13,11 +13,14 @@ import {
   renderMonteCarlo,
   renderSimulate,
 } from "./results.js";
+import { getCurrencySymbol } from "./format.js";
 import {
   configHash,
   debounce,
   getCached,
   getConfig,
+  getFtb,
+  getRegionId,
   onConfigChange,
   readUrl,
   setCached,
@@ -120,11 +123,14 @@ async function runSimulate() {
   simAbort?.abort();
   const cfg = getConfig();
   const hash = configHash(cfg);
+  // The scenario as asked for: the region, currency and relief can change
+  // before the answer lands.
+  const scenario = { cfg, regionId: getRegionId(), symbol: getCurrencySymbol(), ftb: getFtb() };
   const cached = getCached("simulate", hash);
   if (cached) {
     lastWinner = cached.verdict.winner;
     lastWinnerHash = hash;
-    renderSimulate(cached, cfg);
+    renderSimulate(cached, scenario);
     shown.simulate = hash;
     errors.simulate = null;
     syncBanner();
@@ -152,7 +158,7 @@ async function runSimulate() {
     if (simAbort !== controller) return;
     lastWinner = data.verdict.winner;
     lastWinnerHash = hash;
-    renderSimulate(data, cfg);
+    renderSimulate(data, scenario);
     shown.simulate = hash;
     errors.simulate = null;
     syncBanner();

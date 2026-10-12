@@ -11,8 +11,8 @@ import {
   tornadoSummary,
 } from "./charts.js";
 import { trackEvent } from "./analytics.js";
-import { fmtMoney, getCurrencySymbol } from "./format.js";
-import { configHash, debounce, getConfig, getFtb, getRegionId } from "./state.js";
+import { fmtMoney } from "./format.js";
+import { configHash, debounce, getConfig } from "./state.js";
 
 // A winner that wins in 40-60% of simulated futures (the confidence, as
 // displayed) is a toss-up, so the headline stops naming it (ADR-0010).
@@ -230,9 +230,13 @@ export function downloadCsv({ data, cfg, regionId, symbol }) {
   URL.revokeObjectURL(url);
 }
 
-export function renderSimulate(data, cfg) {
+// `scenario` is what the request was made for, `{ cfg, regionId, symbol,
+// ftb }`, captured when it was sent: by the time the answer lands the
+// page can already be on another region.
+export function renderSimulate(data, scenario) {
+  const { cfg } = scenario;
   verdictHash = configHash(cfg);
-  lastSim = { data, cfg, regionId: getRegionId(), symbol: getCurrencySymbol(), ftb: getFtb() };
+  lastSim = { data, ...scenario };
   const shown = lastSim;
   renderVerdict(data);
   renderStats(data);
