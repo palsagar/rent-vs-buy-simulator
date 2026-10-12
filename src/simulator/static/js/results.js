@@ -11,7 +11,7 @@ import {
   tornadoSummary,
 } from "./charts.js";
 import { fmtMoney } from "./format.js";
-import { configHash, getConfig } from "./state.js";
+import { configHash, debounce, getConfig } from "./state.js";
 
 // A winner that wins in 40-60% of simulated futures (the confidence, as
 // displayed) is a toss-up, so the headline stops naming it (ADR-0010).
@@ -29,6 +29,45 @@ let tossUp = false;
 // The config the verdict on screen was computed for. Until the next
 // simulate result lands (or when it fails), it differs from the live config.
 let verdictHash = null;
+
+// The tornado's layout depends on its width: the phone layout below
+// NARROW_CHART_PX, its margins, and the axis room that keeps its labels
+// inside the chart (charts.js). A width change after it is drawn (a
+// resized window, a turned phone) draws it again from the payload on
+// screen (#57).
+let tornado = null; // the payload on screen
+let tornadoWidth = null; // the width it was laid out for; null until drawn
+let watchingTornado = false;
+const TORNADO_RESIZE_MS = 100;
+
+function drawTornado() {
+  const el = document.getElementById("tornado-chart");
+  // A hidden chart has no width to lay out for; it is drawn once it shows.
+  if (el.clientWidth === 0) {
+    tornadoWidth = null;
+    return;
+  }
+  tornadoWidth = el.clientWidth;
+  renderTornadoChart(el, tornado);
+}
+
+// Any whole-pixel change counts. Drawing never changes the chart's width
+// (the card sets it; the height is fixed), so a draw cannot set off another.
+const redrawTornado = debounce(() => {
+  const el = document.getElementById("tornado-chart");
+  if (!tornado || el.clientWidth === 0 || el.clientWidth === tornadoWidth) return;
+  drawTornado();
+  // A redraw keeps the width Plotly drew at, and Plotly fits it to the
+  // chart only on a window resize, which a chart shown again after being
+  // hidden never gets.
+  Plotly.Plots.resize(el);
+}, TORNADO_RESIZE_MS);
+
+function watchTornadoWidth() {
+  if (watchingTornado || typeof ResizeObserver === "undefined") return;
+  watchingTornado = true;
+  new ResizeObserver(redrawTornado).observe(document.getElementById("tornado-chart"));
+}
 
 function headlineHtml({ winner, difference, horizonYears }) {
   const amount = `~${fmtMoney(Math.abs(difference))}`;
@@ -187,5 +226,7 @@ export function renderMonteCarlo(mc, winner) {
     ` · ${name} wins in ${shownPct}% of simulated futures`;
   renderFanChart(document.getElementById("fan-chart"), mc);
   document.getElementById("tornado-summary").textContent = tornadoSummary(mc.tornado, tossUp);
-  renderTornadoChart(document.getElementById("tornado-chart"), mc.tornado);
+  tornado = mc.tornado;
+  drawTornado();
+  watchTornadoWidth();
 }
