@@ -302,6 +302,18 @@ class TestNewPrimitivesOnTheWire:
         with pytest.raises(ValueError, match="levy_paid_by_occupier"):
             config_from_dict(payload)
 
+    def test_mortgage_insurance_round_trips(self):
+        payload = {**config_to_dict(make_config()), "mortgageInsuranceRatePct": 1.0}
+        config = config_from_dict(payload)
+        assert config.mortgage_insurance_rate_pct == 1.0
+        assert config_to_dict(config)["mortgageInsuranceRatePct"] == 1.0
+
+    def test_mortgage_insurance_total_is_on_the_wire(self):
+        config = make_config(down_payment_pct=10)
+        paid = simulate_payload(config)["totals"]["mortgageInsurancePaid"]
+        assert paid > 0
+        assert paid == calculate_scenarios(config).total_mortgage_insurance_paid
+
     def test_all_six_primitives_serialize_with_camel_case_keys(self):
         payload = config_to_dict(make_config())
         for key in (

@@ -416,3 +416,84 @@ class TestPortfolioDrag:
         none = run_flat(taxfree_config(**kwargs))
         assert np.allclose(drag["_basis_buy"], none["_basis_buy"], rtol=1e-12)
         assert np.allclose(drag["_basis_rent"], none["_basis_rent"], rtol=1e-12)
+
+
+class TestMortgageInsurance:
+    """A yearly % of the ORIGINAL loan, billed monthly, on a down payment
+    under 20%, until the scheduled balance falls to 78% of the price (US
+    Homeowners Protection Act, 12 U.S.C. 4901(18) "termination date").
+
+    taxfree_config: price 120,000 at 6% over 30 years. At 10% down the
+    loan is 108,000, so 0.5% a year is 45.00 a month.
+    """
+
+    @staticmethod
+    def _insured(**overrides: object):
+        base = dict(
+            horizon_years=10, down_payment_pct=10, mortgage_insurance_rate_pct=0.5
+        )
+        base.update(overrides)
+        return taxfree_config(**base)
+
+    def test_no_insurance_at_or_above_20_pct_down(self):
+        # 20% exactly is uninsured: lenders require it only below 20%.
+        for down in (20, 25):
+            series = run_flat(self._insured(down_payment_pct=down))
+            assert np.all(series["_mortgage_insurance"] == 0.0), down
+
+    def test_monthly_charge_is_a_twelfth_of_the_yearly_rate_on_the_loan(self):
+        series = run_flat(self._insured())
+        assert series["_mortgage_insurance"][0] == 0.0
+        assert abs(series["_mortgage_insurance"][1] - 108_000 * 0.005 / 12) < 1e-9
+
+    def test_charge_stops_once_the_balance_falls_to_78_pct_of_the_price(self):
+        # 78% of 120,000 is 93,600. By npf.fv the balance is 93,739.78
+        # after payment 102 and 93,560.96 after payment 103. Each month is
+        # judged on the balance it starts with, so month 103 is the last
+        # one charged and month 104 the first one free.
+        series = run_flat(self._insured())
+        balance = series["mortgage_balance"]
+        assert balance[102] > 93_600 >= balance[103]
+        charge = series["_mortgage_insurance"]
+        assert np.all(np.abs(charge[1:104] - 45.0) < 1e-9)
+        assert np.all(charge[104:] == 0.0)
+
+    def test_the_premium_is_part_of_the_cost_of_buying(self):
+        # ADR-0002: buying is already the dearer side here (a 647.51
+        # payment against 500 rent), so each premium raises the buyer's
+        # cost, the cash both sides commit, and what the renter invests,
+        # all by exactly the premium.
+        with_premium = run_flat(self._insured())
+        without = run_flat(self._insured(mortgage_insurance_rate_pct=0.0))
+        premium = with_premium["_mortgage_insurance"]
+        np.testing.assert_allclose(
+            with_premium["housing_cost_buy"] - without["housing_cost_buy"],
+            premium,
+            atol=1e-9,
+        )
+        for key in ("cash_committed", "_basis_rent"):
+            np.testing.assert_allclose(
+                with_premium[key] - without[key], np.cumsum(premium), atol=1e-6
+            )
+
+    def test_rate_zero_means_no_insurance(self):
+        series = run_flat(self._insured(mortgage_insurance_rate_pct=0.0))
+        assert np.all(series["_mortgage_insurance"] == 0.0)
+
+    def test_the_premium_is_not_tax_deductible(self):
+        # Only interest and the levy are deductible; US rules on deducting
+        # this premium have changed several times and are not modelled.
+        kwargs = dict(interest_deduction_enabled=True, marginal_tax_rate_pct=24.0)
+        with_premium = run_flat(self._insured(**kwargs))
+        without = run_flat(self._insured(mortgage_insurance_rate_pct=0.0, **kwargs))
+        np.testing.assert_array_equal(
+            with_premium["cum_tax_savings"], without["cum_tax_savings"]
+        )
+
+    def test_reported_totals_match_the_series(self):
+        config = self._insured()
+        results = calculate_scenarios(config)
+        assert abs(results.total_mortgage_insurance_paid - 45.0 * 103) < 1e-6
+        without = calculate_scenarios(self._insured(mortgage_insurance_rate_pct=0.0))
+        gap = results.monthly_cost_buy_year1 - without.monthly_cost_buy_year1
+        assert abs(gap - 45.0) < 1e-9

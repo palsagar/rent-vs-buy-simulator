@@ -221,6 +221,7 @@ def simulate_payload(config: SimulationConfig) -> dict[str, Any]:
             "maintenancePaid": results.total_maintenance_paid,
             "interestPaid": results.total_mortgage_interest_paid,
             "taxSavings": results.total_tax_savings,
+            "mortgageInsurancePaid": results.total_mortgage_insurance_paid,
         },
         "series": {
             "year": df["Year"].tolist(),

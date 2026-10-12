@@ -161,8 +161,9 @@ def _net_value_series(
         ``outflow_rent``, ``cash_committed``, ``cum_tax_savings``,
         ``net_buy``, ``net_rent``, plus underscore-prefixed internals
         (``_interest``, ``_levy``, ``_insurance``, ``_maintenance``,
-        ``_basis_rent``, ``_basis_buy``, ``_monthly_payment``,
-        ``_buyer_closing``) consumed by the tax layer.
+        ``_mortgage_insurance``, ``_basis_rent``, ``_basis_buy``,
+        ``_monthly_payment``, ``_buyer_closing``) consumed by the tax
+        layer and the reported totals.
 
     Examples
     --------
@@ -255,7 +256,19 @@ def _net_value_series(
         + (config.annual_maintenance_amount / 12) * cost_index
     )
 
-    housing_cost_buy = payment + levy + insurance + maintenance
+    # --- Mortgage insurance: a yearly % of the ORIGINAL loan, billed
+    # monthly, only on a down payment under 20%. A month is charged while
+    # the scheduled balance it starts with is above 78% of the price; at
+    # 78% US policies end by law (12 U.S.C. 4901(18)). Not deductible.
+    mortgage_insurance = np.zeros(h + 1)
+    if config.down_payment_pct < 20:
+        mortgage_insurance[1:] = np.where(
+            balance[:-1] > 0.78 * config.property_price,
+            loan * (config.mortgage_insurance_rate_pct / 100) / 12,
+            0.0,
+        )
+
+    housing_cost_buy = payment + levy + insurance + maintenance + mortgage_insurance
 
     # --- Rent paid during month m (rent set at end of prior month)
     rent_level = config.monthly_rent * np.concatenate(
@@ -379,6 +392,7 @@ def _net_value_series(
         "_levy": levy,
         "_insurance": insurance,
         "_maintenance": maintenance,
+        "_mortgage_insurance": mortgage_insurance,
         "_basis_rent": basis_rent,
         "_basis_buy": basis_buy,
         "_monthly_payment": np.array([pmt]),
@@ -542,4 +556,5 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
         total_maintenance_paid=float(np.sum(series["_maintenance"])),
         total_mortgage_interest_paid=float(np.sum(series["_interest"])),
         total_tax_savings=float(series["cum_tax_savings"][-1]),
+        total_mortgage_insurance_paid=float(np.sum(series["_mortgage_insurance"])),
     )

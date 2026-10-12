@@ -13,8 +13,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+import numpy as np
+
 from simulator.api import config_from_dict
+from simulator.engine import monthly_rate_from_annual
 from simulator.regions import list_regions
+from tests.test_engine_core import run_flat
 
 _FIELDS_JS = Path(__file__).parent.parent / "src/simulator/static/js/fields.js"
 
@@ -262,6 +266,93 @@ class TestUnitedStates:
         assert primitives["annualMaintenanceAmount"] == 0.0
         assert primitives["portfolioDeemedReturnPct"] == 0.0
         assert primitives["portfolioDragRatePct"] == 0.0
+
+    def test_mortgage_insurance_sits_in_freddie_macs_quoted_range(self):
+        # Freddie Mac, "What Is Private Mortgage Insurance?" (My Home by
+        # Freddie Mac, last reviewed 2025-01-03): "You can expect to pay
+        # between $30 and $70 per month for every $100,000 you borrowed",
+        # i.e. 0.36% to 0.84% of the loan a year. Its "Breaking down PMI"
+        # page works its example at 0.51%. Rated M: the real premium
+        # depends on the credit score and the share of the price borrowed.
+        primitives = next(r for r in list_regions() if r["id"] == "us")["taxPrimitives"]
+        rate = primitives["mortgageInsuranceRatePct"]
+        assert rate == 0.5
+        assert 30 * 12 / 100_000 * 100 <= rate <= 70 * 12 / 100_000 * 100
+
+    def test_mortgage_insurance_note_says_when_it_applies_and_when_it_ends(self):
+        # CFPB ("What is private mortgage insurance?"): required on a
+        # conventional loan with a down payment under 20% of the price.
+        # 12 U.S.C. 4901(18)(A): it terminates on the date the balance is
+        # first scheduled to reach 78% of the original value.
+        notes = " ".join(next(r for r in list_regions() if r["id"] == "us")["notes"])
+        assert "20%" in notes
+        assert "78%" in notes
+
+
+class TestMortgageInsuranceAcrossRegions:
+    def test_only_the_us_charges_a_yearly_premium(self):
+        # FR: a one-off guarantee; DE and UK: a higher rate on a small
+        # deposit; NL: the one-off NHG fee. None is a yearly premium.
+        rates = {
+            r["id"]: r["taxPrimitives"]["mortgageInsuranceRatePct"]
+            for r in _available()
+        }
+        assert rates == {"us": 0.5, "fr": 0.0, "de": 0.0, "nl": 0.0, "uk": 0.0}
+
+    def test_every_zero_rate_is_explained_in_the_notes(self):
+        for region in _available():
+            if region["taxPrimitives"]["mortgageInsuranceRatePct"] == 0.0:
+                assert any(
+                    "Mortgage insurance is set to 0" in note for note in region["notes"]
+                ), region["id"]
+
+
+def _refund_growth(region_id: str) -> float:
+    """What investing each year's tax refund would add to Buy.
+
+    Each refund is credited at a year end and grows to the horizon at the
+    equity rate less any box-3 drag; the growth is taxed at the portfolio
+    rate. At the bundle's own defaults with the first-time-buyer relief.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        assert 24_000 < _refund_growth("us") < 26_000
+
+    """
+    region = next(r for r in _available() if r["id"] == region_id)
+    config = _config_for(region, first_time_buyer=True)
+    savings = run_flat(config)["cum_tax_savings"]
+    refunds = np.diff(savings[::12])
+    monthly = monthly_rate_from_annual(config.equity_growth_annual / 100)
+    drag = (
+        min(config.portfolio_deemed_return_pct, config.equity_growth_annual)
+        * config.portfolio_drag_rate_pct
+        / 100
+        / 100
+        / 12
+    )
+    yearly = (1 + monthly - drag) ** 12
+    years_left = config.horizon_years - np.arange(1, config.horizon_years + 1)
+    growth = float(np.sum(refunds * (yearly**years_left - 1)))
+    return growth * (1 - config.portfolio_cg_rate_pct / 100)
+
+
+class TestDeductionSavingsDisclosure:
+    def test_regions_with_the_deduction_on_say_the_savings_are_not_invested(self):
+        # formulas.md section 6: the yearly tax saving counts at face value
+        # and is never invested, a simplification that favours renting.
+        for region in _available():
+            if region["taxPrimitives"]["interestDeductionEnabled"]:
+                assert any("face value" in note for note in region["notes"]), region[
+                    "id"
+                ]
+
+    def test_the_stated_size_of_that_bias_matches_the_engine(self):
+        # The notes say "about $25,000" (US) and "about €14,500" (NL).
+        assert 24_500 <= _refund_growth("us") <= 25_500
+        assert 14_000 <= _refund_growth("nl") <= 15_000
 
 
 class TestFrance:

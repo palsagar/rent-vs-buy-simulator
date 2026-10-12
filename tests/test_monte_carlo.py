@@ -514,23 +514,26 @@ class TestTornadoLevyDelta:
         }
 
     def test_static_primitives_flow_through_monte_carlo_unchanged(self):
-        config = make_config(
-            annual_property_levy=2392.0,
-            levy_paid_by_occupier=True,
-            annual_maintenance_amount=900.0,
-            closing_cost_buyer_amount=-6900.0,
-        )
-        # With every std zeroed, every MC path must reproduce the
-        # deterministic engine exactly.
-        mc = MonteCarloConfig(
-            n_simulations=3,
-            property_appreciation_std=0.0,
-            equity_growth_std=0.0,
-            rent_inflation_std=0.0,
-        )
-        results = run_monte_carlo(config, mc)
-        expected = calculate_scenarios(config).final_difference
-        assert np.allclose(results.final_differences, expected, rtol=1e-9)
+        # At 10% down mortgage insurance is charged as well.
+        for down in (20, 10):
+            config = make_config(
+                annual_property_levy=2392.0,
+                levy_paid_by_occupier=True,
+                annual_maintenance_amount=900.0,
+                closing_cost_buyer_amount=-6900.0,
+                down_payment_pct=down,
+            )
+            # With every std zeroed, every MC path must reproduce the
+            # deterministic engine exactly.
+            mc = MonteCarloConfig(
+                n_simulations=3,
+                property_appreciation_std=0.0,
+                equity_growth_std=0.0,
+                rent_inflation_std=0.0,
+            )
+            results = run_monte_carlo(config, mc)
+            expected = calculate_scenarios(config).final_difference
+            assert np.allclose(results.final_differences, expected, rtol=1e-9), down
 
 
 def _rerun(rate: float) -> float:

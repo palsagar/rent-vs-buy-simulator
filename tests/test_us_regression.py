@@ -118,6 +118,15 @@ RATE_INDEPENDENT_GOLDENS = {
 # paid to sell lowers that tax by 15% of $66,389 = $9,958. Every other
 # bar, the base and the summary GOLDENS stay bit-identical: at the US
 # default the profit is under the exclusion either way.
+#
+# Moved once more, deliberately, for the mortgage-insurance primitive
+# (ADR-0007 amendment): exactly ONE value, Down Payment %'s lower side,
+# 6,236.65 -> -13,813.86. Its test is 15% down, which is insured: 0.5% of
+# the $425,000 loan, $177.08 a month for the 75 months until the balance
+# reaches 78% of the price, $13,281 in all. The renter invests each
+# premium (ADR-0002), so the verdict falls by more than was paid. The
+# US default is 20% down, so the summary GOLDENS, the base and the other
+# 15 tornado values stay bit-identical.
 TORNADO_NAMES = [
     "Property Appreciation",
     "Equity Growth",
@@ -136,7 +145,7 @@ TORNADO_LOW = [
     45461.37478180759,
     36065.72384167119,
     -5546.580837710353,
-    6236.65391019854,
+    -13813.85702451726,
 ]
 TORNADO_HIGH = [
     152592.98506998102,
@@ -180,6 +189,8 @@ class TestUsPresetUnchanged:
         assert config.annual_maintenance_pct == 1.0
         assert config.levy_deduction_cap == 10000.0
         assert config.sale_cg_regime == "exempt_amount"
+        # The Down Payment % tornado golden tests 15% down, which pays it.
+        assert config.mortgage_insurance_rate_pct == 0.5
 
 
 class TestUsTornadoUnchanged:
