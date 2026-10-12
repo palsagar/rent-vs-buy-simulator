@@ -37,7 +37,7 @@ test('Advanced fields appear in group order with plain labels', async ({ page })
     'Property levy (fixed per year)',
     'Renter pays the levy too',
     'Home insurance (per year)',
-    'Mortgage insurance (% of loan per year)',
+    'Mortgage insurance (% of loan)',
     'Maintenance (% of value per year)',
     'Maintenance (fixed per year)',
     'Cost inflation',
