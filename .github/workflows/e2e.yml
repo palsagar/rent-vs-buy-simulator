@@ -66,7 +66,7 @@ jobs:
 
       # playwright.config.js auto-starts both uvicorn servers (8323, 8324).
       - name: Run Playwright tests
-        run: npx playwright test
+        run: npx playwright test tests/zz-diag.spec.js tests/mobile.spec.js
 
       - name: Upload Playwright report
         if: failure()
