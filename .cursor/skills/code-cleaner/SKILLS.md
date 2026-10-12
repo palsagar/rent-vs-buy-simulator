@@ -86,9 +86,16 @@ For remaining issues:
 3. Common patterns:
    ```python
    def process(data: dict[str, Any]) -> list[str]: ...
+
+
    items: list[int] = []
+
+
    def get_user(user_id: int) -> Optional[User]: ...
-   if isinstance(value, str): ...  # type narrowing
+
+
+   if isinstance(value, str):
+       ...  # type narrowing
    ```
 
 4. For stubborn errors: add `# type: ignore[error-code]` with explanation, or ask user for guidance

@@ -376,33 +376,35 @@ Confidence legend: **H** primary-sourced · **M** secondary or derived, reproduc
     "available": True,
     "currencySymbol": "€",
     "typical": {
-        "propertyPrice": 290000,      # M — Lyon existing apartment
-        "monthlyRent": 812,           # M — see note
-        "mortgageRateAnnual": 3.45,   # M — aggregator-corroborated only
-        "mortgageTermYears": 25,      # H — standard FR amortisation
+        "propertyPrice": 290000,  # M — Lyon existing apartment
+        "monthlyRent": 812,  # M — see note
+        "mortgageRateAnnual": 3.45,  # M — aggregator-corroborated only
+        "mortgageTermYears": 25,  # H — standard FR amortisation
     },
     "taxPrimitives": {
-        "closingCostBuyerPct": 7.468,      # H — DMTO 6.318 + CSI 0.10 + emoluments ~1.05
+        "closingCostBuyerPct": 7.468,  # H — DMTO 6.318 + CSI 0.10 + emoluments ~1.05
         "closingCostBuyerAmount": 1300.0,  # H — débours
-        "closingCostSellerPct": 6.0,       # M
+        "closingCostSellerPct": 6.0,  # M
         "propertyTaxRate": 0.0,
-        "annualPropertyLevy": 1220.0,      # M — 0.42% x 290,000; Lyon combined TFPB 32.44%
-        "levyPaidByOccupier": False,       # H — taxe d'habitation on main residences abolished 2023
-        "annualHomeInsurance": 220.0,      # M — multirisque habitation
+        "annualPropertyLevy": 1220.0,  # M — 0.42% x 290,000; Lyon combined TFPB 32.44%
+        "levyPaidByOccupier": False,  # H — taxe d'habitation on main residences abolished 2023
+        "annualHomeInsurance": 220.0,  # M — multirisque habitation
         "annualMaintenancePct": 0.0,
-        "annualMaintenanceAmount": 1300.0, # L — see caveat
-        "interestDeductionEnabled": False, # H — abolished 2011
+        "annualMaintenanceAmount": 1300.0,  # L — see caveat
+        "interestDeductionEnabled": False,  # H — abolished 2011
         "marginalTaxRatePct": 0.0,
         "levyDeductionCap": 0.0,
-        "saleCgRegime": "fully_exempt",    # H — CGI art. 150 U II 1, no duration condition
+        "saleCgRegime": "fully_exempt",  # H — CGI art. 150 U II 1, no duration condition
         "saleCgExemptAmount": 0.0,
-        "saleCgExemptAfterYears": 30,      # inert; the PS taper period, recorded for documentation
-        "saleCgRatePct": 36.2,             # H — 19% IR + 17.2% PS
-        "portfolioCgRatePct": 31.4,        # H — 12.8% PFU + 18.6% PS
+        "saleCgExemptAfterYears": 30,  # inert; the PS taper period, recorded for documentation
+        "saleCgRatePct": 36.2,  # H — 19% IR + 17.2% PS
+        "portfolioCgRatePct": 31.4,  # H — 12.8% PFU + 18.6% PS
         "portfolioDeemedReturnPct": 0.0,
         "portfolioDragRatePct": 0.0,
     },
-    "firstTimeBuyerOverrides": {"closingCostBuyerPct": 6.958},  # H — -0.51pp primo-accédant carve-out
+    "firstTimeBuyerOverrides": {
+        "closingCostBuyerPct": 6.958
+    },  # H — -0.51pp primo-accédant carve-out
 }
 ```
 
@@ -425,33 +427,33 @@ Derivation checks: non-primo total at €290,000 = `7.468% × 290,000 + 1,300 = 
     "available": True,
     "currencySymbol": "€",
     "typical": {
-        "propertyPrice": 339000,      # H — €4,239/m² x 80 m² = €339,120, rounded
-        "monthlyRent": 992,           # H — €12.40/m² x 80 m², same matched pair
-        "mortgageRateAnnual": 4.0,    # M — 15yr Zinsbindung; see notes
-        "mortgageTermYears": 30,      # M — 2% anfängliche Tilgung => ~29yr full repayment
+        "propertyPrice": 339000,  # H — €4,239/m² x 80 m² = €339,120, rounded
+        "monthlyRent": 992,  # H — €12.40/m² x 80 m², same matched pair
+        "mortgageRateAnnual": 4.0,  # M — 15yr Zinsbindung; see notes
+        "mortgageTermYears": 30,  # M — 2% anfängliche Tilgung => ~29yr full repayment
     },
     "taxPrimitives": {
-        "closingCostBuyerPct": 12.07,      # M — GrESt 6.5 (NRW) + Notar/Grundbuch 2.0 + Makler 3.57
+        "closingCostBuyerPct": 12.07,  # M — GrESt 6.5 (NRW) + Notar/Grundbuch 2.0 + Makler 3.57
         "closingCostBuyerAmount": 0.0,
-        "closingCostSellerPct": 4.0,       # M
+        "closingCostSellerPct": 4.0,  # M
         "propertyTaxRate": 0.0,
-        "annualPropertyLevy": 339.0,       # L — ~0.1% of market value; Köln Hebesatz 550% for 2026
-        "levyPaidByOccupier": True,        # H — BetrKV §2 Nr.1, umlagefähig
-        "annualHomeInsurance": 0.0,        # H — condo: inside Hausgeld, and umlagefähig (BetrKV §2 Nr.13)
+        "annualPropertyLevy": 339.0,  # L — ~0.1% of market value; Köln Hebesatz 550% for 2026
+        "levyPaidByOccupier": True,  # H — BetrKV §2 Nr.1, umlagefähig
+        "annualHomeInsurance": 0.0,  # H — condo: inside Hausgeld, and umlagefähig (BetrKV §2 Nr.13)
         "annualMaintenancePct": 0.0,
-        "annualMaintenanceAmount": 1700.0, # M — §28 Abs.2 II.BV €9.00/m² x 80 + Verwalter + Sondereigentum
-        "interestDeductionEnabled": False, # H — owner-occupied
+        "annualMaintenanceAmount": 1700.0,  # M — §28 Abs.2 II.BV €9.00/m² x 80 + Verwalter + Sondereigentum
+        "interestDeductionEnabled": False,  # H — owner-occupied
         "marginalTaxRatePct": 0.0,
         "levyDeductionCap": 0.0,
-        "saleCgRegime": "fully_exempt",    # H — §23 Abs.1 Nr.1 Satz 3 EStG, owner-occupier limb
+        "saleCgRegime": "fully_exempt",  # H — §23 Abs.1 Nr.1 Satz 3 EStG, owner-occupier limb
         "saleCgExemptAmount": 0.0,
-        "saleCgExemptAfterYears": 10,      # inert; the §23 speculation period for non-owner-occupied
-        "saleCgRatePct": 0.0,              # inert; a taxable DE sale is taxed at the personal income rate
-        "portfolioCgRatePct": 26.375,      # H — 25% x 1.055 Soli
-        "portfolioDeemedReturnPct": 0.0,   # Vorabpauschale deliberately not modelled (§2 P5)
+        "saleCgExemptAfterYears": 10,  # inert; the §23 speculation period for non-owner-occupied
+        "saleCgRatePct": 0.0,  # inert; a taxable DE sale is taxed at the personal income rate
+        "portfolioCgRatePct": 26.375,  # H — 25% x 1.055 Soli
+        "portfolioDeemedReturnPct": 0.0,  # Vorabpauschale deliberately not modelled (§2 P5)
         "portfolioDragRatePct": 0.0,
     },
-    "firstTimeBuyerOverrides": {},         # H — no FTB relief enacted
+    "firstTimeBuyerOverrides": {},  # H — no FTB relief enacted
 }
 ```
 
@@ -482,35 +484,37 @@ The P/R of 28.5 is genuine and **not a Kaltmiete artefact** — on the most cons
     "available": True,
     "currencySymbol": "€",
     "typical": {
-        "propertyPrice": 490000,      # H — CBS, verified 487,383
-        "monthlyRent": 2300,          # L — derived, ±11% band; see caveat
-        "mortgageRateAnnual": 4.3,    # M — non-NHG (above the €470,000 NHG cap)
-        "mortgageTermYears": 30,      # H — annuity; also the 30yr deduction period
+        "propertyPrice": 490000,  # H — CBS, verified 487,383
+        "monthlyRent": 2300,  # L — derived, ±11% band; see caveat
+        "mortgageRateAnnual": 4.3,  # M — non-NHG (above the €470,000 NHG cap)
+        "mortgageTermYears": 30,  # H — annuity; also the 30yr deduction period
     },
     "taxPrimitives": {
-        "closingCostBuyerPct": 3.2,        # H — overdrachtsbelasting 2% + ~1.2% other
+        "closingCostBuyerPct": 3.2,  # H — overdrachtsbelasting 2% + ~1.2% other
         "closingCostBuyerAmount": 0.0,
-        "closingCostSellerPct": 1.4,       # M
-        "propertyTaxRate": 0.2815,         # H — 0.15% owner charges + 0.1315% EWF; derivation §5.5
+        "closingCostSellerPct": 1.4,  # M
+        "propertyTaxRate": 0.2815,  # H — 0.15% owner charges + 0.1315% EWF; derivation §5.5
         "annualPropertyLevy": 0.0,
         "levyPaidByOccupier": False,
-        "annualHomeInsurance": 550.0,      # M — opstalverzekering; Moving.nl. €1.30 per €1,000
-                                          #     herbouwwaarde x ~€350k rebuild x 1.21 assurantiebelasting
-        "annualMaintenancePct": 1.0,      # M-H — Nibud "ruim 1%"/yr; VEH 1% of WOZ. Value-proportional
-                                          #     by source; kept in that unit deliberately (§2 P3)
+        "annualHomeInsurance": 550.0,  # M — opstalverzekering; Moving.nl. €1.30 per €1,000
+        #     herbouwwaarde x ~€350k rebuild x 1.21 assurantiebelasting
+        "annualMaintenancePct": 1.0,  # M-H — Nibud "ruim 1%"/yr; VEH 1% of WOZ. Value-proportional
+        #     by source; kept in that unit deliberately (§2 P3)
         "annualMaintenanceAmount": 0.0,
         "interestDeductionEnabled": True,  # H
-        "marginalTaxRatePct": 37.56,       # H — 2026 tariefsaanpassing maximum, NOT the 49.5% top rate
-        "levyDeductionCap": 0.0,           # H — NL levy is not deductible; REQUIRES the §6.1 sentinel fix
-        "saleCgRegime": "fully_exempt",    # H — eigen woning, box 1
+        "marginalTaxRatePct": 37.56,  # H — 2026 tariefsaanpassing maximum, NOT the 49.5% top rate
+        "levyDeductionCap": 0.0,  # H — NL levy is not deductible; REQUIRES the §6.1 sentinel fix
+        "saleCgRegime": "fully_exempt",  # H — eigen woning, box 1
         "saleCgExemptAmount": 0.0,
         "saleCgExemptAfterYears": 0,
-        "saleCgRatePct": 0.0,              # H — no securities/property CGT
-        "portfolioCgRatePct": 0.0,         # H — the burden is box 3, not CGT
-        "portfolioDeemedReturnPct": 6.0,   # H — Wet IB 2001 art. 5.2 lid 2, enacted, in force 2026-01-01
-        "portfolioDragRatePct": 36.0,     # H — art. 5.5. Taxed on min(deemed, actual), floored at nil (art. 5.25)
+        "saleCgRatePct": 0.0,  # H — no securities/property CGT
+        "portfolioCgRatePct": 0.0,  # H — the burden is box 3, not CGT
+        "portfolioDeemedReturnPct": 6.0,  # H — Wet IB 2001 art. 5.2 lid 2, enacted, in force 2026-01-01
+        "portfolioDragRatePct": 36.0,  # H — art. 5.5. Taxed on min(deemed, actual), floored at nil (art. 5.25)
     },
-    "firstTimeBuyerOverrides": {"closingCostBuyerPct": 1.2},  # H — startersvrijstelling 0% vs 2%
+    "firstTimeBuyerOverrides": {
+        "closingCostBuyerPct": 1.2
+    },  # H — startersvrijstelling 0% vs 2%
 }
 ```
 
@@ -537,33 +541,36 @@ The P/R of 28.5 is genuine and **not a Kaltmiete artefact** — on the most cons
     "available": True,
     "currencySymbol": "£",
     "typical": {
-        "propertyPrice": 289106,      # H — HM Land Registry UKHPI, England semi-detached, Apr 2026
-        "monthlyRent": 1431,          # H — ONS PIPR, England semi-detached, May 2026
-        "mortgageRateAnnual": 4.65,   # M — 5yr fix, 75% LTV
-        "mortgageTermYears": 25,      # amortisation; the 5 is the fix (§2.8)
+        "propertyPrice": 289106,  # H — HM Land Registry UKHPI, England semi-detached, Apr 2026
+        "monthlyRent": 1431,  # H — ONS PIPR, England semi-detached, May 2026
+        "mortgageRateAnnual": 4.65,  # M — 5yr fix, 75% LTV
+        "mortgageTermYears": 25,  # amortisation; the 5 is the fix (§2.8)
     },
     "taxPrimitives": {
-        "closingCostBuyerPct": 5.0,        # H — SDLT marginal slice 250k-925k
-        "closingCostBuyerAmount": -6900.0, # H — SDLT nil-rate intercept (-10,000) + ~3,100 fixed fees
-        "closingCostSellerPct": 1.75,      # H — agent 1.42% VAT-INCLUSIVE + legal
+        "closingCostBuyerPct": 5.0,  # H — SDLT marginal slice 250k-925k
+        "closingCostBuyerAmount": -6900.0,  # H — SDLT nil-rate intercept (-10,000) + ~3,100 fixed fees
+        "closingCostSellerPct": 1.75,  # H — agent 1.42% VAT-INCLUSIVE + legal
         "propertyTaxRate": 0.0,
-        "annualPropertyLevy": 2392.0,      # H — England avg Band D 2026/27 (2,343 excl. parish precepts)
-        "levyPaidByOccupier": True,        # H — LGFA 1992 s.6(2), resident liable
-        "annualHomeInsurance": 310.0,      # M
+        "annualPropertyLevy": 2392.0,  # H — England avg Band D 2026/27 (2,343 excl. parish precepts)
+        "levyPaidByOccupier": True,  # H — LGFA 1992 s.6(2), resident liable
+        "annualHomeInsurance": 310.0,  # M
         "annualMaintenancePct": 0.0,
         "annualMaintenanceAmount": 900.0,  # M — ONS Family Spending FYE2025, LOWER bound
-        "interestDeductionEnabled": False, # H — MIRAS withdrawn 2000
+        "interestDeductionEnabled": False,  # H — MIRAS withdrawn 2000
         "marginalTaxRatePct": 0.0,
         "levyDeductionCap": 0.0,
-        "saleCgRegime": "fully_exempt",    # H — Private Residence Relief
+        "saleCgRegime": "fully_exempt",  # H — Private Residence Relief
         "saleCgExemptAmount": 0.0,
         "saleCgExemptAfterYears": 0,
-        "saleCgRatePct": 24.0,             # inert; the residential rate absent PRR
-        "portfolioCgRatePct": 24.0,        # H — unwrapped higher rate (18% basic)
+        "saleCgRatePct": 24.0,  # inert; the residential rate absent PRR
+        "portfolioCgRatePct": 24.0,  # H — unwrapped higher rate (18% basic)
         "portfolioDeemedReturnPct": 0.0,
         "portfolioDragRatePct": 0.0,
     },
-    "firstTimeBuyerOverrides": {"closingCostBuyerPct": 0.0, "closingCostBuyerAmount": 3100.0},
+    "firstTimeBuyerOverrides": {
+        "closingCostBuyerPct": 0.0,
+        "closingCostBuyerAmount": 3100.0,
+    },
 }
 ```
 
