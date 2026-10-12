@@ -7,6 +7,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   release-please:
     name: Release PR and tag
@@ -20,7 +23,8 @@ jobs:
       tag: ${{ steps.release.outputs.tag_name }}
 
     steps:
-      - uses: googleapis/release-please-action@v5
+      - name: Run release-please
+        uses: googleapis/release-please-action@v5
         id: release
         with:
           config-file: release-please-config.json

@@ -59,7 +59,8 @@ uv venv --seed && uv pip install -e .
 
 ## Releases
 
-- release-please (`.github/workflows/release.yml`) keeps one open "chore: release X.Y.Z" PR that bumps `pyproject.toml` and `uv.lock` and writes `CHANGELOG.md` from the squash-commit subjects (`feat:` → minor, `fix:` → patch, `!` in the PR title → major).
+- release-please (`.github/workflows/release.yml`) keeps one open "chore: release X.Y.Z" PR. That PR bumps `pyproject.toml` and `uv.lock` and writes `CHANGELOG.md` from the squash-commit subjects.
+- A `feat:` PR title gives a minor bump, `fix:` gives a patch bump, and a `!` after the type (for example `feat!:`) gives a major bump.
 - Approving and merging that PR tags `vX.Y.Z`, creates the GitHub Release, and publishes to PyPI through `publish.yml` (trusted publishing, `pypi` environment).
 - Never edit the version by hand. Keep the file name `release.yml`: PyPI's trusted publisher is registered against it.
 
