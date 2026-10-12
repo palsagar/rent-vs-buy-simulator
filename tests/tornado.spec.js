@@ -31,6 +31,64 @@ function rowsTopToBottom(page) {
   );
 }
 
+// Labels that start near an edge of the chart: in the first two, every
+// input that can sit at a slider limit sits at one, and your verdict lies
+// close to one edge; in the third, a marked bar end lies close to the
+// right edge.
+const EDGE_CASES = [
+  {
+    name: 'your verdict is near the left edge',
+    query: '?propertyPrice=2000000&downPaymentPct=50&mortgageRateAnnual=10&propertyAppreciationAnnual=0&equityGrowthAnnual=15&monthlyRent=500&horizonYears=40&rentInflationRate=0&propertyTaxRate=5',
+    limitLabels: 7,
+  },
+  {
+    name: 'your verdict is near the right edge',
+    query: '?propertyPrice=2000000&monthlyRent=10000&mortgageRateAnnual=1&propertyAppreciationAnnual=10&rentInflationRate=0.1&equityGrowthAnnual=15&propertyTaxRate=0&horizonYears=40&downPaymentPct=5',
+    limitLabels: 7,
+  },
+  {
+    name: 'a marked bar end is near the right edge',
+    query: '?propertyAppreciationAnnual=9.5&equityGrowthAnnual=0&horizonYears=40',
+    limitLabels: 0,
+  },
+];
+
+/**
+ * The chart's limit labels and bar-end labels, and the text of every
+ * annotation or bar-end label that does not fit inside the chart.
+ */
+function labelsOutside(page) {
+  return page.evaluate(() => {
+    const el = document.getElementById('tornado-chart');
+    const box = el.getBoundingClientRect();
+    const labels = [...el.querySelectorAll('.annotation'), ...el.querySelectorAll('text.bartext')];
+    return {
+      limitLabels: el.layout.annotations.filter((a) => a.name === 'limit-label').length,
+      endLabels: el.querySelectorAll('text.bartext').length,
+      outside: labels.flatMap((t) => {
+        const r = t.getBoundingClientRect();
+        const inside = r.left >= box.left && r.right <= box.right && r.top >= box.top && r.bottom <= box.bottom;
+        return inside ? [] : [t.textContent];
+      }),
+    };
+  });
+}
+
+/** What the chart was laid out for: the parts that depend on its width. */
+function tornadoLayout(page) {
+  return page.evaluate(() => {
+    const el = document.getElementById('tornado-chart');
+    return {
+      width: el.clientWidth,
+      drawnWidth: el._fullLayout.width,
+      range: el.layout.xaxis.range,
+      narrow: el.layout.yaxis.showticklabels === false,
+      rowLabels: el.layout.annotations.filter((a) => a.name === 'row-label').length,
+      rows: el.layout.yaxis.categoryarray.length,
+    };
+  });
+}
+
 test.describe('the summary sentence', () => {
   test('a toss-up says so instead of naming bars', async ({ page }) => {
     await load(page);
@@ -319,47 +377,10 @@ test.describe('on a phone', () => {
     expect(out).toEqual({ found: true, inside: true });
   });
 
-  // Labels that start near an edge of the chart: in the first two, every
-  // input that can sit at a slider limit sits at one, and your verdict lies
-  // close to one edge; in the third, a marked bar end lies close to the
-  // right edge.
-  const EDGE_CASES = [
-    {
-      name: 'your verdict is near the left edge',
-      query: '?propertyPrice=2000000&downPaymentPct=50&mortgageRateAnnual=10&propertyAppreciationAnnual=0&equityGrowthAnnual=15&monthlyRent=500&horizonYears=40&rentInflationRate=0&propertyTaxRate=5',
-      limitLabels: 7,
-    },
-    {
-      name: 'your verdict is near the right edge',
-      query: '?propertyPrice=2000000&monthlyRent=10000&mortgageRateAnnual=1&propertyAppreciationAnnual=10&rentInflationRate=0.1&equityGrowthAnnual=15&propertyTaxRate=0&horizonYears=40&downPaymentPct=5',
-      limitLabels: 7,
-    },
-    {
-      name: 'a marked bar end is near the right edge',
-      query: '?propertyAppreciationAnnual=9.5&equityGrowthAnnual=0&horizonYears=40',
-      limitLabels: 0,
-    },
-  ];
   for (const { name, query, limitLabels } of EDGE_CASES) {
     test(`every label stays inside the chart when ${name}`, async ({ page }) => {
       await load(page, query);
-      const out = await page.evaluate(() => {
-        const el = document.getElementById('tornado-chart');
-        const box = el.getBoundingClientRect();
-        const annotations = el.layout.annotations.flatMap((a, i) =>
-          a.name === 'limit-label' || /ahead/.test(a.text) ? [el.querySelector(`.annotation[data-index="${i}"]`)] : [],
-        );
-        const labels = [...annotations, ...el.querySelectorAll('text.bartext')];
-        return {
-          limitLabels: el.layout.annotations.filter((a) => a.name === 'limit-label').length,
-          endLabels: el.querySelectorAll('text.bartext').length,
-          outside: labels.flatMap((t) => {
-            const r = t.getBoundingClientRect();
-            const inside = r.left >= box.left && r.right <= box.right && r.top >= box.top && r.bottom <= box.bottom;
-            return inside ? [] : [t.textContent];
-          }),
-        };
-      });
+      const out = await labelsOutside(page);
       expect(out.limitLabels).toBe(limitLabels);
       expect(out.endLabels).toBeGreaterThan(0);
       expect(out.outside).toEqual([]);
@@ -379,5 +400,108 @@ test.describe('on a phone', () => {
     });
     expect(out.count).toBe(16); // two ends on each of the 8 bars
     expect(out.outside).toBe(0);
+  });
+});
+
+test.describe('after a width change', () => {
+  // The link from #57: limit labels near the left edge.
+  const ISSUE_QUERY = EDGE_CASES[0].query;
+  const PHONE = { width: 390, height: 664 };
+  const DESKTOP = { width: 1280, height: 800 };
+
+  /** The phone layout, with every row labelled, drawn at the chart's width. */
+  async function phoneLayoutAtItsWidth(page) {
+    const { width, drawnWidth, narrow, rowLabels, rows } = await tornadoLayout(page);
+    return narrow && rowLabels === rows && drawnWidth === width;
+  }
+
+  test('a chart drawn at 540 px is laid out again at 360 px (#57)', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await load(page, ISSUE_QUERY);
+    const fresh = await tornadoLayout(page);
+
+    await page.setViewportSize({ width: 540, height: 800 });
+    await load(page, ISSUE_QUERY);
+    expect((await tornadoLayout(page)).range).not.toEqual(fresh.range);
+
+    // Record every finished draw from before the resize on.
+    await page.evaluate(() => {
+      window.__draws = [];
+      const el = document.getElementById('tornado-chart');
+      el.on('plotly_afterplot', () =>
+        window.__draws.push({ range: el.layout.xaxis.range, drawnWidth: el._fullLayout.width }),
+      );
+    });
+    await page.setViewportSize({ width: 360, height: 800 });
+    await expect.poll(() => tornadoLayout(page)).toEqual(fresh);
+    // Settled once a draw with the fresh layout has finished.
+    await expect
+      .poll(() => page.evaluate(() => window.__draws.at(-1)))
+      .toEqual({ range: fresh.range, drawnWidth: fresh.drawnWidth });
+    expect((await labelsOutside(page)).outside).toEqual([]);
+
+    // Drawing does not change the width, so it does not draw again.
+    await page.evaluate(() => { window.__draws = []; });
+    await page.waitForTimeout(500);
+    expect(await page.evaluate(() => window.__draws.length)).toBe(0);
+  });
+
+  test('a resize while a new result is pending does not draw the old one in the new currency', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await load(page);
+    await page.locator('#region-pills .preset-btn', { hasText: 'UK' }).click();
+    await expect(page.locator('#tornado-chart')).toContainText('£');
+    // The next Monte Carlo result never arrives.
+    await page.route('**/api/monte-carlo', () => {});
+    await page.locator('#region-pills .preset-btn', { hasText: 'FR' }).click();
+    await expect(page.locator('#verdict-line')).toContainText('€');
+
+    await page.setViewportSize(PHONE);
+    await page.waitForTimeout(500);
+    // Not laid out again: the pending result is drawn at the new width when
+    // it lands. (The axis ticks are Plotly's own and follow its resize.)
+    expect((await tornadoLayout(page)).narrow).toBe(false);
+    const labels = await page.evaluate(() =>
+      [...document.querySelectorAll('#tornado-chart text.bartext, #tornado-chart .annotation')]
+        .map((t) => t.textContent)
+        .join(' '),
+    );
+    expect(labels).toContain('£');
+    expect(labels).not.toContain('€');
+  });
+
+  test('a desktop chart takes the phone layout on a phone, and back', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await load(page, ISSUE_QUERY);
+    expect(await tornadoLayout(page)).toMatchObject({ narrow: false, rowLabels: 0 });
+
+    await page.setViewportSize(PHONE);
+    await expect.poll(() => phoneLayoutAtItsWidth(page)).toBe(true);
+    expect((await labelsOutside(page)).outside).toEqual([]);
+    const share = await page.evaluate(() => {
+      const el = document.getElementById('tornado-chart');
+      return el._fullLayout._size.w / el.clientWidth;
+    });
+    expect(share).toBeGreaterThan(0.75);
+
+    await page.setViewportSize(DESKTOP);
+    await expect.poll(async () => {
+      const { width, drawnWidth, narrow, rowLabels } = await tornadoLayout(page);
+      return !narrow && rowLabels === 0 && drawnWidth === width;
+    }).toBe(true);
+  });
+
+  test('a chart hidden during the change is laid out when it shows', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await load(page, ISSUE_QUERY);
+    await page.evaluate(() => { document.getElementById('tornado-chart').style.display = 'none'; });
+    await page.setViewportSize(PHONE);
+    await page.waitForTimeout(300);
+    // A hidden chart has no width, so nothing is laid out for it.
+    expect((await tornadoLayout(page)).narrow).toBe(false);
+
+    await page.evaluate(() => { document.getElementById('tornado-chart').style.display = ''; });
+    await expect.poll(() => phoneLayoutAtItsWidth(page)).toBe(true);
+    expect((await labelsOutside(page)).outside).toEqual([]);
   });
 });

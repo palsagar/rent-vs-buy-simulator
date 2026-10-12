@@ -342,6 +342,15 @@ test.describe('real tracker', () => {
     expect(named(sent, 'link-opened')).toEqual([['link-opened', undefined]]);
   });
 
+  test('the relief setting is stripped from tracked URLs', async ({ page }) => {
+    const sent = await fakeUmami(page);
+    await openTracked(page, '/?propertyPrice=400000&r=uk&ftb=0&v=2');
+    await expect.poll(() => named(sent, 'link-opened').length).toBe(1);
+    await settle(page);
+    expect(pageViews(sent).map((p) => p.url)).toEqual([`${TRACKED}/`]);
+    for (const { payload } of sent) expect(payload.url).not.toContain('ftb');
+  });
+
   test('a plain visit sends no link-opened', async ({ page }) => {
     const sent = await fakeUmami(page);
     await openTracked(page);
