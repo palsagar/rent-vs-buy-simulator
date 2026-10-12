@@ -1,0 +1,29 @@
+# Fast, offline-friendly checks only. Tests (pytest, Playwright) run in CI and on
+# demand: a multi-second test run on every commit makes people use --no-verify,
+# which defeats the hook.
+# Install once:  uv tool install pre-commit && pre-commit install
+exclude: ^tests/fixtures/   # vendored third-party script; keep byte-identical
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+
+  # Keep this rev equal to the ruff version in uv.lock (currently 0.15.9) so the
+  # hook and `uv run ruff` / CI agree. Bump both together.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.9
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
