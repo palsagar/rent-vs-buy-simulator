@@ -20,7 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from simulator.api import _camel
-from simulator.engine import calculate_scenarios
+from simulator.engine import _FLOAT_TOLERANCE, calculate_scenarios
 from simulator.models import MonteCarloConfig, SimulationConfig
 from simulator.monte_carlo import (
     _UI_MAXIMUM,
@@ -393,7 +393,7 @@ class TestTheNoteStatesTheRealSteps:
         for field in ("property_price", "monthly_rent"):
             base = getattr(config, field)
             share = step[field] / base * 100
-            assert abs(share - stated_share) < 1e-9, (
+            assert abs(share - stated_share) < _FLOAT_TOLERANCE, (
                 f"the note says {field} moves by {stated_share}%, "
                 f"the engine uses {share}%"
             )

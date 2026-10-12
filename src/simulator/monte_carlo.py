@@ -36,10 +36,10 @@ _POSITIVE_FIELD_FLOOR = 0.001
 _LEVY_RELATIVE_DELTA = 0.5 / 1.2
 
 # Share of its own value by which the tornado moves the home price and
-# the monthly rent. A fixed amount in local currency tested a EUR 812 rent
-# by 62% and a $2,400 one by 21%, so bar widths -- and the ranking --
-# followed the size of the number rather than its importance. At the US
-# defaults this is still exactly a 100k price step.
+# the monthly rent. A fixed amount in local currency tested a rent of
+# EUR 812 by 62% and a rent of $2,400 by 21%, so bar widths -- and the
+# ranking -- followed the size of the number rather than its importance.
+# At the US defaults this is still exactly a 100k price step.
 _PRICE_RENT_RELATIVE_DELTA = 0.2
 
 # Fraction of the verdict below which a tornado swing is float noise
@@ -391,7 +391,10 @@ def _compute_sensitivity(  # noqa: C901
     base_value = _run_with_override()
 
     # Parameters to perturb: (display_name, config_field, delta)
-    # Delta is in the same units as the field.
+    # Each delta is in the field's own units. Home price and rent take a
+    # share of their own base, worked out here. The two levy entries are
+    # placeholders: the loop below replaces each with a share of the
+    # levy's own base.
     # The first three deltas mirror the fixed MC calibration so there is a
     # single source of truth (stds are in percentage points; rent_inflation_rate
     # is a decimal, hence /100).

@@ -12,7 +12,7 @@ from dataclasses import fields as dataclass_fields
 import numpy as np
 import pytest
 
-from simulator.engine import calculate_scenarios
+from simulator.engine import _FLOAT_TOLERANCE, calculate_scenarios
 from simulator.models import MonteCarloConfig, SimulationConfig
 from simulator.monte_carlo import (
     _UI_MAXIMUM,
@@ -206,8 +206,8 @@ class TestSensitivityReportsPerturbedInputs:
         )
         for bar, base in (("Property Price", price), ("Monthly Rent", rent)):
             i = sens.params.index(bar)
-            assert math.isclose(sens.low_input[i], base * 0.8, rel_tol=1e-12)
-            assert math.isclose(sens.high_input[i], base * 1.2, rel_tol=1e-12)
+            assert abs(sens.low_input[i] - base * 0.8) < _FLOAT_TOLERANCE
+            assert abs(sens.high_input[i] - base * 1.2) < _FLOAT_TOLERANCE
 
     def test_a_relative_step_still_stops_exactly_at_the_slider_limits(self):
         # The chart marks a side at a limit by comparing its tested value
@@ -219,6 +219,18 @@ class TestSensitivityReportsPerturbedInputs:
         sens = _compute_sensitivity(make_config(monthly_rent=550))
         i = sens.params.index("Monthly Rent")
         assert sens.low_input[i] == _UI_MINIMUM["monthly_rent"]
+
+        # 10% above the price minimum: a 20% step down lands below it.
+        price = _UI_MINIMUM["property_price"] * 1.1
+        sens = _compute_sensitivity(make_config(property_price=price))
+        i = sens.params.index("Property Price")
+        assert sens.low_input[i] == _UI_MINIMUM["property_price"]
+
+        # 10% below the rent maximum: a 20% step up lands above it.
+        rent = _UI_MAXIMUM["monthly_rent"] * 0.9
+        sens = _compute_sensitivity(make_config(monthly_rent=rent))
+        i = sens.params.index("Monthly Rent")
+        assert sens.high_input[i] == _UI_MAXIMUM["monthly_rent"]
 
 
 class TestPortfolioDragIsPathDependent:
