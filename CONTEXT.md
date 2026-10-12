@@ -33,6 +33,18 @@ _Avoid_: Scenario B, Scenario C, Rent + Invest Savings
 The share of simulated futures in which the Verdict's winning strategy still wins, produced by the auto-run Monte Carlo over the same Net Value series. Always presented alongside the Verdict, never as a separate analysis with its own answer.
 _Avoid_: Buy wins %, probability tab
 
+**Sensitivity test**:
+Changing one input while every other input stays as the person set it, then recomputing the Verdict. Each bar of "What could change the answer?" is one input tested twice, once lower and once higher.
+_Avoid_: Perturbation, scenario
+
+**Test step**:
+How far a Sensitivity test moves an input from its current value: a share of the value for the home price, rent and levy, points for the down payment and mortgage rate, and a typical range over the Horizon for the guesses about the future.
+_Avoid_: Delta, shock
+
+**Slider limit**:
+The lowest or highest value a person can set for an input. The limits are the same in every Region. A Sensitivity test stops at the limit instead of going past it, except that property appreciation and equity growth may go below zero.
+_Avoid_: Bound, clamp (in anything a user reads)
+
 **Cash-flow matching**:
 The rule that makes the two strategies comparable: both spend the same total cash each month, and whichever side has lower housing costs invests the difference in equities in its own scenario. Symmetric — it can flow to either side, and flips over the life of the mortgage.
 _Avoid_: Monthly savings (the old mortgage−rent-only formula)
