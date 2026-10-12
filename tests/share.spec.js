@@ -98,7 +98,7 @@ test('after a failed simulation, Share sends the link without the old verdict', 
   );
 
   await dragPrice(page, 750000);
-  await expect(page.locator('#error-banner')).toContainText('Simulation failed: boom');
+  await expect(page.locator('#error-banner')).toContainText("Couldn't update the results: boom");
   await page.click('#share-btn');
   const shared = await page.evaluate(() => window.__shared);
   expect(new URL(shared.url).searchParams.get('propertyPrice')).toBe('750000');

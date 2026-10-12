@@ -22,7 +22,7 @@ import {
   setCached,
 } from "./state.js";
 import { Tour, STEPS } from "./tour.js";
-import { hideError, initUi, paintBusy, showError } from "./ui.js";
+import { hideError, initErrorBanner, initUi, paintBusy, showError } from "./ui.js";
 
 let simAbort = null;
 let mcAbort = null;
@@ -34,15 +34,48 @@ let simRun = null;
 // must not render: its toss-up call would carry over to the new result.
 let jumps = 0;
 // Each failed source holds { message, hash }: the error and the config
-// hash it failed for.
-const errors = { simulate: null, monteCarlo: null };
+// hash it failed for (null for the regions request).
+const errors = { simulate: null, monteCarlo: null, regions: null };
+// Dismiss hides the banner until the next failure.
+let bannerDismissed = false;
 // The config hash each source last rendered.
 const shown = { simulate: null, monteCarlo: null };
 
+// One failure at a time, the one that matters most first: a simulate
+// retry also re-runs Monte Carlo.
 function syncBanner() {
-  const failed = errors.simulate ?? errors.monteCarlo;
-  if (failed) showError(failed.message);
-  else hideError();
+  const source = ["simulate", "monteCarlo", "regions"].find((s) => errors[s]);
+  if (!source || bannerDismissed) hideError();
+  else showError(errors[source].message, source === "regions" ? "reload" : "retry", source);
+}
+
+function fail(source, message, hash) {
+  errors[source] = { message, hash };
+  bannerDismissed = false;
+  syncBanner();
+  syncBusy();
+}
+
+// Why a request failed, in words a visitor can act on.
+function reason(err) {
+  if (err.status === 503) return "the server is busy. Try again in a moment.";
+  if (err instanceof TypeError) return "the connection dropped. Check you're online and try again.";
+  return err.message;
+}
+
+// Monte Carlo alone is re-run for its own failure: the simulate result for
+// the live config is already on screen.
+function retry(source) {
+  errors[source] = null;
+  syncBanner();
+  syncBusy();
+  if (source === "simulate") runSimulate().then(runMonteCarlo);
+  else if (source === "monteCarlo") runMonteCarlo();
+}
+
+function dismissError() {
+  bannerDismissed = true;
+  syncBanner();
 }
 
 // Which result sections are out of date for the live config, and whether
@@ -101,9 +134,7 @@ async function runSimulate() {
       // controller's own signal rather than the error's name. A genuinely
       // failed (non-aborted) request still shows the banner.
       if (!controller.signal.aborted && simAbort === controller) {
-        errors.simulate = { message: `Simulation failed: ${err.message}`, hash };
-        syncBanner();
-        syncBusy();
+        fail("simulate", `Couldn't update the results: ${reason(err)}`, hash);
       }
     }
   })();
@@ -152,9 +183,7 @@ async function runMonteCarlo() {
     }
   } catch (err) {
     if (!controller.signal.aborted && mcAbort === controller) {
-      errors.monteCarlo = { message: `Monte Carlo failed: ${err.message}`, hash };
-      syncBanner();
-      syncBusy();
+      fail("monteCarlo", `Couldn't work out how sure the answer is: ${reason(err)}`, hash);
       // Repaint only the verdict this run was for, once its simulate run
       // has settled. If that run failed too, the verdict on screen is an
       // older one that still sits beside its own confidence, so it stays.
@@ -168,6 +197,8 @@ const scheduleSimulate = debounce(runSimulate, 300);
 const scheduleMonteCarlo = debounce(runMonteCarlo, 600);
 
 async function init() {
+  // First: the regions request below can already fail.
+  initErrorBanner({ onRetry: retry, onDismiss: dismissError });
   readUrl();
   const tour = new Tour({ steps: STEPS });
   window.__rvb = { tour }; // test handle for browser-driven verification
@@ -177,8 +208,8 @@ async function init() {
   let regions;
   try {
     regions = await getRegions();
-  } catch (err) {
-    showError(`Could not load regions: ${err.message}`);
+  } catch {
+    fail("regions", "Couldn't load the region settings, so the US defaults are shown.", null);
     // currencySymbol is not optional: it reaches setCurrency, and from
     // there every money label in the app -- including the Plotly locale
     // the charts register. Omitting it rendered axis ticks as

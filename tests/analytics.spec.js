@@ -139,6 +139,37 @@ test('restore-quiet: tour restore uses applyPreset, not synthetic clicks', async
   expect(names).not.toContain('ftb-toggled');
 });
 
+/** Stub umami, load past the welcome, and wait for the first full result. */
+async function loadTracked(page) {
+  await stubUmami(page);
+  await page.addInitScript(() => {
+    try { localStorage.setItem('rvb.tour.v1', 'done'); } catch (e) {}
+  });
+  await page.goto('/');
+  await page.waitForFunction(
+    () => document.getElementById('verdict-confidence').textContent.length > 0,
+    null,
+    { timeout: 20_000 },
+  );
+}
+
+test('error-retried fires when Try again is clicked', async ({ page }) => {
+  await loadTracked(page);
+  await page.route('**/api/simulate', (route) =>
+    route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ detail: 'boom' }) }),
+  );
+  await page.evaluate(() => {
+    const price = document.querySelector('#core-inputs input[type=range]');
+    price.value = 1295000;
+    price.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect(page.locator('#error-retry')).toBeVisible();
+  await page.unroute('**/api/simulate');
+  await page.locator('#error-retry').click();
+  await expect.poll(() => page.evaluate(() => window.__umamiCalls))
+    .toContainEqual(['error-retried', { source: 'simulate' }]);
+});
+
 // ── Real tracker ─────────────────────────────────────────────────────────
 // The second webServer in playwright.config.js injects the tag for this
 // fake Umami origin. Each test answers the origin's requests itself.

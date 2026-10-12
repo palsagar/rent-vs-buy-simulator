@@ -140,7 +140,7 @@ test('a failed Monte Carlo run clears the toss-up headline', async ({ page }) =>
   await input.fill('1295000');
   await input.evaluate((el) => el.dispatchEvent(new Event('input', { bubbles: true })));
 
-  await expect(page.locator('#error-banner')).toContainText('Monte Carlo failed: boom');
+  await expect(page.locator('#error-banner')).toContainText("Couldn't work out how sure the answer is: boom");
   await expect(page.locator('#verdict-line')).toContainText('Renting leaves you');
   await expect(page.locator('#verdict-line')).not.toContainText('Too close to call');
 });
@@ -164,7 +164,7 @@ test('when a drag fails in both requests, the verdict keeps the confidence besid
 
   // The default result is still on screen, so its toss-up wording stays
   // beside its own confidence.
-  await expect(page.locator('#error-banner')).toContainText('Simulation failed: boom');
+  await expect(page.locator('#error-banner')).toContainText("Couldn't update the results: boom");
   await expect(line).toHaveText(
     'Too close to call: buying and renting end within ~$28,656 of each other after 10 years',
   );

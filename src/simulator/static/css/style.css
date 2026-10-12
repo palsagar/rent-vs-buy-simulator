@@ -38,27 +38,40 @@ body {
   height: 100vh;
 }
 
-/* Error banner (device-lost pattern) */
+/* Error banner: a toast above every overlay, sheet and the tour (300-302). */
 #error-banner {
   display: none;
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(640px, calc(100vw - 24px));
+  z-index: 400;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 14px;
   background: var(--error);
   color: #fff;
-  padding: 10px 16px;
   font-size: 13px;
-  text-align: center;
-  z-index: 100;
+  line-height: 1.4;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
-#error-banner.visible { display: block; }
+#error-banner.visible { display: flex; }
+#error-message { flex: 1; }
 #error-banner button {
-  margin-left: 10px;
+  min-height: 36px;
+  padding: 0 12px;
   background: none;
   border: 1px solid rgba(255, 255, 255, 0.6);
-  border-radius: 4px;
+  border-radius: 6px;
   color: #fff;
   font-size: 12px;
-  padding: 2px 10px;
   cursor: pointer;
+  white-space: nowrap;
 }
+#error-banner button[hidden] { display: none; }
+#error-dismiss { border-color: transparent; font-size: 14px; min-width: 36px; }
 
 /* Title bar (ported) */
 #title-bar {
@@ -810,4 +823,6 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   .slider-header { align-items: center; }
   .stat-label,
   .slider-hint { font-size: 12px; }
+  #error-banner button { min-height: 44px; }
+  #error-dismiss { min-width: 44px; }
 }

@@ -19,7 +19,12 @@
 </head>
 <body>
 
-<div id="error-banner"><span></span> <button id="error-reload">Reload</button></div>
+<div id="error-banner" role="alert">
+  <span id="error-message"></span>
+  <button type="button" id="error-retry">Try again</button>
+  <button type="button" id="error-reload" hidden>Reload page</button>
+  <button type="button" id="error-dismiss" aria-label="Dismiss">✕</button>
+</div>
 
 <div id="app">
 

@@ -227,19 +227,37 @@ export function initUi(tour) {
       shareBtn.textContent = shareLabel;
     }, 2000);
   });
-
-  // Wired here (not inline onclick) so the CSP script-src can omit 'unsafe-inline'.
-  document.getElementById("error-reload").addEventListener("click", () => location.reload());
 }
 
-export function showError(message) {
-  const banner = document.getElementById("error-banner");
-  banner.querySelector("span").textContent = message;
-  banner.classList.add("visible");
+// The source of the failure the banner shows: what Try again re-runs.
+let bannerSource = null;
+
+// Wired here (not inline onclick) so the CSP script-src can omit 'unsafe-inline'.
+export function initErrorBanner({ onRetry, onDismiss }) {
+  document.getElementById("error-retry").addEventListener("click", (e) => {
+    if (e.isTrusted) {
+      trackEvent("error-retried", { source: bannerSource === "monteCarlo" ? "monte-carlo" : "simulate" });
+    }
+    onRetry(bannerSource);
+  });
+  document.getElementById("error-reload").addEventListener("click", () => location.reload());
+  document.getElementById("error-dismiss").addEventListener("click", onDismiss);
+}
+
+// `action` is "retry" or "reload": the one fix the banner offers.
+export function showError(message, action, source) {
+  bannerSource = source;
+  // Shown first, then filled: an alert is announced when its text changes.
+  document.getElementById("error-banner").classList.add("visible");
+  document.getElementById("error-message").textContent = message;
+  document.getElementById("error-retry").hidden = action !== "retry";
+  document.getElementById("error-reload").hidden = action !== "reload";
 }
 
 export function hideError() {
   document.getElementById("error-banner").classList.remove("visible");
+  // Emptied, so the same message is announced again next time.
+  document.getElementById("error-message").textContent = "";
 }
 
 // Fades the out-of-date result sections, marks the ones still updating as

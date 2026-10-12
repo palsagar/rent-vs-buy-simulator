@@ -231,7 +231,7 @@ test.describe('phone: live verdict in the sheet', () => {
       price.value = 1295000;
       price.dispatchEvent(new Event('input'));
     });
-    await expect(page.locator('#error-banner')).toContainText('Monte Carlo failed: boom');
+    await expect(page.locator('#error-banner')).toContainText("Couldn't work out how sure the answer is: boom");
     await expect(page.locator('#sheet-verdict')).toHaveText('Renting ahead by ~$643,253 after 10 yrs');
   });
 });
