@@ -9,7 +9,11 @@ Every value is source-verified, never guessed, and each one's
 justification is pinned by a fixture in ``tests/test_regions.py`` with
 its citation. Values that are derived rather than primary-sourced, and
 every known divergence between a bundle and the real statute, carry a
-caveat in that bundle's ``notes`` — rendered in the UI. See
+caveat in that bundle's ``notes`` — rendered in the UI, under the verdict.
+Notes are written for the person using the calculator: plain words, one
+idea per sentence, led by what the caveat means for the answer, and
+ordered by how much it can move the verdict. Sources and internal
+references go in the comment above each list, not in the notes. See
 ``docs/multi-region-spec.md`` §8 for the full list of known gaps and
 their bias directions.
 """
@@ -56,21 +60,25 @@ REGIONS: list[dict[str, Any]] = [
         },
         "firstTimeBuyerOverrides": {},
         "firstTimeBuyerMaxPrice": None,
+        # Sources and internal references for these notes: ADR-0009 (plain
+        # taxable portfolios), ADR-0013 (refunds invested), CFPB and
+        # 12 U.S.C. 4901(18)(A) (mortgage insurance ends at 78%).
         "notes": [
-            "Portfolios are modelled as plain taxable brokerage accounts. "
-            "401(k)/IRA sheltering is not modelled, which understates the "
-            "renter's after-tax returns (ADR-0009).",
-            "If you put down less than 20%, lenders charge mortgage "
-            "insurance. It is modelled at 0.5% of the amount you borrow "
-            "per year, and it stops once you owe 78% of the purchase price "
-            "or less, where it ends automatically by law. If your quote "
-            "differs, change it in Advanced under Yearly costs of owning.",
+            "Renting may come out better than shown if you invest through a"
+            " 401(k) or an IRA. The model treats all investments as an "
+            "ordinary taxable account, so it leaves out the tax those "
+            "accounts save the renter.",
             "The tax you save by deducting mortgage interest and the "
-            "property levy comes back as a refund at the end of each year. "
-            "The model assumes you invest it: it grows with your other "
-            "investments and is taxed on its gains when you cash them in. "
-            "If you would spend it instead, buying comes out worse than "
-            "shown.",
+            "property levy comes back as a refund each year, and the model "
+            "assumes you invest it. It grows with your other investments, "
+            "and its gains are taxed when you cash them in. If you would "
+            "spend it instead, buying comes out worse than shown.",
+            "If you put down less than 20%, buying costs more: lenders "
+            "charge mortgage insurance. The model sets it at 0.5% of the "
+            "amount you borrow each year. It stops once you owe 78% of the "
+            "purchase price or less, because the law ends it there. If your"
+            " quote differs, change it in Advanced under Yearly costs of "
+            "owning.",
         ],
     },
     {
@@ -119,24 +127,33 @@ REGIONS: list[dict[str, Any]] = [
         # The primo-accedant carve-out carries no price ceiling in the
         # sourced material, so none is modelled.
         "firstTimeBuyerMaxPrice": None,
+        # Sources and internal references: copropriété charges
+        # récupérables (owner-only maintenance), the VLC revaluation
+        # coefficient (~+0.8%/yr), the degressive notaire emolument bands,
+        # encadrement des loyers, and ADR-0009 (no PEA).
         "notes": [
-            "Maintenance (€1,300/yr) is an owner-only estimate. A large "
-            "share of French copropriété charges are récupérables from the "
-            "tenant; if the figure still includes any, it overstates the "
-            "owner's cost and biases toward renting.",
-            "The flat levy is indexed at your cost-inflation rate, not the "
-            "statutory VLC coefficient (~+0.8%/yr), so it is over-indexed "
-            "at the 2.5% default.",
-            "Notaire emoluments are degressive across four bands; modelled "
-            "flat, a ≤0.2pp error on a 7.9% cost.",
-            "Rent regulation (encadrement) is not modelled; rent grows at "
-            "the selected outlook rate.",
+            "Maintenance is set at €1,300 a year, meant to cover only what "
+            "an owner pays. In a French apartment building, a tenant pays a"
+            " large share of the shared building charges. If your figure "
+            "still includes some of those, it overstates what owning costs,"
+            " and the answer leans toward renting.",
+            "Buying looks a little more expensive than it is, because the "
+            "yearly property tax (taxe foncière) grows with your cost "
+            "inflation, 2.5% by default. The official value it is charged "
+            "on rises by only about 0.8% a year.",
             "Mortgage insurance is set to 0. French lenders ask for a "
             "guarantee on almost every home loan: a guarantee company "
-            "vouches for you, or the lender registers a charge on the "
-            "home. It is paid when you take out the loan, not every year, "
-            "and it is not modelled separately.",
-            "Portfolios are modelled as plain taxable accounts — no PEA (ADR-0009).",
+            "vouches for you, or the lender registers a charge on the home."
+            " You pay it once when you take out the loan, not every year, "
+            "and the model does not include it separately.",
+            "Rent grows at the outlook rate you pick. Rent controls in "
+            "French cities are not modelled.",
+            "If you invest through a PEA, a French account with lower tax "
+            "on investment gains, your investments are taxed less than "
+            "shown. The model treats them as an ordinary taxable account.",
+            "Notary fees fall in four steps as the price rises. The model "
+            "uses one flat rate instead, which is off by at most 0.2 "
+            "percentage points of the 7.9% total buying costs.",
         ],
     },
     {
@@ -184,28 +201,40 @@ REGIONS: list[dict[str, Any]] = [
         },
         "firstTimeBuyerOverrides": {},  # H — no FTB relief enacted
         "firstTimeBuyerMaxPrice": None,
+        # Sources and internal references: Makler buyer half 3.57% incl.
+        # USt; Grunderwerbsteuer 3.5-6.5% by Bundesland, NRW 6.5%;
+        # Grundsteuer reform (eight state models) and Köln Hebesatz 550%;
+        # Zinsbindung, Anschlussfinanzierung and § 489 BGB (exit after
+        # 10 years); ADR-0009 (no Sparer-Pauschbetrag). Heating and water
+        # (Nebenkosten) are left out of both sides, so they cannot change
+        # the verdict and carry no note.
         "notes": [
-            "The Grundsteuer figure (€339/yr) is the weakest value in the "
-            "set. The post-2025 reform runs eight state models and the "
-            "effective rate is unsourceable at precision; ~0.1% of market "
-            "value is likely understated at Köln's 550% Hebesatz.",
-            "The Makler buyer-half (3.57% incl. USt) is conditional — a "
-            "maklerfrei sale drops the total to 8.50%, a €12,102 swing at "
-            "this price. Adjust the buyer-cost slider in Advanced.",
-            "Grunderwerbsteuer varies 3.5–6.5% by Bundesland; 6.5% (NRW) "
-            "is used nationally. The 3pp spread is ≈€10,170 on the shipped "
-            "€339,000.",
-            "The mortgage rate is held fixed for the full amortisation "
-            "term; the 10/15/20yr Zinsbindung and Anschlussfinanzierung "
-            "are not modelled, nor is the §489 BGB exit right after 10 yrs.",
-            "Heating and water Nebenkosten are omitted from both arms — "
-            "both parties pay them, so they are decision-neutral.",
-            "Mortgage insurance is set to 0. German lenders charge a "
-            "higher interest rate when your deposit is small, not a "
-            "separate premium. If your quote reflects that, raise the "
-            "mortgage rate.",
-            "Portfolios are modelled as plain taxable accounts — no "
-            "Sparer-Pauschbetrag (ADR-0009).",
+            "Buying costs include 3.57% (with VAT) for the buyer's half of "
+            "the estate agent's fee (Makler). If you buy without an agent, "
+            "total buying costs fall to 8.50%, about €12,102 less at the "
+            "default price of €339,000. Change Buying costs in Advanced to "
+            "match.",
+            "The property transfer tax (Grunderwerbsteuer) is set at 6.5%, "
+            "the rate in North Rhine-Westphalia. Other states charge "
+            "between 3.5% and 6.5%. In a cheaper state, buying costs up to "
+            "about €10,170 less at €339,000.",
+            "Buying may cost more than shown, because the yearly property "
+            "tax (Grundsteuer) of €339 is probably too low. It is the least"
+            " certain number here: the 2025 reform created eight different "
+            "state models, so the real rate cannot be pinned down. About "
+            "0.1% of the home's value is likely too little at Köln's local "
+            "rate.",
+            "The mortgage rate stays fixed for the whole loan. In Germany a"
+            " rate is usually fixed for 10, 15 or 20 years and then "
+            "renegotiated, which the model does not include. It also leaves"
+            " out your legal right to repay a fixed-rate loan early after "
+            "10 years.",
+            "Mortgage insurance is set to 0. German lenders charge a higher"
+            " interest rate when your deposit is small, not a separate "
+            "premium. If your quote reflects that, raise the mortgage rate.",
+            "Your investments are taxed a little more than they would be, "
+            "because the model leaves out the yearly tax-free allowance on "
+            "investment income (Sparer-Pauschbetrag).",
         ],
     },
     {
@@ -257,53 +286,61 @@ REGIONS: list[dict[str, Any]] = [
         # H — the exemption is capped by property value; above it the
         # full 2% is due, so the relief must not apply there.
         "firstTimeBuyerMaxPrice": 555_000.0,
+        # Sources and internal references: startersvrijstelling (0%
+        # instead of 2% overdrachtsbelasting, value cap, age 18-35, owner
+        # occupation); box 3 forfait 6% x 36% enacted for 2026 only, the
+        # 2027 deemed return an identified funding lever, Wet werkelijk
+        # rendement box 3 from 1 Jan 2028; heffingsvrij vermogen
+        # unavailable under the tegenbewijs route (Hoge Raad); 1 January
+        # peildatum; NHG limit; free-sector rent derivation (+/-11% band).
+        # Hillen relief carries no note: it only applies above a ~91.9%
+        # down payment, beyond the slider's 50% maximum. ADR-0009,
+        # ADR-0013.
         "notes": [
-            "The startersvrijstelling (0% instead of 2% "
-            "overdrachtsbelasting) applies only to a home worth "
-            "€555,000 or less, bought by someone aged 18–35 who will "
-            "live in it. The first-time-buyer pill switches itself off "
-            "above that price, but it cannot know your age — if you are "
-            "36 or over, switch it off yourself.",
-            "Box 3 is charged on the LESSER of a 6% deemed return and "
-            "your actual return, floored at nil — so a bad year is taxed "
-            "less, and a loss is not taxed at all.",
-            "The heffingsvrij vermogen (€59,357 per person) is not "
-            "modelled: under the tegenbewijs route the allowance is not "
-            "available (Hoge Raad), which would make the comparison "
-            "depend on your wealth and break the vectorised portfolio "
-            "update. The headline verdict applies the full 2.16%/yr "
-            "(6% × 36%) whenever your equity growth is 6% or above. "
-            "With the allowance the effective drag would be 1.65% at "
-            "€250k, 1.90% at €500k and 2.03% at €1M — a residual of "
-            "0.13–0.51pp, biased toward buying. The Monte Carlo mean "
-            "drag is lower (~1.30%), because the min binds in the "
-            "years your return falls below 6%.",
-            "The 6%/36% figures are enacted for 2026 ONLY. The 2027 "
-            "deemed return is an identified funding lever, and the whole "
-            "forfait-plus-tegenbewijs system is slated for replacement by "
-            "the Wet werkelijk rendement box 3 from 1 January 2028. A 10-, "
-            "25- or 30-year simulation should not be read as assuming "
-            "this regime persists.",
-            "Rent (€2,300/mo free-sector) is a derivation with a ±11% "
-            "band; free-sector stock comparable to a large owner-occupied "
-            "home barely exists. The blend overstates rent for a large "
-            "home, so the true price/rent ratio is higher than shown.",
-            "Hillen relief is inert at these defaults because deductible "
-            "interest exceeds the eigenwoningforfait throughout. It would "
-            "only bite above a ~91.9% down payment.",
-            "Box 3 uses a 1 January peildatum; the model applies the drag "
-            "monthly, which overstates it by ~3.37% of the terminal "
-            "portfolio over 30 years, biased toward buying.",
-            "Mortgage insurance is set to 0. There is no yearly premium in "
-            "the Netherlands. A loan under the NHG limit can carry a "
-            "one-off guarantee fee instead; the figures here are for a "
-            "loan above that limit.",
+            "The first-time-buyer relief (startersvrijstelling: 0% transfer"
+            " tax instead of 2%) applies only to a home worth €555,000 or "
+            "less, bought by someone aged 18 to 35 who will live in it. The"
+            " First-time buyer pill switches itself off above that price, "
+            "but it cannot know your age. If you are 36 or over, switch it "
+            "off yourself.",
+            "The tax on investments (box 3) follows rules set for 2026 "
+            "only: tax on an assumed 6% return, at 36%. The government may "
+            "change the assumed return for 2027, and the whole system is "
+            "due to be replaced on 1 January 2028 by a tax on actual "
+            "returns. A 10-, 25- or 30-year simulation does not mean these "
+            "rules will last.",
+            "Leaving out the box 3 tax-free allowance (heffingsvrij "
+            "vermogen, €59,357 per person) makes investing look worse than "
+            "it is, so the answer leans toward buying. If you are taxed on "
+            "your actual return, the Dutch Supreme Court has ruled that the"
+            " allowance does not apply. The model charges the full 2.16% a "
+            "year (6% × 36%) whenever your equity growth is 6% or more. "
+            "With the allowance, the charge would be 1.65% on €250k, 1.90% "
+            "on €500k and 2.03% on €1M, a gap of 0.13 to 0.51 percentage "
+            "points. In the simulated futures the average charge is lower, "
+            "about 1.30%, because years with a return under 6% are taxed on"
+            " that lower return.",
+            "Box 3 tax is charged on the lower of the assumed 6% return and"
+            " your actual return, and never on a loss. So a bad year is "
+            "taxed less, and a year with a loss is not taxed at all.",
             "The tax you save by deducting mortgage interest comes back as "
-            "a refund at the end of each year. The model assumes you invest "
-            "it: it grows with your other investments and pays the box 3 "
-            "wealth tax like them. If you would spend it instead, buying "
-            "comes out worse than shown.",
-            "Portfolios are modelled as plain taxable accounts (ADR-0009).",
+            "a refund each year, and the model assumes you invest it. It "
+            "grows with your other investments and pays the box 3 tax like "
+            "them. If you would spend it instead, buying comes out worse "
+            "than shown.",
+            "Renting may cost less than shown. The rent of €2,300 a month "
+            "is an estimate, with a margin of about 11% either way, and few"
+            " homes this size are rented on the open market. The estimate "
+            "likely overstates the rent for a large home.",
+            "Box 3 tax is worked out on what you own on 1 January. The "
+            "model charges it every month instead, which overstates it by "
+            "about 3.37% of the final portfolio over 30 years, so the "
+            "answer leans slightly toward buying.",
+            "Mortgage insurance is set to 0. There is no yearly premium in "
+            "the Netherlands. A loan under the national mortgage guarantee "
+            "limit (NHG) can carry a one-off guarantee fee instead. The "
+            "figures here are for a loan above that limit.",
+            "The model treats investments as an ordinary taxable account.",
         ],
     },
     {
@@ -352,40 +389,50 @@ REGIONS: list[dict[str, Any]] = [
         # the relief." Above this the relief does not exist, so applying
         # it inverts the verdict across roughly £610k-£710k.
         "firstTimeBuyerMaxPrice": 500_000.0,
+        # Sources and internal references: gov.uk ("If the price is over
+        # £500,000, you cannot claim the relief"); SDLT bands; LBTT
+        # (Scotland) and LTT (Wales); ONS Family Spending (maintenance,
+        # recall-based); 5-year fix reverting to SVR (~195bp higher);
+        # SDLT surcharges; ADR-0009 (no ISA). The council-tax note (rents
+        # assumed exclusive of it, unverifiable from ONS PIPR) is left out:
+        # it shifts the monthly costs shown but cannot change the verdict.
         "notes": [
-            "First-time-buyer relief is withdrawn entirely above £500,000 "
-            '— gov.uk: "If the price is over £500,000, you cannot claim '
-            'the relief." The first-time-buyer pill switches itself off '
-            "above that price and full SDLT applies, so the verdict is "
-            "not overstated there.",
-            "First-time-buyer SDLT is also under-charged between £300,000 "
-            "and £500,000, where relief is 5% rather than 0%: £5,000 low "
-            "at £400k, £7,500 at £450k, £10,000 at £500k.",
-            "Above £925,000 the SDLT marginal rate steps to 10% then 12%, "
-            "but this model's line stays at 5% — £3,750 low at £1M, and "
-            "£63,750 (41%) low at the £2M slider ceiling.",
-            "SDLT applies to England & Northern Ireland only. Scotland "
-            "uses LBTT and Wales uses LTT, with different bands and no "
-            "first-time-buyer relief in Wales.",
-            "Rents are modelled as exclusive of council tax. This premise "
-            "is unverifiable — ONS never states it, and PIPR measures "
-            "achieved rather than advertised rents. It shifts the displayed "
-            "monthly costs but cannot change the verdict.",
-            "Maintenance (£900/yr) is a lower bound: the ONS survey is "
-            "recall-based and under-captures lumpy repairs.",
-            "Buyer costs are under-charged across the whole £125,000–"
-            "£250,000 band and clamp at zero below £138,000, where the "
-            "true cost is £3,360.",
-            "The additional-dwelling (+5pp) and non-resident (+2pp) SDLT "
-            "surcharges are not modelled; this tool prices a single "
-            "owner-occupied primary residence.",
-            "The mortgage rate is held fixed for the full 25 years; "
-            "reversion from the 5yr fix to SVR (currently ~195bp higher) "
-            "is not modelled.",
+            "First-time buyers lose the stamp duty relief entirely on a "
+            "home over £500,000. The First-time buyer pill switches itself "
+            "off above that price and the full stamp duty applies, so the "
+            "answer is not too kind to buying there.",
+            "Between £300,000 and £500,000, first-time buyers pay 5% stamp "
+            "duty on the part of the price above £300,000, but the model "
+            "charges none. So buying costs too little by £5,000 at £400k, "
+            "£7,500 at £450k and £10,000 at £500k.",
+            "Above £925,000, stamp duty rises in steps to 10% and then 12%,"
+            " but the model keeps charging 5%. So buying costs too little "
+            "by £3,750 at £1M, and by £63,750 (41% of the real cost) at £2M,"
+            " the top of the price slider.",
+            "Below £250,000 the model charges too little in buying costs. "
+            "Below £138,000 it charges nothing; the real cost at £138,000 "
+            "is £3,360.",
+            "The mortgage rate stays fixed for the full 25 years. A 5-year "
+            "fixed rate usually moves to the lender's standard variable "
+            "rate afterwards, now about 1.95 percentage points higher, "
+            "which the model does not include.",
+            "If you invest through an ISA, a UK account with no tax on "
+            "investment gains, your investments are taxed less than shown. "
+            "The model treats them as an ordinary taxable account.",
+            "Buying may cost more than shown, because maintenance of £900 a"
+            " year is a minimum. It comes from a national survey in which "
+            "people recall their spending, which misses large one-off "
+            "repairs.",
+            "The extra stamp duty on a second home (5 percentage points) or"
+            " for a buyer who does not live in the UK (2 percentage points)"
+            " is not modelled. The figures are for a single home you live "
+            "in.",
             "Mortgage insurance is set to 0. UK lenders charge a higher "
             "interest rate when your deposit is small, not a separate "
             "premium. If your quote reflects that, raise the mortgage rate.",
-            "Portfolios are modelled as plain taxable accounts — no ISA (ADR-0009).",
+            "The stamp duty here is the one for England and Northern "
+            "Ireland. Scotland and Wales have their own taxes, with "
+            "different bands, and Wales has no first-time-buyer relief.",
         ],
     },
 ]

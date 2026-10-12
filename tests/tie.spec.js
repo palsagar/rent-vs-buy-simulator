@@ -11,7 +11,7 @@ import { test, expect } from '@playwright/test';
 
 const PHONE = { viewport: { width: 390, height: 664 }, hasTouch: true, isMobile: true };
 
-async function loadTie(page) {
+async function loadTie(page, { level = false } = {}) {
   await page.addInitScript(() => {
     try { localStorage.setItem('rvb.tour.v1', 'done'); } catch (e) {}
   });
@@ -21,6 +21,8 @@ async function loadTie(page) {
     body.verdict.winner = 'tie';
     body.verdict.difference = 0;
     body.breakevenYear = null;
+    // Level every year, not only at the horizon.
+    if (level) body.series.netRent = [...body.series.netBuy];
     await route.fulfill({ response, json: body });
   });
   await page.route('**/api/monte-carlo', async (route) => {
@@ -71,9 +73,36 @@ test('the headline says the two end equally well off, with no amount', async ({ 
   await expect(page.locator('#verdict-line .amount-buy, #verdict-line .amount-rent')).toHaveCount(0);
 });
 
-test('the breakeven line names neither side', async ({ page }) => {
-  await loadTie(page);
+test('the breakeven line names neither side when the two are level every year', async ({ page }) => {
+  await loadTie(page, { level: true });
   await expect(page.locator('#verdict-breakeven')).toHaveText('Neither pulls ahead within 10 years');
+});
+
+test('a tie at the horizon still says who leads before it', async ({ page }) => {
+  // The default config, with no crossing reported: renting leads in the
+  // early years (buying pays its up-front costs), so it is named.
+  await loadTie(page);
+  await expect(page.locator('#verdict-breakeven')).toHaveText(
+    /^(Buying|Renting) is ahead until the two end level at year 10$/,
+  );
+});
+
+test('a tie at the horizon keeps the breakeven of an earlier crossing', async ({ page }) => {
+  // Ends level after 30 years, but buying overtakes renting near year 9 and
+  // leads by about $45,711 at year 20.
+  await page.addInitScript(() => {
+    try { localStorage.setItem('rvb.tour.v1', 'done'); } catch (e) {}
+  });
+  const simulated = page.waitForResponse('**/api/simulate');
+  await page.goto('/?horizonYears=30&equityGrowthAnnual=8.025318049137098&r=us&v=3');
+  const body = await (await simulated).json();
+  expect(body.verdict.winner).toBe('tie');
+  expect(body.breakevenYear).not.toBeNull();
+  const year = Math.ceil(body.breakevenYear);
+  expect(year).toBeLessThan(30);
+  await expect(page.locator('#verdict-breakeven')).toHaveText(
+    `Buying is ahead from year ${year} until the two end level at year 30`,
+  );
 });
 
 test('the confidence line shows buying\'s share of the simulated futures', async ({ page }) => {

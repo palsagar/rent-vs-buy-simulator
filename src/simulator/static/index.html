@@ -19,7 +19,12 @@
 </head>
 <body>
 
-<div id="error-banner"><span></span> <button id="error-reload">Reload</button></div>
+<div id="error-banner" role="alert">
+  <span id="error-message"></span>
+  <button type="button" id="error-retry">Try again</button>
+  <button type="button" id="error-reload" hidden>Reload page</button>
+  <button type="button" id="error-dismiss" aria-label="Dismiss">✕</button>
+</div>
 
 <div id="app">
 
@@ -186,11 +191,19 @@
     </aside>
 
     <div id="results">
-      <div id="results-spinner">updating…</div>
+      <div id="results-spinner" aria-hidden="true"><span class="busy-chip"><span class="busy-dot"></span>Updating…</span></div>
+      <p id="link-notice" role="status" hidden><span id="link-notice-text"></span> <button type="button" id="link-notice-dismiss" class="text-btn">Dismiss</button></p>
 
-      <section id="verdict-hero">
-        <p id="verdict-line"></p>
-        <div id="verdict-subline"><span id="verdict-breakeven"></span><span id="verdict-confidence"></span></div>
+      <section id="print-summary" class="card" aria-hidden="true">
+        <h2>Your numbers</h2>
+        <p id="print-stale" hidden>These results are for the numbers below, not your latest change.</p>
+        <dl id="print-summary-list"></dl>
+        <p id="print-summary-link"></p>
+      </section>
+
+      <section id="verdict-hero" data-result="simulate" tabindex="-1">
+        <p id="verdict-line" aria-live="polite" aria-atomic="true"></p>
+        <div id="verdict-subline"><span id="verdict-breakeven"></span><span id="verdict-confidence" aria-live="polite"></span><span id="verdict-pending" hidden> · Checking how sure this is…</span></div>
         <div id="stat-row">
           <div class="stat-card buy"><div class="stat-label">Buy net value</div><div class="stat-value buy" id="stat-buy"></div></div>
           <div class="stat-card rent"><div class="stat-label">Rent net value</div><div class="stat-value rent" id="stat-rent"></div></div>
@@ -198,16 +211,20 @@
           <div class="stat-card"><div class="stat-label">Rent cost · yr 1</div><div class="stat-value" id="stat-cost-rent"></div></div>
         </div>
         <p id="net-note" hidden>Both net values count rent, mortgage payments and other costs as money spent, so they are often below zero. What decides the verdict is the gap between them.</p>
+        <details id="region-caveats" hidden>
+          <summary></summary>
+          <ul id="region-notes"></ul>
+        </details>
         <button id="share-btn" class="btn">Share this scenario</button>
       </section>
 
-      <section class="card">
+      <section class="card" data-result="simulate">
         <h2>Net value over time</h2>
         <div class="card-sub">What you'd walk away with, minus everything you put in — at every year.</div>
         <div id="decision-chart" class="chart"></div>
       </section>
 
-      <section class="card">
+      <section class="card" data-result="monte-carlo">
         <h2>How sure is this?</h2>
         <div class="card-sub">500 simulated futures of the Buy − Rent difference. Bands: 50% and 90% of outcomes.</div>
         <div id="fan-chart" class="chart"></div>
@@ -215,6 +232,7 @@
         <div class="card-sub">Each bar tests one number at a time, set lower and higher than yours. A bar that crosses into the other colour flips the answer on its own.</div>
         <p id="tornado-summary"></p>
         <div id="tornado-chart" class="chart"></div>
+        <p id="tornado-detail" aria-live="polite" hidden></p>
         <details id="tornado-note">
           <summary>How are the test values chosen?</summary>
           <p>Each bar changes one number at a time and keeps everything else as you set it. The value tested is printed at each end of the bar.</p>
@@ -224,7 +242,7 @@
         </details>
       </section>
 
-      <section class="card">
+      <section class="card" data-result="simulate">
         <h2>Where the money goes</h2>
         <div class="card-sub">Cumulative cash out of pocket on each side.</div>
         <div id="outflow-chart" class="chart"></div>
@@ -232,8 +250,9 @@
         <div id="breakdown-chart" class="chart"></div>
       </section>
 
-      <details id="numbers">
+      <details id="numbers" data-result="simulate">
         <summary>The numbers</summary>
+        <p class="numbers-note">One row per year. The last row, in bold, is the year you sell, which the verdict uses.</p>
         <div id="data-table"></div>
         <button id="csv-btn" class="btn">Download CSV</button>
       </details>
@@ -241,7 +260,6 @@
       <footer>
         🔒 <strong>Privacy:</strong> Cookie-less, privacy-friendly analytics via self-hosted <a href="https://umami.is" target="_blank" rel="noopener">Umami</a> — no personal data, no cross-site tracking. Hosted on a tiny VPS via <a href="https://coolify.io/" target="_blank" rel="noopener">Coolify</a>.<br>
         Calculations use monthly granularity; Net Value prices a full exit at every year (selling costs and capital-gains tax on both sides). Tax defaults follow the selected region. Source: <a href="https://github.com/palsagar/rent-vs-buy-simulator" target="_blank" rel="noopener">GitHub</a>. Made by <a href="https://github.com/palsagar" target="_blank" rel="noopener">palsagar</a>.
-        <div id="region-notes"></div>
       </footer>
     </div>
   </div>

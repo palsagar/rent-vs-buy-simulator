@@ -519,6 +519,19 @@ test('restoring a priced-out FTB intent re-enables relief when the price drops',
   await expect(page.locator('#ftb-pill .preset-btn')).toHaveClass(/active/);
 });
 
+test('a tour taken from a shared link leaves the shared numbers in place', async ({ page }) => {
+  await page.addInitScript(() => {
+    try { localStorage.removeItem('rvb.tour.v1'); } catch (e) {}
+  });
+  await page.goto('/?propertyPrice=750000&r=us&v=2');
+  await page.waitForFunction(() => window.__rvb?.tour, null, { timeout: 20_000 });
+  await page.locator('#start-tour-btn', { hasText: 'Take the tour first' }).click();
+  await expect(page.locator('.tour-tooltip')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.tour-tooltip')).toHaveCount(0);
+  await expect(page.locator('#core-inputs input[type=range]').first()).toHaveValue('750000');
+});
+
 test('prefers-reduced-motion disables the pulse animation and overlay transitions', async ({ page }) => {
   await page.addInitScript(() => {
     try { localStorage.removeItem('rvb.tour.v1'); } catch (e) {}

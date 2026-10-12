@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
  *
  * Opening a deep share URL in a fresh tab must restore the config silently and
  * render the verdict — and a mid-flight request that is superseded/aborted must
- * never surface its abort as the "Reload" error banner. A genuinely failed
+ * never surface its abort as the error banner. A genuinely failed
  * request still shows the banner.
  */
 

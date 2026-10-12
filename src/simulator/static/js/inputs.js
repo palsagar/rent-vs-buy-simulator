@@ -17,6 +17,7 @@ import {
   setFtb,
   setParam,
   setRegionId,
+  linkCarried,
   urlOmitted,
 } from "./state.js";
 
@@ -34,17 +35,23 @@ const SECTION_CONTAINERS = {
 const widgets = []; // { def, refresh() } — refresh re-reads state into the widget
 let regionsList = [];
 
+// Ids that tie a field's name and hint to its control for screen readers.
+// The levy cap's amount slider reuses its field's key, hence the counter.
+let fieldUid = 0;
+const uid = (key) => `f-${key}-${++fieldUid}`;
+
 function buildSlider(def, container) {
   const scale = def.scale ?? 1;
+  const id = uid(def.key);
   const row = document.createElement("div");
   row.className = "slider-row";
   row.innerHTML = `
     <div class="slider-header">
-      <span class="slider-name">${def.label}</span>
+      <span class="slider-name" id="${id}-name">${def.label}</span>
       <button type="button" class="slider-value"></button>
   </div>
-    <input type="range" min="${def.min}" max="${def.max}" step="${def.step}">
-    ${def.hint ? `<div class="slider-hint">${def.hint}</div>` : ""}
+    <input type="range" min="${def.min}" max="${def.max}" step="${def.step}" aria-labelledby="${id}-name"${def.hint ? ` aria-describedby="${id}-hint"` : ""}>
+    ${def.hint ? `<div class="slider-hint" id="${id}-hint">${def.hint}</div>` : ""}
   `;
   const input = row.querySelector("input");
   const value = row.querySelector(".slider-value");
@@ -54,6 +61,8 @@ function buildSlider(def, container) {
     const text = def.fmt(displayed);
     value.textContent = text;
     value.setAttribute("aria-label", `${def.label} ${text}, type an exact value`);
+    // The slider reads "$500k", as shown, rather than "500000".
+    input.setAttribute("aria-valuetext", text);
   };
   const refresh = () => {
     const stored = getConfig()[def.key];
@@ -160,6 +169,7 @@ function openTypedField(def, value, slider, shown, apply) {
 function buildSegmented(def, container) {
   const picker = document.createElement("div");
   picker.className = "seg-picker";
+  picker.setAttribute("role", "group");
   const buttons = def.options.map((option) => {
     const btn = document.createElement("button");
     btn.className = "seg-btn";
@@ -193,7 +203,13 @@ function buildCheckbox(def, container) {
   };
   input.addEventListener("change", () => setParam(def.key, input.checked));
   container.appendChild(row);
-  if (def.hint) container.appendChild(hintEl(def.hint));
+  // The wrapping label names the box; the hint describes it.
+  if (def.hint) {
+    const hint = hintEl(def.hint);
+    hint.id = `${uid(def.key)}-hint`;
+    input.setAttribute("aria-describedby", hint.id);
+    container.appendChild(hint);
+  }
   widgets.push({ refresh });
 }
 
@@ -212,7 +228,7 @@ function buildSelect(def, container) {
   const row = document.createElement("div");
   row.className = "select-row";
   row.appendChild(select);
-  container.appendChild(labeledRow(def, row));
+  container.appendChild(labeledRow(def, row, select));
   widgets.push({ refresh });
 }
 
@@ -283,18 +299,27 @@ function buildLevyCap(def, container) {
     }
     amount.hidden = choice !== "capped";
   };
-  container.appendChild(labeledRow(def, controls));
+  container.appendChild(labeledRow(def, controls, picker));
   widgets.push({ refresh });
 }
 
-function labeledRow(def, el) {
+// `control` is the element a screen reader announces: it takes the name
+// shown above it (unless it has its own) and the hint below it.
+function labeledRow(def, el, control = el) {
+  const id = uid(def.key);
   const wrap = document.createElement("div");
   const header = document.createElement("div");
   header.className = "slider-header";
-  header.innerHTML = `<span class="slider-name">${def.label}</span>`;
+  header.innerHTML = `<span class="slider-name" id="${id}-name">${def.label}</span>`;
   wrap.appendChild(header);
   wrap.appendChild(el);
-  if (def.hint) wrap.appendChild(hintEl(def.hint));
+  if (!control.hasAttribute("aria-label")) control.setAttribute("aria-labelledby", `${id}-name`);
+  if (def.hint) {
+    const hint = hintEl(def.hint);
+    hint.id = `${id}-hint`;
+    control.setAttribute("aria-describedby", hint.id);
+    wrap.appendChild(hint);
+  }
   return wrap;
 }
 
@@ -330,11 +355,11 @@ function hasRelief(region) {
 // outputs a single signed number that is enough to invert it -- the UK
 // verdict flips across roughly GBP610k-GBP710k. Relief must therefore be
 // a function of price, not a latched flag.
-/** Whether relief exists for this region AT this price. */
-function reliefApplies(region) {
+/** Whether relief exists for this region AT this price (`cfg`'s). */
+function reliefApplies(region, cfg = getConfig()) {
   if (!hasRelief(region)) return false;
   const cap = region.firstTimeBuyerMaxPrice;
-  return cap == null || getConfig().propertyPrice <= cap;
+  return cap == null || cfg.propertyPrice <= cap;
 }
 
 /**
@@ -351,7 +376,10 @@ function ftbMatchesConfig(region) {
 
 /** Put the relief setting in the share link, for a region that has one. */
 function rememberFtb() {
-  setFtb(hasRelief(selectedRegion) ? ftbOn : null);
+  setFtb(
+    hasRelief(selectedRegion) ? ftbOn : null,
+    Object.keys(selectedRegion?.firstTimeBuyerOverrides ?? {}),
+  );
 }
 
 /**
@@ -359,8 +387,10 @@ function rememberFtb() {
  * snapshot. `stated` is the setting it carried, or null/undefined for a
  * link written before `ftb` existed: the setting is then inferred from
  * the numbers, which fails once a relief value has been edited (#51).
+ * `holdsRelief` says whether the config's relief keys hold the relief,
+ * edited or not, when the setting is stated.
  */
-function adoptFtb(stated) {
+function adoptFtb(stated, holdsRelief) {
   const matches = ftbMatchesConfig(selectedRegion);
   if (stated == null) {
     // Only derive the flag from a region that actually enacts relief.
@@ -376,44 +406,39 @@ function adoptFtb(stated) {
     // for the next region with relief.
     ftbOn = hasRelief(selectedRegion) ? stated : true;
     // A stated setting was written after syncFtbToPrice ran, so the keys
-    // hold what the relief at this price says, edits included. A
-    // hand-built link can state the relief without its numbers, though;
-    // syncFtbToPrice then applies it, so the pill never shows the relief
-    // on beside numbers that are not the relief's.
-    ftbInEffect =
-      ftbOn && reliefApplies(selectedRegion) && mayHoldRelief(selectedRegion);
+    // hold what the relief at this price says, edits included. When they
+    // do not (a hand-built link that states the relief without its
+    // numbers), syncFtbToPrice applies it, so the pill never shows the
+    // relief on beside numbers that are not the relief's.
+    ftbInEffect = ftbOn && reliefApplies(selectedRegion) && holdsRelief;
   }
   rememberFtb();
 }
 
 /**
- * Whether the config can be this region's relief, edited or not: one
- * relief key still holds its relief value, or every other key of the
- * region's bundle holds the bundle's value.
+ * Whether the opening link set any of the region's relief values. The app
+ * writes every value that differs from the default, and every relief
+ * value does, so a link it wrote with the relief in effect sets them,
+ * edited or not (unless each was edited back to exactly the default). A
+ * hand-built link (`?r=uk&ftb=1`) sets none, and gets the relief values.
  */
-function mayHoldRelief(region) {
-  const overrides = region.firstTimeBuyerOverrides;
-  const cfg = getConfig();
-  return (
-    Object.keys(overrides).some((k) => cfg[k] === overrides[k]) ||
-    Object.entries(region.taxPrimitives).every(
-      ([k, v]) => k in overrides || cfg[k] === v,
-    )
-  );
+function linkHoldsRelief(region) {
+  return Object.keys(region?.firstTimeBuyerOverrides ?? {}).some(linkCarried);
 }
 
 /**
  * The selected region's value for every Advanced field, with the
  * first-time-buyer relief applied while it is in effect, or null when no
  * region is selected (a link whose numbers match no bundle). Cost
- * inflation is in no bundle, so its default is the app-wide one.
+ * inflation is in no bundle, so its default is the app-wide one. The price
+ * that decides the relief is `cfg`'s, the live config's by default.
  */
-export function regionDefaults() {
+export function regionDefaults(cfg = getConfig()) {
   if (!selectedRegion) return null;
   return {
     costInflationRate: DEFAULT_CONFIG.costInflationRate,
     ...selectedRegion.taxPrimitives,
-    ...(ftbOn && reliefApplies(selectedRegion) ? selectedRegion.firstTimeBuyerOverrides : {}),
+    ...(ftbOn && reliefApplies(selectedRegion, cfg) ? selectedRegion.firstTimeBuyerOverrides : {}),
   };
 }
 
@@ -537,26 +562,25 @@ function selectRegionPill(regionPills, regions, region) {
 }
 
 // Every region's known simplifications are disclosed here rather than in
-// a doc nobody opens. Notes are authored in regions.py, so they travel
-// with the values they qualify.
+// a doc nobody opens: collapsed under the verdict they qualify. Notes are
+// authored in regions.py, so they travel with the values they qualify.
 function renderRegionNotes(region) {
-  const host = document.getElementById("region-notes");
-  if (!host) return;
+  const box = document.getElementById("region-caveats");
+  const list = document.getElementById("region-notes");
   // replaceChildren, not innerHTML: notes are authored data, but the
   // habit matters. Note text below goes in via textContent for the
   // same reason.
-  host.replaceChildren();
-  if (!region?.notes?.length) return;
-  const heading = document.createElement("strong");
-  heading.textContent = `${region.label} — modelling notes:`;
-  const list = document.createElement("ul");
-  for (const note of region.notes) {
+  list.replaceChildren();
+  const notes = region?.notes ?? [];
+  box.hidden = notes.length === 0;
+  if (notes.length === 0) return;
+  box.querySelector("summary").textContent =
+    `${notes.length} ${notes.length === 1 ? "thing" : "things"} to know about the ${region.label} numbers`;
+  for (const note of notes) {
     const item = document.createElement("li");
     item.textContent = note;
     list.appendChild(item);
   }
-  host.appendChild(heading);
-  host.appendChild(list);
 }
 
 function applySelectedRegion() {
@@ -626,7 +650,7 @@ function buildPresetPills(regions) {
   // id on first load and stops depending on the numbers matching. An `r`
   // that names no region is dropped, so a shared link never repeats it.
   setRegionId(selectedRegion?.id ?? null);
-  adoptFtb(getFtb());
+  adoptFtb(getFtb(), linkHoldsRelief(selectedRegion));
   if (selectedRegion) setCurrency(selectedRegion.currencySymbol);
   selectRegionPill(regionPills, regions, selectedRegion);
   // A link shared before relief was priced can carry the FTB buyer costs
@@ -684,10 +708,11 @@ export function registerWidget(widget) {
 /**
  * Capture the settings a tour may disturb, for restore on exit.
  * Includes `ftbOn` (user intent), not just the config, so restoring can
- * re-enable a relief that was priced out during the tour.
+ * re-enable a relief that was priced out during the tour, and
+ * `ftbInEffect`, so an edited relief value is restored as edited.
  */
 export function snapshotSettings() {
-  return { config: getConfig(), regionId: getRegionId(), ftbOn };
+  return { config: getConfig(), regionId: getRegionId(), ftbOn, ftbInEffect };
 }
 
 /**
@@ -703,7 +728,7 @@ export function restoreSettings(snapshot) {
   // Restores every config key, including any FTB override values.
   applyPreset(snapshot.config);
   setRegionId(snapshot.regionId);
-  adoptFtb(snapshot.ftbOn);
+  adoptFtb(snapshot.ftbOn, snapshot.ftbInEffect);
   selectRegionPill(document.getElementById("region-pills"), regionsList, region);
   // Outlook pills have no authoritative match after restore; clear the chrome
   // rather than leave a stale highlight (the app already tolerates this

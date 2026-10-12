@@ -261,3 +261,19 @@ test('the phone-size slider thumb rule survives CSS parsing', async ({ page }) =
   });
   expect(width).toBe('20px');
 });
+
+test('charts have no mode bar on a touch screen', async ({ page }) => {
+  await expect(page.locator('#decision-chart .modebar')).toHaveCount(0);
+});
+
+test('a tapped tornado bar is spelled out under the chart', async ({ page }) => {
+  const detail = page.locator('#tornado-detail');
+  await expect(detail).toBeVisible();
+  await expect(detail).toHaveText('Tap a bar to see what it tested.');
+  const bar = page.locator('#tornado-chart .bars .point path').first();
+  await bar.scrollIntoViewIfNeeded();
+  // At the bar's centre: Plotly's drag layer, not the bar, takes the touch.
+  const box = await bar.boundingBox();
+  await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(detail).toHaveText(/ instead of .*\. (Buying|Renting) ahead by .*\.$/);
+});

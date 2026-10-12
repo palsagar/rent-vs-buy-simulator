@@ -1,14 +1,35 @@
-// Chrome behavior: drawer, overlays, error banner, loading indicator.
+// Chrome behavior: drawer, overlays, error banner, busy state.
 // Also owns the accessibility wiring for the overlays and drawer: focus
 // management, dialog semantics, keyboard accordion, and scrim dismissal.
 
 import { Tour, currentActiveTour } from "./tour.js";
 import { trackEvent } from "./analytics.js";
 import { moveFocusIn, restoreFocus, trapFocus } from "./focus.js";
+import { INPUT_DEFS } from "./fields.js";
 import { verdictIsCurrent } from "./results.js";
 import { shareUrl } from "./state.js";
 
-export function initUi(tour) {
+// A first visit through a link someone sent opens on their scenario:
+// viewing it is the main action and the tour the second. The buttons keep
+// their ids and handlers, so View still marks the welcome as skipped.
+function applySharedWelcome(welcome) {
+  welcome.querySelector("h1").textContent = "Someone shared a scenario with you";
+  welcome.querySelector(".welcome-hero-sub").textContent = "Their numbers are already filled in";
+  welcome.querySelector(".welcome-intro").textContent =
+    "This calculator compares buying a home with renting and investing the difference. " +
+    "The answer for their numbers is ready below. " +
+    "Change any number to try your own.";
+  const view = document.getElementById("start-sim-btn");
+  const tourBtn = document.getElementById("start-tour-btn");
+  view.textContent = "View this shared scenario";
+  view.className = "btn-primary";
+  tourBtn.textContent = "Take the tour first";
+  tourBtn.className = "btn";
+  tourBtn.before(view);
+}
+
+// `sharedLink`: the page opened on a link that sets its own numbers.
+export function initUi(tour, { sharedLink = false } = {}) {
   // Desktop only: on a phone the preset bar is hidden, and the groups sit
   // in the inputs sheet right below the outlook section.
   document.getElementById("advanced-btn").addEventListener("click", () => {
@@ -118,13 +139,14 @@ export function initUi(tour) {
     releaseWelcomeTrap = null;
     welcome.classList.add("hidden");
   };
+  if (sharedLink) applySharedWelcome(welcome);
   // First visit only: returning visitors hold the tour flag. Markup starts
   // hidden and JS reveals it, so no inline script is needed (CSP-safe).
   if (!Tour.readFlag()) {
     welcomeActive = true;
     welcome.classList.remove("hidden");
     releaseWelcomeTrap = trapFocus(welcome);
-    moveFocusIn(welcome, document.getElementById("start-tour-btn"));
+    moveFocusIn(welcome, document.getElementById(sharedLink ? "start-sim-btn" : "start-tour-btn"));
   }
   document.getElementById("start-tour-btn").addEventListener("click", () => {
     dismissWelcome();
@@ -156,6 +178,16 @@ export function initUi(tour) {
     const s = scrim();
     if (s) s.classList.toggle("hidden", !open);
   };
+  // While the sheet is open its own live verdict line speaks, so the hero's
+  // would say the same thing twice. Watched, not set in setDrawer: the tour
+  // and the phone layout also open and close the sheet.
+  const syncHeroLive = () => {
+    const live = inputPanel.classList.contains("visible") ? "off" : "polite";
+    for (const id of ["verdict-line", "verdict-confidence"]) {
+      document.getElementById(id).setAttribute("aria-live", live);
+    }
+  };
+  new MutationObserver(syncHeroLive).observe(inputPanel, { attributes: true, attributeFilter: ["class"] });
   // Done, Esc and a tap outside close the phone inputs sheet. After Esc,
   // focus that was in the sheet goes to the button that reopens it, not
   // off-screen.
@@ -227,21 +259,78 @@ export function initUi(tour) {
       shareBtn.textContent = shareLabel;
     }, 2000);
   });
-
-  // Wired here (not inline onclick) so the CSP script-src can omit 'unsafe-inline'.
-  document.getElementById("error-reload").addEventListener("click", () => location.reload());
 }
 
-export function showError(message) {
+// A link value the calculator cannot use falls back to its starting value;
+// this says which ones did. `keys` are config keys, or `ftb`.
+export function showLinkNotice(keys) {
+  // `ftb` is not a field: it is the first-time-buyer pill.
+  const label = (key) => (key === "ftb" ? "First-time buyer" : INPUT_DEFS.find((d) => d.key === key)?.label ?? key);
+  const labels = [...new Set(keys.map(label))];
+  document.getElementById("link-notice-text").textContent =
+    labels.length === 1
+      ? `One value in this link was outside what the calculator allows, so ${labels[0]} uses the starting value instead.`
+      : `Some values in this link were outside what the calculator allows, so these use the starting values instead: ${labels.join(", ")}.`;
+  const notice = document.getElementById("link-notice");
+  notice.hidden = false;
+  document.getElementById("link-notice-dismiss").addEventListener("click", () => {
+    notice.hidden = true;
+  });
+}
+
+// The source of the failure the banner shows: what Try again re-runs.
+let bannerSource = null;
+
+// Wired here (not inline onclick) so the CSP script-src can omit 'unsafe-inline'.
+export function initErrorBanner({ onRetry, onDismiss }) {
   const banner = document.getElementById("error-banner");
-  banner.querySelector("span").textContent = message;
-  banner.classList.add("visible");
+  // Focus on a button the banner just hid would be lost, so it moves to
+  // the results the banner was about.
+  const leaveBanner = () => {
+    if (!banner.classList.contains("visible") && banner.contains(document.activeElement)) {
+      document.getElementById("verdict-hero").focus({ preventScroll: true });
+    }
+  };
+  document.getElementById("error-retry").addEventListener("click", (e) => {
+    if (e.isTrusted) {
+      trackEvent("error-retried", { source: bannerSource === "monteCarlo" ? "monte-carlo" : "simulate" });
+    }
+    onRetry(bannerSource);
+    leaveBanner();
+  });
+  document.getElementById("error-reload").addEventListener("click", () => location.reload());
+  document.getElementById("error-dismiss").addEventListener("click", () => {
+    onDismiss();
+    leaveBanner();
+  });
+}
+
+// `action` is "retry" or "reload": the one fix the banner offers.
+export function showError(message, action, source) {
+  bannerSource = source;
+  // Shown first, then filled: an alert is announced when its text changes.
+  document.getElementById("error-banner").classList.add("visible");
+  document.getElementById("error-message").textContent = message;
+  document.getElementById("error-retry").hidden = action !== "retry";
+  document.getElementById("error-reload").hidden = action !== "reload";
 }
 
 export function hideError() {
   document.getElementById("error-banner").classList.remove("visible");
+  // Emptied, so the same message is announced again next time.
+  document.getElementById("error-message").textContent = "";
 }
 
-export function setLoading(on) {
-  document.getElementById("results-spinner").style.display = on ? "flex" : "none";
+// Fades the out-of-date result sections, marks the ones still updating as
+// busy, and shows the Updating chip while any update can still land.
+export function paintBusy({ simulate, monteCarlo, checkingConfidence }) {
+  for (const el of document.querySelectorAll("[data-result]")) {
+    const s = el.dataset.result === "simulate" ? simulate : monteCarlo;
+    el.classList.toggle("stale", s.stale);
+    el.setAttribute("aria-busy", String(s.working));
+  }
+  document
+    .getElementById("results-spinner")
+    .classList.toggle("visible", simulate.working || monteCarlo.working);
+  document.getElementById("verdict-pending").hidden = !checkingConfidence;
 }

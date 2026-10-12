@@ -97,6 +97,16 @@ export function urlOmitted(key) {
   return omittedKeys.has(key);
 }
 
+// The config keys the link the page opened with set, with a usable value.
+// A key left out holds the default: the link either matched it or, when
+// hand-built, never set it. Set by readUrl.
+let carriedKeys = new Set();
+
+/** Whether the link the page opened with set `key`. */
+export function linkCarried(key) {
+  return carriedKeys.has(key);
+}
+
 // Which region the user picked is state in its own right, NOT something
 // recoverable from the numbers. Reverse-matching a config against every
 // bundle's taxPrimitives fails the moment any one of them is edited --
@@ -133,19 +143,31 @@ export function getFtb() {
   return ftb;
 }
 
-export function setFtb(on) {
+// The region's relief keys, written to the link while the relief is on
+// even when they equal the default: a link without them reads as one that
+// states the relief without its numbers, and gets the relief values
+// (inputs.js), which would undo an edit back to the default.
+let reliefKeys = [];
+
+export function getReliefKeys() {
+  return reliefKeys;
+}
+
+/** `keys` are the selected region's relief keys. */
+export function setFtb(on, keys = []) {
   ftb = on;
+  reliefKeys = on ? keys : [];
   // Through the same delay as config changes, like setRegionId.
   scheduleUrlWrite();
 }
 
-function currentQuery() {
+function currentQuery(cfg = config, region = regionId, relief = ftb, keys = reliefKeys) {
   const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(config)) {
-    if (value !== DEFAULT_CONFIG[key]) params.set(key, value);
+  for (const [key, value] of Object.entries(cfg)) {
+    if (value !== DEFAULT_CONFIG[key] || keys.includes(key)) params.set(key, value);
   }
-  if (regionId) params.set("r", regionId);
-  if (ftb !== null) params.set("ftb", ftb ? "1" : "0");
+  if (region) params.set("r", region);
+  if (relief !== null) params.set("ftb", relief ? "1" : "0");
   const qs = params.toString();
   return qs ? `?${qs}&v=${URL_SCHEMA_VERSION}` : "";
 }
@@ -162,9 +184,14 @@ function writeUrl() {
 /**
  * An absolute link to the current scenario. Built from the live config,
  * so it is current even while the debounced address-bar write is pending.
+ * Given a `{ cfg, regionId, ftb, reliefKeys }` scenario, the link to that
+ * one instead.
  */
-export function shareUrl() {
-  return `${location.origin}${location.pathname}${currentQuery()}`;
+export function shareUrl(scenario) {
+  const query = scenario
+    ? currentQuery(scenario.cfg, scenario.regionId, scenario.ftb, scenario.reliefKeys)
+    : currentQuery();
+  return `${location.origin}${location.pathname}${query}`;
 }
 
 // Per-field validation metadata derived from INPUT_DEFS (the single source
@@ -190,6 +217,13 @@ function isValidNumber(key, n) {
   return !range || (n >= range.min && n <= range.max);
 }
 
+/**
+ * Restore the config from the address bar. Returns `shared`, true when
+ * the link sets at least one value that differs from the defaults or turns
+ * the first-time-buyer relief off (a scenario someone sent), and `dropped`,
+ * the keys (config keys, or `ftb`) whose values the link carries but the
+ * calculator cannot use.
+ */
 export function readUrl() {
   const params = new URLSearchParams(location.search);
   // A link with no version marker predates the sentinel move, so its
@@ -212,6 +246,8 @@ export function readUrl() {
   const ftbRaw = params.get("ftb");
   ftb = ftbRaw === "1" ? true : ftbRaw === "0" ? false : null;
   const restored = {};
+  const dropped = [];
+  if (params.has("ftb") && ftb === null) dropped.push("ftb");
   for (const [key, def] of Object.entries(DEFAULT_CONFIG)) {
     if (!params.has(key)) continue;
     const raw = params.get(key);
@@ -224,18 +260,25 @@ export function readUrl() {
     // Drop values outside the field's known range or allowed set so a
     // hand-edited share URL can't push an invalid config into the API.
     if (typeof def === "boolean") {
-      restored[key] = raw === "true";
+      if (raw === "true" || raw === "false") restored[key] = raw === "true";
+      else dropped.push(key);
     } else if (typeof def === "number") {
       const n = Number(raw);
       if (!Number.isNaN(n) && isValidNumber(key, n)) restored[key] = n;
+      else dropped.push(key);
     } else {
       const allowed = ALLOWED_VALUES.get(key);
       if (!allowed || allowed.has(raw)) restored[key] = raw;
+      else dropped.push(key);
     }
   }
   if (Object.keys(restored).length > 0) {
     config = { ...DEFAULT_CONFIG, ...restored };
   }
+  carriedKeys = new Set(Object.keys(restored));
+  // Relief is on unless a link turns it off, so only "off" is a choice.
+  const shared = ftb === false || Object.entries(restored).some(([k, v]) => v !== DEFAULT_CONFIG[k]);
+  return { shared, dropped };
 }
 
 // --- result cache, keyed by the serialized config ---

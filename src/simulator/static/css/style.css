@@ -38,27 +38,40 @@ body {
   height: 100vh;
 }
 
-/* Error banner (device-lost pattern) */
+/* Error banner: a toast above every overlay, sheet and the tour (300-302). */
 #error-banner {
   display: none;
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(640px, calc(100vw - 24px));
+  z-index: 400;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 14px;
   background: var(--error);
   color: #fff;
-  padding: 10px 16px;
   font-size: 13px;
-  text-align: center;
-  z-index: 100;
+  line-height: 1.4;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
-#error-banner.visible { display: block; }
+#error-banner.visible { display: flex; }
+#error-message { flex: 1; }
 #error-banner button {
-  margin-left: 10px;
+  min-height: 36px;
+  padding: 0 12px;
   background: none;
   border: 1px solid rgba(255, 255, 255, 0.6);
-  border-radius: 4px;
+  border-radius: 6px;
   color: #fff;
   font-size: 12px;
-  padding: 2px 10px;
   cursor: pointer;
+  white-space: nowrap;
 }
+#error-banner button[hidden] { display: none; }
+#error-dismiss { border-color: transparent; font-size: 14px; min-width: 36px; }
 
 /* Title bar (ported) */
 #title-bar {
@@ -126,6 +139,19 @@ body {
   border-radius: 4px;
 }
 #preset-bar::-webkit-scrollbar-track { background: transparent; }
+/* Set by layout.js on the edges the bar continues past. */
+#preset-bar.fade-end {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+}
+#preset-bar.fade-start {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent);
+}
+#preset-bar.fade-start.fade-end {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+}
 .preset-label {
   font-size: 11px;
   color: var(--muted);
@@ -183,12 +209,65 @@ body {
   flex-direction: column;
   gap: 16px;
 }
+/* A readable line length on very wide screens. Width 100%, because auto
+   side margins would otherwise stop the cards from stretching. */
+#results > * { width: 100%; max-width: 1200px; margin-inline: auto; }
+/* Floats over the top of the results and stays in view when they scroll.
+   It is always in the layout (zero height, negative margin cancelling the
+   column gap), so showing it never moves the cards. The sticky offset
+   counts from inside #results' 20px top padding: the chip's centre sits
+   26px below the top of the visible results, its top edge 13px below. */
 #results-spinner {
-  display: none;
+  position: sticky;
+  top: 6px;
+  z-index: 5;
+  height: 0;
+  margin-bottom: -16px;
+  display: flex;
   justify-content: center;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--green-text);
+  pointer-events: none;
+}
+.busy-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 12px;
+  transform: translateY(-50%);
+  border-radius: 13px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 12px;
+  /* A ring of page colour keeps it clear of the card edges and chart text
+     it floats over. */
+  box-shadow: 0 0 0 6px var(--bg), 0 4px 12px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0s linear 0.15s;
+}
+/* Shown only when an update takes long enough to notice. */
+#results-spinner.visible .busy-chip {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.15s ease 0.4s, visibility 0s linear 0.4s;
+}
+.busy-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green-text);
+  animation: busyPulse 1s ease-in-out infinite;
+}
+@keyframes busyPulse { 50% { opacity: 0.3; } }
+
+/* Out-of-date numbers fade back while their update runs. */
+[data-result] :is(.chart, #verdict-line, #verdict-breakeven, #verdict-confidence, #stat-row, #tornado-summary, #data-table) {
+  transition: opacity 0.15s ease;
+}
+[data-result].stale :is(.chart, #verdict-line, #verdict-breakeven, #verdict-confidence, #stat-row, #tornado-summary, #data-table) {
+  opacity: 0.45;
+  transition: opacity 0.2s ease 0.4s;
 }
 
 /* Inputs (ported slider system) */
@@ -367,7 +446,33 @@ input[type="range"]::-moz-range-thumb {
   pointer-events: none;
 }
 
+/* A gentle note on values a link carried that the calculator cannot use. */
+#link-notice {
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--raised);
+  border-left: 3px solid var(--accent-text);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.text-btn {
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  color: var(--accent-text);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Printed only (see the @media print block at the end). */
+#print-summary { display: none; }
+
 /* Verdict hero */
+/* Focusable only from script (after the error banner closes), so no ring. */
+#verdict-hero:focus { outline: none; }
 #verdict-hero {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -410,6 +515,15 @@ input[type="range"]::-moz-range-thumb {
 .stat-value.rent { color: var(--rent); }
 #net-note { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
 #share-btn { margin-top: 14px; }
+#region-caveats { margin-top: 12px; font-size: 12px; line-height: 1.5; color: var(--muted); }
+/* A drawn marker, so a summary that wraps keeps its text clear of it. */
+#region-caveats summary { position: relative; padding-left: 16px; list-style: none; cursor: pointer; color: var(--text-2); }
+#region-caveats summary::-webkit-details-marker { display: none; }
+#region-caveats summary::before { content: "▸"; position: absolute; left: 0; font-size: 11px; color: var(--muted); }
+#region-caveats[open] summary::before { content: "▾"; }
+#region-caveats summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#region-notes { margin: 8px 0 0; padding-left: 18px; }
+#region-notes li { margin-bottom: 4px; }
 
 /* Chart cards */
 .card {
@@ -427,6 +541,7 @@ input[type="range"]::-moz-range-thumb {
 #tornado-summary { margin: 0 0 8px; font-size: 13px; line-height: 1.5; color: var(--text); }
 #tornado-summary:empty { display: none; }
 #tornado-chart { height: 420px; }
+#tornado-detail { margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-2); min-height: 1.5em; }
 #tornado-note { margin-top: 8px; font-size: 12px; line-height: 1.5; color: var(--muted); }
 #tornado-note summary { cursor: pointer; color: var(--text-2); }
 #tornado-note p { margin: 8px 0 0; }
@@ -457,14 +572,15 @@ input[type="range"]::-moz-range-thumb {
   border-bottom: 1px solid rgba(48, 54, 61, 0.4);
   color: var(--text-2);
 }
+/* A minus sign must not wrap away from its amount. */
+#data-table td { white-space: nowrap; }
+#data-table tr.horizon-row td { font-weight: 600; color: var(--text); border-top: 1px solid var(--border); }
+.numbers-note { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
 #csv-btn { margin-top: 10px; }
 
 /* Footer */
 footer { font-size: 12px; color: var(--muted); line-height: 1.7; padding: 8px 4px 24px; overflow-wrap: anywhere; }
 footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anywhere; }
-#region-notes { margin-top: 10px; }
-#region-notes ul { margin: 6px 0 0; padding-left: 18px; }
-#region-notes li { margin-bottom: 4px; }
 
 /* Overlays: welcome modal + guide (ported) */
 .overlay {
@@ -564,6 +680,7 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
 /* Welcome CTAs + guide link */
 .welcome-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   justify-content: center;
   padding-top: 20px;
@@ -621,6 +738,12 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   .overlay, .overlay.hidden { transition: none; }
   .guide-section-body, .guide-section.open .guide-section-body { transition: none; }
   .guide-chevron { transition: none; }
+  /* No fades, but the same 0.4 s wait, so a fast update still never flickers. */
+  .busy-chip,
+  [data-result] :is(.chart, #verdict-line, #verdict-breakeven, #verdict-confidence, #stat-row, #tornado-summary, #data-table) { transition: none; }
+  #results-spinner.visible .busy-chip { transition: opacity 0s linear 0.4s, visibility 0s linear 0.4s; }
+  [data-result].stale :is(.chart, #verdict-line, #verdict-breakeven, #verdict-confidence, #stat-row, #tornado-summary, #data-table) { transition: opacity 0s linear 0.4s; }
+  .busy-dot { animation: none; }
 }
 
 /* Mobile: the left panel becomes a bottom sheet */
@@ -705,6 +828,8 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   #verdict-line { font-size: 20px; }
   /* Bottom room so the pinned Edit button never covers the footer. */
   #results { padding: 14px 14px 88px; }
+  /* The page scrolls here, so the offset is from the top of the screen. */
+  #results-spinner { top: 26px; }
   /* One line: the name and (from layout.js) the Guide button. The author
      and repo links live in the footer. */
   #title-bar .badge,
@@ -754,4 +879,67 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   .slider-header { align-items: center; }
   .stat-label,
   .slider-hint { font-size: 12px; }
+  #error-banner button { min-height: 44px; }
+  /* Finger-sized. */
+  #region-caveats { margin-top: 4px; }
+  #region-caveats summary { padding-block: 13px; }
+  .text-btn { min-height: 44px; }
+  /* Dismiss on a row of its own, so the finger-sized button does not
+     stretch the last line of the text. */
+  #link-notice { padding-bottom: 0; }
+  #link-notice .text-btn { display: flex; align-items: center; }
+  #error-dismiss { min-width: 44px; }
+}
+
+/* Print: a light page with your numbers, the verdict and its caveats, and
+   the four chart cards. The cards restyle themselves through the colour
+   tokens; the dark Plotly charts are inverted, which keeps Buy orange and
+   Rent blue (a little darker) on white paper. */
+@media print {
+  :root {
+    --bg: #fff;
+    --surface: #fff;
+    --raised: #f6f8fa;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --text-2: #1f2328;
+    --muted: #59636e;
+    --buy: #bc4c00;
+    --rent: #0969da;
+    --green-text: #1a7f37;
+  }
+  body { overflow: visible; background: #fff; }
+  #app { height: auto; }
+  #main { display: block; overflow: visible; }
+  /* 1px each side, so the cards' side borders stay inside the page. */
+  #results { overflow: visible; padding: 0 1px; }
+  #preset-bar, #input-panel, #inputs-btn, #drawer-scrim, .overlay, .tour-dim, .tour-ring, .tour-tooltip,
+  #error-banner, #results-spinner, #share-btn, #csv-btn, #tornado-note, #tornado-detail, #numbers,
+  footer, #link-notice, .modebar-container, #title-bar .badge, #title-bar .author-link,
+  #title-bar .gh-pill, #guide-btn { display: none !important; }
+  #title-bar { background: none; border: none; padding: 0 0 8px; }
+  #print-summary { display: block; }
+  #print-summary dl {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 2px 16px;
+    margin: 8px 0;
+    font-size: 12px;
+    color: var(--text);
+  }
+  #print-summary dt { color: var(--muted); }
+  #print-summary dd { margin: 0; }
+  #print-summary .print-summary-heading { grid-column: 1 / -1; margin-top: 8px; font-weight: 600; color: var(--text); }
+  #print-stale { margin: 4px 0 8px; font-size: 12px; font-weight: 600; color: var(--text); }
+  #print-summary-link { margin: 0; font-size: 11px; overflow-wrap: anywhere; color: var(--muted); }
+  .card, #verdict-hero { break-inside: avoid; border-color: var(--border); }
+  .chart {
+    filter: invert(1) hue-rotate(180deg);
+    break-inside: avoid;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .stat-card { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  /* A result still updating prints at full strength. */
+  [data-result].stale * { opacity: 1 !important; }
 }

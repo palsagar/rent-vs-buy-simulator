@@ -10,6 +10,7 @@ import {
   renderTornadoChart,
   tornadoSummary,
 } from "./charts.js";
+import { trackEvent } from "./analytics.js";
 import { fmtMoney } from "./format.js";
 import { configHash, debounce, getConfig } from "./state.js";
 
@@ -29,6 +30,13 @@ let tossUp = false;
 // The config the verdict on screen was computed for. Until the next
 // simulate result lands (or when it fails), it differs from the live config.
 let verdictHash = null;
+// The payloads on screen, so the charts can be drawn again at a new size.
+// The tornado's is `tornado`, below. `lastSim` also keeps the scenario the
+// result was computed for (config, region, currency, relief setting), so
+// the CSV and the printout describe the numbers on screen even when a
+// later change failed to update them.
+let lastSim = null;
+let lastFan = null;
 
 // The tornado's layout depends on its width: the phone layout below
 // NARROW_CHART_PX, its margins, and the axis room that keeps its labels
@@ -108,18 +116,48 @@ function paintSheetVerdict() {
   if (line.textContent !== text) line.textContent = text;
 }
 
+// The headline is a live region: rewriting the same text would announce it again.
+function paintHeadline() {
+  const line = document.getElementById("verdict-line");
+  const html = headlineHtml(lastVerdict);
+  if (line.innerHTML !== html) line.innerHTML = html;
+}
+
+// The gap under which Buy and Rent are level: the server's tie rule.
+const TIE_TOLERANCE = 0.5;
+
+// A tie is about the horizon only: in earlier years one side can lead.
+// The line names that side, and says nobody pulls ahead only when the two
+// stay level throughout.
+function tieBreakevenText(data) {
+  const { horizonYears } = data.verdict;
+  const { year, netBuy, netRent } = data.series;
+  const diff = netBuy.map((v, i) => v - netRent[i]);
+  const name = (d) => (d > 0 ? "Buying" : "Renting");
+  const b = data.breakevenYear;
+  // A crossing in the final year is the tie itself.
+  if (b != null && Math.ceil(b) < horizonYears) {
+    const after = diff[year.findIndex((y) => y > b)];
+    return `${name(after)} is ahead from year ${Math.ceil(b)} until the two end level at year ${horizonYears}`;
+  }
+  const lead = diff.reduce((a, d) => (Math.abs(d) > Math.abs(a) ? d : a), 0);
+  if (Math.abs(lead) < TIE_TOLERANCE) return `Neither pulls ahead within ${horizonYears} years`;
+  return `${name(lead)} is ahead until the two end level at year ${horizonYears}`;
+}
+
 function renderVerdict(data) {
   lastVerdict = data.verdict;
   const { winner, horizonYears } = data.verdict;
   const name = winner === "buy" ? "Buying" : "Renting";
-  document.getElementById("verdict-line").innerHTML = headlineHtml(data.verdict);
+  paintHeadline();
 
   const breakevenEl = document.getElementById("verdict-breakeven");
   const b = data.breakevenYear;
-  // A tie ignores the breakeven: a gap that ends at the tie can still
-  // cross zero in the last month, which would name a winner.
-  if (winner === "tie") breakevenEl.textContent = `Neither pulls ahead within ${horizonYears} years`;
-  else if (b != null) breakevenEl.textContent = `${name} pulls ahead if you stay ≥ ${Math.ceil(b)} years`;
+  if (winner === "tie") breakevenEl.textContent = tieBreakevenText(data);
+  else if (b != null) {
+    const n = Math.ceil(b);
+    breakevenEl.textContent = `${name} pulls ahead if you stay ≥ ${n} ${n === 1 ? "year" : "years"}`;
+  }
   else breakevenEl.textContent = `No breakeven within ${horizonYears} years`;
   document.getElementById("verdict-confidence").textContent = "";
   paintSheetVerdict();
@@ -138,61 +176,93 @@ function renderStats(data) {
   document.getElementById("net-note").hidden = netBuy >= 0 && netRent >= 0;
 }
 
-const TABLE_COLUMNS = [
-  ["Year", "year", (v) => v.toFixed(0)],
-  ["Home value", "homeValue", fmtMoney],
-  ["Portfolio (rent)", "equityValue", fmtMoney],
-  ["Portfolio (buy)", "buyPortfolioValue", fmtMoney],
-  ["Mortgage balance", "mortgageBalance", fmtMoney],
-  ["Outflow (buy)", "outflowBuy", fmtMoney],
-  ["Outflow (rent)", "outflowRent", fmtMoney],
-  ["Net (buy)", "netBuy", fmtMoney],
-  ["Net (rent)", "netRent", fmtMoney],
+// One list for the on-screen table and the CSV. `csv` takes the currency code.
+const NUMBER_COLUMNS = [
+  { label: "Home value", csv: (c) => `Home value (${c})`, key: "homeValue" },
+  { label: "Portfolio (rent)", csv: (c) => `Portfolio rent side (${c})`, key: "equityValue" },
+  { label: "Portfolio (buy)", csv: (c) => `Portfolio buy side (${c})`, key: "buyPortfolioValue" },
+  { label: "Mortgage balance", csv: (c) => `Mortgage balance (${c})`, key: "mortgageBalance" },
+  { label: "Out of pocket (buy)", csv: (c) => `Out of pocket buy side (${c})`, key: "outflowBuy" },
+  { label: "Out of pocket (rent)", csv: (c) => `Out of pocket rent side (${c})`, key: "outflowRent" },
+  { label: "Everything put in", csv: (c) => `Everything put in (${c})`, key: "cashCommitted" },
+  { label: "Net (buy)", csv: (c) => `Net value buy side (${c})`, key: "netBuy" },
+  { label: "Net (rent)", csv: (c) => `Net value rent side (${c})`, key: "netRent" },
 ];
+
+// CSV headers name the currency as an ASCII code, which every spreadsheet
+// reads. By region, because two regions can share a symbol.
+const REGION_CURRENCY = { us: "USD", fr: "EUR", de: "EUR", nl: "EUR", uk: "GBP" };
 
 function renderTable(series) {
   // Yearly rows for readability; CSV export (below) keeps every month.
-  const rows = series.year
-    .map((year, i) => ({ year, i }))
-    .filter(({ i }) => i % 12 === 0)
-    .map(({ i }) => `<tr>${TABLE_COLUMNS.map(([, key, fmt]) => `<td>${fmt(series[key][i])}</td>`).join("")}</tr>`)
+  const yearly = series.year.map((_, i) => i).filter((i) => i % 12 === 0);
+  const rows = yearly
+    .map((i, n) => {
+      // The last row is the year you sell, the one the verdict reads.
+      const horizon = n === yearly.length - 1 ? ' class="horizon-row"' : "";
+      const cells = NUMBER_COLUMNS.map(({ key }) => `<td>${fmtMoney(series[key][i])}</td>`).join("");
+      return `<tr${horizon}><td>${series.year[i].toFixed(0)}</td>${cells}</tr>`;
+    })
     .join("");
+  const head = ["Year", ...NUMBER_COLUMNS.map((c) => c.label)].map((label) => `<th>${label}</th>`).join("");
   document.getElementById("data-table").innerHTML =
-    `<table><thead><tr>${TABLE_COLUMNS.map(([label]) => `<th>${label}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>`;
+    `<table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-export function downloadCsv(series) {
-  const cols = [
-    ["Year", series.year],
-    ["Home_Value", series.homeValue],
-    ["Equity_Value", series.equityValue],
-    ["Buy_Portfolio_Value", series.buyPortfolioValue],
-    ["Mortgage_Balance", series.mortgageBalance],
-    ["Outflow_Buy", series.outflowBuy],
-    ["Outflow_Rent", series.outflowRent],
-    ["Cash_Committed", series.cashCommitted],
-    ["Net_Buy", series.netBuy],
-    ["Net_Rent", series.netRent],
-  ];
+// Takes the scenario the table on screen was computed for, so the
+// headers and the file name always match the rows in the file.
+export function downloadCsv({ data, cfg, regionId, symbol }) {
+  const { series } = data;
+  // A link that matches no region keeps its symbol.
+  const code = REGION_CURRENCY[regionId] ?? symbol;
   const lines = [
-    cols.map(([name]) => name).join(","),
-    ...series.year.map((_, i) => cols.map(([, arr]) => arr[i]).join(",")),
+    ["Month", "Year", ...NUMBER_COLUMNS.map((c) => c.csv(code))].join(","),
+    ...series.year.map((year, i) =>
+      [Math.round(year * 12), year.toFixed(4), ...NUMBER_COLUMNS.map(({ key }) => series[key][i].toFixed(2))].join(","),
+    ),
   ];
-  const url = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
-  const link = Object.assign(document.createElement("a"), { href: url, download: "simulation_results.csv" });
+  // The byte-order mark makes Excel read the file as UTF-8.
+  const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const name = `rent-or-buy-${regionId ?? "custom"}-${cfg.horizonYears}-years-${cfg.propertyPrice}.csv`;
+  const link = Object.assign(document.createElement("a"), { href: url, download: name });
   link.click();
   URL.revokeObjectURL(url);
 }
 
-export function renderSimulate(data, cfg) {
+// `scenario` is what the request was made for, `{ cfg, regionId, symbol,
+// ftb, reliefKeys }`, captured when it was sent: by the time the answer
+// lands the page can already be on another region.
+export function renderSimulate(data, scenario) {
+  const { cfg } = scenario;
   verdictHash = configHash(cfg);
+  lastSim = { data, ...scenario };
+  const shown = lastSim;
   renderVerdict(data);
   renderStats(data);
   renderDecisionChart(document.getElementById("decision-chart"), data.series, data.breakevenYear);
   renderOutflowChart(document.getElementById("outflow-chart"), data.series);
   renderBreakdownChart(document.getElementById("breakdown-chart"), data, cfg);
   renderTable(data.series);
-  document.getElementById("csv-btn").onclick = () => downloadCsv(data.series);
+  document.getElementById("csv-btn").onclick = (e) => {
+    downloadCsv(shown);
+    if (e.isTrusted) trackEvent("csv-downloaded");
+  };
+}
+
+/**
+ * The scenario the results on screen were computed for, as
+ * `{ cfg, regionId, ftb, reliefKeys }`, or null before the first result.
+ */
+export function shownScenario() {
+  return (
+    lastSim && {
+      cfg: lastSim.cfg,
+      regionId: lastSim.regionId,
+      ftb: lastSim.ftb,
+      reliefKeys: lastSim.reliefKeys,
+    }
+  );
 }
 
 // Whether the verdict on screen belongs to the live config, so Share
@@ -224,11 +294,12 @@ export function forgetTossUp() {
 export function clearTossUp() {
   tossUp = false;
   clearTornadoSummary();
-  if (lastVerdict) document.getElementById("verdict-line").innerHTML = headlineHtml(lastVerdict);
+  if (lastVerdict) paintHeadline();
   paintSheetVerdict();
 }
 
 export function renderMonteCarlo(mc, winner) {
+  lastFan = mc;
   // A tie has no winner whose share to show, so it shows buying's.
   const pct = winner === "rent" ? 100 - mc.buyWinsPct : mc.buyWinsPct;
   const name = winner === "rent" ? "Renting" : "Buying";
@@ -236,10 +307,12 @@ export function renderMonteCarlo(mc, winner) {
   // printed beside it (60.4% prints as 60% and is a toss-up).
   const shownPct = Math.round(pct);
   tossUp = shownPct >= TOSS_UP_MIN_PCT && shownPct <= TOSS_UP_MAX_PCT;
-  if (lastVerdict) document.getElementById("verdict-line").innerHTML = headlineHtml(lastVerdict);
+  if (lastVerdict) paintHeadline();
   paintSheetVerdict();
-  document.getElementById("verdict-confidence").textContent =
-    ` · ${name} wins in ${shownPct}% of simulated futures`;
+  // A live region too, written only when its text changes.
+  const confidence = document.getElementById("verdict-confidence");
+  const confidenceText = ` · ${name} wins in ${shownPct}% of simulated futures`;
+  if (confidence.textContent !== confidenceText) confidence.textContent = confidenceText;
   renderFanChart(document.getElementById("fan-chart"), mc);
   document.getElementById("tornado-summary").textContent = tornadoSummary(mc.tornado, tossUp);
   tornado = mc.tornado;
@@ -248,4 +321,17 @@ export function renderMonteCarlo(mc, winner) {
   tornadoHash = verdictHash;
   drawTornado();
   watchTornadoWidth();
+}
+
+// Redraw every chart from the payloads on screen, at the charts' current
+// size; print.js uses it to lay them out at paper width and back.
+export function redrawCharts() {
+  if (lastSim) {
+    const { data, cfg } = lastSim;
+    renderDecisionChart(document.getElementById("decision-chart"), data.series, data.breakevenYear);
+    renderOutflowChart(document.getElementById("outflow-chart"), data.series);
+    renderBreakdownChart(document.getElementById("breakdown-chart"), data, cfg);
+  }
+  if (lastFan) renderFanChart(document.getElementById("fan-chart"), lastFan);
+  if (tornado) drawTornado();
 }

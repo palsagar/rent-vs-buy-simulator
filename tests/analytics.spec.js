@@ -139,6 +139,57 @@ test('restore-quiet: tour restore uses applyPreset, not synthetic clicks', async
   expect(names).not.toContain('ftb-toggled');
 });
 
+/** Stub umami, load past the welcome, and wait for the first full result. */
+async function loadTracked(page) {
+  await stubUmami(page);
+  await page.addInitScript(() => {
+    try { localStorage.setItem('rvb.tour.v1', 'done'); } catch (e) {}
+  });
+  await page.goto('/');
+  await page.waitForFunction(
+    () => document.getElementById('verdict-confidence').textContent.length > 0,
+    null,
+    { timeout: 20_000 },
+  );
+}
+
+test('csv-downloaded fires when the CSV is downloaded', async ({ page }) => {
+  await loadTracked(page);
+  await page.locator('#numbers summary').click();
+  const download = page.waitForEvent('download');
+  await page.locator('#csv-btn').click();
+  await download;
+  await expect.poll(() => eventNames(page)).toContain('csv-downloaded');
+});
+
+test('page-printed fires when the page is printed', async ({ page }) => {
+  await loadTracked(page);
+  // Twice, as Chromium does for a print-to-PDF inside a print preview.
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('beforeprint'));
+    window.dispatchEvent(new Event('beforeprint'));
+  });
+  await expect.poll(() => eventNames(page)).toContain('page-printed');
+  expect((await eventNames(page)).filter((n) => n === 'page-printed')).toHaveLength(1);
+});
+
+test('error-retried fires when Try again is clicked', async ({ page }) => {
+  await loadTracked(page);
+  await page.route('**/api/simulate', (route) =>
+    route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ detail: 'boom' }) }),
+  );
+  await page.evaluate(() => {
+    const price = document.querySelector('#core-inputs input[type=range]');
+    price.value = 1295000;
+    price.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect(page.locator('#error-retry')).toBeVisible();
+  await page.unroute('**/api/simulate');
+  await page.locator('#error-retry').click();
+  await expect.poll(() => page.evaluate(() => window.__umamiCalls))
+    .toContainEqual(['error-retried', { source: 'simulate' }]);
+});
+
 // ── Real tracker ─────────────────────────────────────────────────────────
 // The second webServer in playwright.config.js injects the tag for this
 // fake Umami origin. Each test answers the origin's requests itself.

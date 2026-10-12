@@ -503,7 +503,8 @@ export class Tour {
             x = Math.min(Math.max(l + (rt - l - tw) / 2, M), W - tw - M);
             y = Math.min(t + 16, H - th - M);
         } else if (side === 'bottom') {
-            x = Math.min(Math.max(l, M), W - tw - M); y = b + M;
+            // Kept on screen even when the room below is a little short.
+            x = Math.min(Math.max(l, M), W - tw - M); y = Math.min(b + M, H - th - M);
         } else if (side === 'top') {
             x = Math.min(Math.max(l, M), W - tw - M); y = Math.max(t - th - M, M);
         } else if (side === 'right') {
