@@ -10,8 +10,9 @@ import {
   renderTornadoChart,
   tornadoSummary,
 } from "./charts.js";
-import { fmtMoney } from "./format.js";
-import { configHash, debounce, getConfig } from "./state.js";
+import { trackEvent } from "./analytics.js";
+import { fmtMoney, getCurrencySymbol } from "./format.js";
+import { configHash, debounce, getConfig, getRegionId } from "./state.js";
 
 // A winner that wins in 40-60% of simulated futures (the confidence, as
 // displayed) is a toss-up, so the headline stops naming it (ADR-0010).
@@ -138,48 +139,54 @@ function renderStats(data) {
   document.getElementById("net-note").hidden = netBuy >= 0 && netRent >= 0;
 }
 
-const TABLE_COLUMNS = [
-  ["Year", "year", (v) => v.toFixed(0)],
-  ["Home value", "homeValue", fmtMoney],
-  ["Portfolio (rent)", "equityValue", fmtMoney],
-  ["Portfolio (buy)", "buyPortfolioValue", fmtMoney],
-  ["Mortgage balance", "mortgageBalance", fmtMoney],
-  ["Outflow (buy)", "outflowBuy", fmtMoney],
-  ["Outflow (rent)", "outflowRent", fmtMoney],
-  ["Net (buy)", "netBuy", fmtMoney],
-  ["Net (rent)", "netRent", fmtMoney],
+// One list for the on-screen table and the CSV. `csv` takes the currency code.
+const NUMBER_COLUMNS = [
+  { label: "Home value", csv: (c) => `Home value (${c})`, key: "homeValue" },
+  { label: "Portfolio (rent)", csv: (c) => `Portfolio rent side (${c})`, key: "equityValue" },
+  { label: "Portfolio (buy)", csv: (c) => `Portfolio buy side (${c})`, key: "buyPortfolioValue" },
+  { label: "Mortgage balance", csv: (c) => `Mortgage balance (${c})`, key: "mortgageBalance" },
+  { label: "Out of pocket (buy)", csv: (c) => `Out of pocket buy side (${c})`, key: "outflowBuy" },
+  { label: "Out of pocket (rent)", csv: (c) => `Out of pocket rent side (${c})`, key: "outflowRent" },
+  { label: "Everything put in", csv: (c) => `Everything put in (${c})`, key: "cashCommitted" },
+  { label: "Net (buy)", csv: (c) => `Net value buy side (${c})`, key: "netBuy" },
+  { label: "Net (rent)", csv: (c) => `Net value rent side (${c})`, key: "netRent" },
 ];
+
+// CSV headers name the currency as an ASCII code, which every spreadsheet reads.
+const CURRENCY_CODES = { $: "USD", "€": "EUR", "£": "GBP" };
 
 function renderTable(series) {
   // Yearly rows for readability; CSV export (below) keeps every month.
-  const rows = series.year
-    .map((year, i) => ({ year, i }))
-    .filter(({ i }) => i % 12 === 0)
-    .map(({ i }) => `<tr>${TABLE_COLUMNS.map(([, key, fmt]) => `<td>${fmt(series[key][i])}</td>`).join("")}</tr>`)
+  const yearly = series.year.map((_, i) => i).filter((i) => i % 12 === 0);
+  const rows = yearly
+    .map((i, n) => {
+      // The last row is the year you sell, the one the verdict reads.
+      const horizon = n === yearly.length - 1 ? ' class="horizon-row"' : "";
+      const cells = NUMBER_COLUMNS.map(({ key }) => `<td>${fmtMoney(series[key][i])}</td>`).join("");
+      return `<tr${horizon}><td>${series.year[i].toFixed(0)}</td>${cells}</tr>`;
+    })
     .join("");
+  const head = ["Year", ...NUMBER_COLUMNS.map((c) => c.label)].map((label) => `<th>${label}</th>`).join("");
   document.getElementById("data-table").innerHTML =
-    `<table><thead><tr>${TABLE_COLUMNS.map(([label]) => `<th>${label}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table>`;
+    `<table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-export function downloadCsv(series) {
-  const cols = [
-    ["Year", series.year],
-    ["Home_Value", series.homeValue],
-    ["Equity_Value", series.equityValue],
-    ["Buy_Portfolio_Value", series.buyPortfolioValue],
-    ["Mortgage_Balance", series.mortgageBalance],
-    ["Outflow_Buy", series.outflowBuy],
-    ["Outflow_Rent", series.outflowRent],
-    ["Cash_Committed", series.cashCommitted],
-    ["Net_Buy", series.netBuy],
-    ["Net_Rent", series.netRent],
-  ];
+// `cfg` is the config the table on screen was computed for, so the file
+// name always matches the rows in the file.
+export function downloadCsv(series, cfg) {
+  const symbol = getCurrencySymbol();
+  const code = CURRENCY_CODES[symbol] ?? symbol;
   const lines = [
-    cols.map(([name]) => name).join(","),
-    ...series.year.map((_, i) => cols.map(([, arr]) => arr[i]).join(",")),
+    ["Month", "Year", ...NUMBER_COLUMNS.map((c) => c.csv(code))].join(","),
+    ...series.year.map((year, i) =>
+      [Math.round(year * 12), year.toFixed(4), ...NUMBER_COLUMNS.map(({ key }) => series[key][i].toFixed(2))].join(","),
+    ),
   ];
-  const url = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
-  const link = Object.assign(document.createElement("a"), { href: url, download: "simulation_results.csv" });
+  // The byte-order mark makes Excel read the file as UTF-8.
+  const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const name = `rent-or-buy-${getRegionId() ?? "custom"}-${cfg.horizonYears}-years-${cfg.propertyPrice}.csv`;
+  const link = Object.assign(document.createElement("a"), { href: url, download: name });
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -192,7 +199,10 @@ export function renderSimulate(data, cfg) {
   renderOutflowChart(document.getElementById("outflow-chart"), data.series);
   renderBreakdownChart(document.getElementById("breakdown-chart"), data, cfg);
   renderTable(data.series);
-  document.getElementById("csv-btn").onclick = () => downloadCsv(data.series);
+  document.getElementById("csv-btn").onclick = (e) => {
+    downloadCsv(data.series, cfg);
+    if (e.isTrusted) trackEvent("csv-downloaded");
+  };
 }
 
 // Whether the verdict on screen belongs to the live config, so Share

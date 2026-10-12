@@ -518,6 +518,10 @@ input[type="range"]::-moz-range-thumb {
   border-bottom: 1px solid rgba(48, 54, 61, 0.4);
   color: var(--text-2);
 }
+/* A minus sign must not wrap away from its amount. */
+#data-table td { white-space: nowrap; }
+#data-table tr.horizon-row td { font-weight: 600; color: var(--text); border-top: 1px solid var(--border); }
+.numbers-note { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
 #csv-btn { margin-top: 10px; }
 
 /* Footer */

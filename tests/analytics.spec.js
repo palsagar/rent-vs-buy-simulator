@@ -153,6 +153,15 @@ async function loadTracked(page) {
   );
 }
 
+test('csv-downloaded fires when the CSV is downloaded', async ({ page }) => {
+  await loadTracked(page);
+  await page.locator('#numbers summary').click();
+  const download = page.waitForEvent('download');
+  await page.locator('#csv-btn').click();
+  await download;
+  await expect.poll(() => eventNames(page)).toContain('csv-downloaded');
+});
+
 test('error-retried fires when Try again is clicked', async ({ page }) => {
   await loadTracked(page);
   await page.route('**/api/simulate', (route) =>
