@@ -522,6 +522,33 @@ test.describe('first-time-buyer relief in a shared link', () => {
     });
   });
 
+  // Relief values and another value edited: the link carries them all,
+  // and the relief stays on with the edits kept.
+  // UK has two relief values; both are edited.
+  for (const [region, edits] of [
+    ['FR', { closingCostBuyerPct: 8 }],
+    ['NL', { closingCostBuyerPct: 2.5 }],
+    ['UK', { closingCostBuyerPct: 1, closingCostBuyerAmount: 4000 }],
+  ]) {
+    test(`${region}: a link with edited relief values and another edit keeps them all`, async ({ page }) => {
+      await boot(page);
+      await page.locator('#region-pills .preset-btn', { hasText: region }).click();
+      await expect(ftbPill(page)).toHaveClass(/active/);
+      await openGroup(page, 'transaction');
+      for (const [key, value] of Object.entries(edits)) await typeAdvanced(page, key, String(value));
+      await openGroup(page, 'yearly');
+      await typeAdvanced(page, 'annualHomeInsurance', '300');
+
+      const link = await shareLink(page);
+      expect(ftbParam(link)).toBe('1');
+      await boot(page, link);
+      const cfg = await page.evaluate(async () => (await import('./js/state.js')).getConfig());
+      for (const [key, value] of Object.entries(edits)) expect(cfg[key]).toBe(value);
+      expect(cfg.annualHomeInsurance).toBe(300);
+      await expect(ftbPill(page)).toHaveClass(/active/);
+    });
+  }
+
   test('a hand-built link that states the relief without its numbers gets the relief values', async ({ page }) => {
     await boot(page, '/?r=uk&ftb=1&v=2');
     await expect(ftbPill(page)).toHaveClass(/active/);

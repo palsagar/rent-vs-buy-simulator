@@ -97,6 +97,16 @@ export function urlOmitted(key) {
   return omittedKeys.has(key);
 }
 
+// The config keys the link the page opened with set, with a usable value.
+// A key left out holds the default: the link either matched it or, when
+// hand-built, never set it. Set by readUrl.
+let carriedKeys = new Set();
+
+/** Whether the link the page opened with set `key`. */
+export function linkCarried(key) {
+  return carriedKeys.has(key);
+}
+
 // Which region the user picked is state in its own right, NOT something
 // recoverable from the numbers. Reverse-matching a config against every
 // bundle's taxPrimitives fails the moment any one of them is edited --
@@ -248,6 +258,7 @@ export function readUrl() {
   if (Object.keys(restored).length > 0) {
     config = { ...DEFAULT_CONFIG, ...restored };
   }
+  carriedKeys = new Set(Object.keys(restored));
   // Relief is on unless a link turns it off, so only "off" is a choice.
   const shared = ftb === false || Object.entries(restored).some(([k, v]) => v !== DEFAULT_CONFIG[k]);
   return { shared, dropped };

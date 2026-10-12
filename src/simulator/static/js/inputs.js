@@ -17,6 +17,7 @@ import {
   setFtb,
   setParam,
   setRegionId,
+  linkCarried,
   urlOmitted,
 } from "./state.js";
 
@@ -383,8 +384,10 @@ function rememberFtb() {
  * snapshot. `stated` is the setting it carried, or null/undefined for a
  * link written before `ftb` existed: the setting is then inferred from
  * the numbers, which fails once a relief value has been edited (#51).
+ * `holdsRelief` says whether the config's relief keys hold the relief,
+ * edited or not, when the setting is stated.
  */
-function adoptFtb(stated) {
+function adoptFtb(stated, holdsRelief) {
   const matches = ftbMatchesConfig(selectedRegion);
   if (stated == null) {
     // Only derive the flag from a region that actually enacts relief.
@@ -400,30 +403,24 @@ function adoptFtb(stated) {
     // for the next region with relief.
     ftbOn = hasRelief(selectedRegion) ? stated : true;
     // A stated setting was written after syncFtbToPrice ran, so the keys
-    // hold what the relief at this price says, edits included. A
-    // hand-built link can state the relief without its numbers, though;
-    // syncFtbToPrice then applies it, so the pill never shows the relief
-    // on beside numbers that are not the relief's.
-    ftbInEffect =
-      ftbOn && reliefApplies(selectedRegion) && mayHoldRelief(selectedRegion);
+    // hold what the relief at this price says, edits included. When they
+    // do not (a hand-built link that states the relief without its
+    // numbers), syncFtbToPrice applies it, so the pill never shows the
+    // relief on beside numbers that are not the relief's.
+    ftbInEffect = ftbOn && reliefApplies(selectedRegion) && holdsRelief;
   }
   rememberFtb();
 }
 
 /**
- * Whether the config can be this region's relief, edited or not: one
- * relief key still holds its relief value, or every other key of the
- * region's bundle holds the bundle's value.
+ * Whether the opening link set any of the region's relief values. The app
+ * writes every value that differs from the default, and every relief
+ * value does, so a link it wrote with the relief in effect sets them,
+ * edited or not (unless each was edited back to exactly the default). A
+ * hand-built link (`?r=uk&ftb=1`) sets none, and gets the relief values.
  */
-function mayHoldRelief(region) {
-  const overrides = region.firstTimeBuyerOverrides;
-  const cfg = getConfig();
-  return (
-    Object.keys(overrides).some((k) => cfg[k] === overrides[k]) ||
-    Object.entries(region.taxPrimitives).every(
-      ([k, v]) => k in overrides || cfg[k] === v,
-    )
-  );
+function linkHoldsRelief(region) {
+  return Object.keys(region?.firstTimeBuyerOverrides ?? {}).some(linkCarried);
 }
 
 /**
@@ -649,7 +646,7 @@ function buildPresetPills(regions) {
   // id on first load and stops depending on the numbers matching. An `r`
   // that names no region is dropped, so a shared link never repeats it.
   setRegionId(selectedRegion?.id ?? null);
-  adoptFtb(getFtb());
+  adoptFtb(getFtb(), linkHoldsRelief(selectedRegion));
   if (selectedRegion) setCurrency(selectedRegion.currencySymbol);
   selectRegionPill(regionPills, regions, selectedRegion);
   // A link shared before relief was priced can carry the FTB buyer costs
@@ -707,10 +704,11 @@ export function registerWidget(widget) {
 /**
  * Capture the settings a tour may disturb, for restore on exit.
  * Includes `ftbOn` (user intent), not just the config, so restoring can
- * re-enable a relief that was priced out during the tour.
+ * re-enable a relief that was priced out during the tour, and
+ * `ftbInEffect`, so an edited relief value is restored as edited.
  */
 export function snapshotSettings() {
-  return { config: getConfig(), regionId: getRegionId(), ftbOn };
+  return { config: getConfig(), regionId: getRegionId(), ftbOn, ftbInEffect };
 }
 
 /**
@@ -726,7 +724,7 @@ export function restoreSettings(snapshot) {
   // Restores every config key, including any FTB override values.
   applyPreset(snapshot.config);
   setRegionId(snapshot.regionId);
-  adoptFtb(snapshot.ftbOn);
+  adoptFtb(snapshot.ftbOn, snapshot.ftbInEffect);
   selectRegionPill(document.getElementById("region-pills"), regionsList, region);
   // Outlook pills have no authoritative match after restore; clear the chrome
   // rather than leave a stale highlight (the app already tolerates this
