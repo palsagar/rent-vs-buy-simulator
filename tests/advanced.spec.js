@@ -521,6 +521,21 @@ test.describe('first-time-buyer relief in a shared link', () => {
     });
   });
 
+  test('a hand-built link that states the relief without its numbers gets the relief values', async ({ page }) => {
+    await boot(page, '/?r=uk&ftb=1&v=2');
+    await expect(ftbPill(page)).toHaveClass(/active/);
+    const cfg = await page.evaluate(async () => (await import('./js/state.js')).getConfig());
+    expect([cfg.closingCostBuyerPct, cfg.closingCostBuyerAmount]).toEqual([0, 3100]);
+    await expect(summaries(page).first()).toHaveText('Buy 0% + £3,100 · Sell 6%');
+  });
+
+  test('a relief stated off for a region without one does not carry over to the next region', async ({ page }) => {
+    await boot(page, '/?r=us&ftb=0&v=2');
+    await uk(page);
+    await expect(ftbPill(page)).toHaveClass(/active/);
+    await expect(summaries(page).first()).toHaveText('Buy 0% + £3,100 · Sell 1.75%');
+  });
+
   test('regions without a relief carry no setting', async ({ page }) => {
     await boot(page);
     await uk(page);

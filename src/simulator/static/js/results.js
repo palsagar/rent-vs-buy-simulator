@@ -36,9 +36,15 @@ let verdictHash = null;
 // resized window, a turned phone) draws it again from the payload on
 // screen (#57).
 let tornado = null; // the payload on screen
+let tornadoHash = null; // the config it was computed for
 let tornadoWidth = null; // the width it was laid out for; null until drawn
 let watchingTornado = false;
 const TORNADO_RESIZE_MS = 100;
+
+// Until the next Monte Carlo result lands, the payload on screen can belong
+// to an older config. Drawing it again then would show its numbers in the
+// new region's currency; the pending result draws at the new width anyway.
+const tornadoIsCurrent = () => tornadoHash === configHash(getConfig());
 
 function drawTornado() {
   const el = document.getElementById("tornado-chart");
@@ -56,11 +62,15 @@ function drawTornado() {
 const redrawTornado = debounce(() => {
   const el = document.getElementById("tornado-chart");
   if (!tornado || el.clientWidth === 0 || el.clientWidth === tornadoWidth) return;
-  drawTornado();
+  if (!tornadoIsCurrent()) return;
+  tornadoWidth = el.clientWidth;
   // A redraw keeps the width Plotly drew at, and Plotly fits it to the
   // chart only on a window resize, which a chart shown again after being
-  // hidden never gets.
-  Plotly.Plots.resize(el);
+  // hidden never gets. So fit the width first, then draw: the chart's own
+  // layout is the last draw.
+  Plotly.Plots.resize(el).then(() => {
+    if (tornadoIsCurrent()) drawTornado();
+  });
 }, TORNADO_RESIZE_MS);
 
 function watchTornadoWidth() {
@@ -227,6 +237,9 @@ export function renderMonteCarlo(mc, winner) {
   renderFanChart(document.getElementById("fan-chart"), mc);
   document.getElementById("tornado-summary").textContent = tornadoSummary(mc.tornado, tossUp);
   tornado = mc.tornado;
+  // main.js renders a Monte Carlo result only for the config of the
+  // verdict on screen.
+  tornadoHash = verdictHash;
   drawTornado();
   watchTornadoWidth();
 }

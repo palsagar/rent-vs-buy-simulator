@@ -424,17 +424,50 @@ test.describe('after a width change', () => {
     await load(page, ISSUE_QUERY);
     expect((await tornadoLayout(page)).range).not.toEqual(fresh.range);
 
+    // Record every finished draw from before the resize on.
+    await page.evaluate(() => {
+      window.__draws = [];
+      const el = document.getElementById('tornado-chart');
+      el.on('plotly_afterplot', () =>
+        window.__draws.push({ range: el.layout.xaxis.range, drawnWidth: el._fullLayout.width }),
+      );
+    });
     await page.setViewportSize({ width: 360, height: 800 });
     await expect.poll(() => tornadoLayout(page)).toEqual(fresh);
+    // Settled once a draw with the fresh layout has finished.
+    await expect
+      .poll(() => page.evaluate(() => window.__draws.at(-1)))
+      .toEqual({ range: fresh.range, drawnWidth: fresh.drawnWidth });
     expect((await labelsOutside(page)).outside).toEqual([]);
 
     // Drawing does not change the width, so it does not draw again.
-    await page.evaluate(() => {
-      window.__plots = 0;
-      document.getElementById('tornado-chart').on('plotly_afterplot', () => window.__plots++);
-    });
+    await page.evaluate(() => { window.__draws = []; });
     await page.waitForTimeout(500);
-    expect(await page.evaluate(() => window.__plots)).toBe(0);
+    expect(await page.evaluate(() => window.__draws.length)).toBe(0);
+  });
+
+  test('a resize while a new result is pending does not draw the old one in the new currency', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await load(page);
+    await page.locator('#region-pills .preset-btn', { hasText: 'UK' }).click();
+    await expect(page.locator('#tornado-chart')).toContainText('£');
+    // The next Monte Carlo result never arrives.
+    await page.route('**/api/monte-carlo', () => {});
+    await page.locator('#region-pills .preset-btn', { hasText: 'FR' }).click();
+    await expect(page.locator('#verdict-line')).toContainText('€');
+
+    await page.setViewportSize(PHONE);
+    await page.waitForTimeout(500);
+    // Not laid out again: the pending result is drawn at the new width when
+    // it lands. (The axis ticks are Plotly's own and follow its resize.)
+    expect((await tornadoLayout(page)).narrow).toBe(false);
+    const labels = await page.evaluate(() =>
+      [...document.querySelectorAll('#tornado-chart text.bartext, #tornado-chart .annotation')]
+        .map((t) => t.textContent)
+        .join(' '),
+    );
+    expect(labels).toContain('£');
+    expect(labels).not.toContain('€');
   });
 
   test('a desktop chart takes the phone layout on a phone, and back', async ({ page }) => {

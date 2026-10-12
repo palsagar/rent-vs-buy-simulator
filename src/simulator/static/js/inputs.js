@@ -370,12 +370,34 @@ function adoptFtb(stated) {
     // carries above the ceiling.
     ftbInEffect = matches;
   } else {
-    ftbOn = stated;
+    // As above: a stated "off" from US or DE must not latch the flag off
+    // for the next region with relief.
+    ftbOn = hasRelief(selectedRegion) ? stated : true;
     // A stated setting was written after syncFtbToPrice ran, so the keys
-    // hold what the relief at this price says, edits included.
-    ftbInEffect = stated && reliefApplies(selectedRegion);
+    // hold what the relief at this price says, edits included. A
+    // hand-built link can state the relief without its numbers, though;
+    // syncFtbToPrice then applies it, so the pill never shows the relief
+    // on beside numbers that are not the relief's.
+    ftbInEffect =
+      ftbOn && reliefApplies(selectedRegion) && mayHoldRelief(selectedRegion);
   }
   rememberFtb();
+}
+
+/**
+ * Whether the config can be this region's relief, edited or not: one
+ * relief key still holds its relief value, or every other key of the
+ * region's bundle holds the bundle's value.
+ */
+function mayHoldRelief(region) {
+  const overrides = region.firstTimeBuyerOverrides;
+  const cfg = getConfig();
+  return (
+    Object.keys(overrides).some((k) => cfg[k] === overrides[k]) ||
+    Object.entries(region.taxPrimitives).every(
+      ([k, v]) => k in overrides || cfg[k] === v,
+    )
+  );
 }
 
 /**
