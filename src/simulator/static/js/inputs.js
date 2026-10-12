@@ -456,15 +456,22 @@ function deriveSelectedRegion(regions) {
 
 /**
  * Give each key the opening link was too old to carry the selected
- * region's value, rather than the US default the config started from.
+ * region's value, rather than the US default the config started from, or,
+ * when the link matches no region, the value it had before the key existed.
  */
 function fillKeysTheLinkPredates() {
-  const primitives = selectedRegion?.taxPrimitives ?? {};
   const cfg = getConfig();
-  const keys = KEYS_ADDED_IN_V3.filter(
-    (k) => urlOmitted(k) && k in primitives && cfg[k] !== primitives[k],
-  );
-  if (keys.length > 0) applyPreset(Object.fromEntries(keys.map((k) => [k, primitives[k]])));
+  const fill = {};
+  for (const [k, before] of Object.entries(KEYS_ADDED_IN_V3)) {
+    if (!urlOmitted(k)) continue;
+    // A link that matches no region has no bundle to ask. It was written
+    // before the key existed, so it gets the value that changes nothing:
+    // the scenario its sender saw. (The offline stand-in region has no
+    // values at all and keeps the default.)
+    const value = selectedRegion ? selectedRegion.taxPrimitives[k] : before;
+    if (value !== undefined && cfg[k] !== value) fill[k] = value;
+  }
+  if (Object.keys(fill).length > 0) applyPreset(fill);
 }
 
 /** Move ONLY the override keys. Never re-applies the whole bundle. */

@@ -79,11 +79,14 @@ export function applyPreset(partial) {
 // v3 added mortgageInsuranceRatePct. A link carries only the values that
 // differ from DEFAULT_CONFIG, so a v3 link without the key means the US
 // default, but an older link without it says nothing about it: the value
-// must come from the link's region instead (inputs.js).
+// must come from the link's region instead, or, if the link matches no
+// region, be the value that changes nothing (inputs.js).
 const URL_SCHEMA_VERSION = "3";
 
-// Keys a link older than v3 cannot carry.
-export const KEYS_ADDED_IN_V3 = ["mortgageInsuranceRatePct"];
+// Keys a link older than v3 cannot carry, each with the value that leaves
+// the model as it was before the key existed (inputs.js uses it when the
+// link matches no region).
+export const KEYS_ADDED_IN_V3 = { mortgageInsuranceRatePct: 0 };
 
 // The KEYS_ADDED_IN_V3 that the link the page opened with was too old to
 // carry. Set by readUrl.
@@ -195,8 +198,12 @@ export function readUrl() {
   // this gate the migration would rewrite every European region link and
   // silently make that region's levy deductible.
   const isLegacy = !params.has("v");
-  const predatesV3 = isLegacy || Number(params.get("v")) < 3;
-  omittedKeys = new Set(predatesV3 ? KEYS_ADDED_IN_V3.filter((k) => !params.has(k)) : []);
+  // A missing or unreadable version (v=abc) proves nothing, so the link
+  // counts as older than v3: !(NaN >= 3) is true.
+  const predatesV3 = !(Number(params.get("v")) >= 3);
+  omittedKeys = new Set(
+    predatesV3 ? Object.keys(KEYS_ADDED_IN_V3).filter((k) => !params.has(k)) : [],
+  );
   // Validated against the real bundle list by inputs.js, which owns the
   // region data; an unknown id is dropped there.
   regionId = params.get("r");

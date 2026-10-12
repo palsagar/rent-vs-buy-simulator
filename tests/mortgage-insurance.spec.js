@@ -59,6 +59,19 @@ test('an old French link with no region still opens in euros', async ({ page }) 
   expect(await stored(page)).toBe(0);
 });
 
+test('an old link that matches no region gets no mortgage insurance', async ({ page }) => {
+  // No bundle to ask: the link predates the field, so it gets the value
+  // that changes nothing, which is the scenario its sender saw.
+  await boot(page, '/?closingCostSellerPct=5&downPaymentPct=10&v=2');
+  expect(await stored(page)).toBe(0);
+  await expect(yearly(page).locator('.adv-group-values')).toHaveText('≈ $12,200 in year 1');
+});
+
+test('a version that is not a number counts as older than v3', async ({ page }) => {
+  await boot(page, `/?${FR_VALUES}&r=fr&v=abc`);
+  expect(await stored(page)).toBe(0);
+});
+
 test('a v3 link without the rate means the US default it stands for', async ({ page }) => {
   // In France the 0.5% was chosen on purpose, so it is marked as changed.
   await boot(page, `/?${FR_VALUES}&downPaymentPct=10&r=fr&v=3`);
