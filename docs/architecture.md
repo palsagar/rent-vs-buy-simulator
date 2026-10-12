@@ -67,7 +67,7 @@ graph TD
 
 **`results.js`** — renders a simulate or Monte Carlo payload into the results DOM, including the toss-up wording when the winner takes 40–60% of simulated futures (ADR-0010), the tie wording when the server reports `winner: "tie"`, the net-value note, and the live one-line verdict in the phone sheet header. It draws the tornado again when the chart's width changes. The headline and the confidence are polite live regions, written only when their text changes (the hero's go quiet while the phone sheet, with its own live line, is open). `downloadCsv` exports the same columns as the yearly numbers table, one row per month, with the currency code in each header and the region, horizon and price in the file name.
 
-**`charts.js`** — the five Plotly charts: decision (Net Value over time, with breakeven marker), fan (simulated futures), tornado (sensitivity), outflows, and the ownership-cost breakdown.
+**`charts.js`** — the five Plotly charts: decision (Net Value over time, with breakeven marker), fan (simulated futures), tornado (sensitivity), outflows, and the ownership-cost breakdown. With a mouse, each chart shows a mode bar on hover: **Save as image** on every chart, plus zoom, pan and reset on the three time-series charts. Touch screens get no mode bar, and a line under the tornado repeats the bar last tapped.
 
 **`analytics.js`** — `trackEvent` wrapper around `window.umami`, no-ops when analytics is unconfigured. Also defines `window.umamiBeforeSend`, the hook that strips the app's own URL params, keeps one page view per load, and sends `link-opened` for a shared link.
 

@@ -41,6 +41,59 @@ test('the hover readout shows the year with one decimal', async ({ page }) => {
   expect(await hover.textContent()).not.toMatch(/\d\.\d{2,}/);
 });
 
+async function hoverChart(page, id) {
+  const box = await page.locator(`#${id}`).boundingBox();
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  await expect(page.locator(`#${id} .modebar`)).toBeVisible();
+  return page.locator(`#${id} .modebar-btn`);
+}
+
+test('a time-series chart offers zoom, pan, reset and save on hover', async ({ page }) => {
+  await load(page);
+  const buttons = await hoverChart(page, 'decision-chart');
+  await expect(buttons).toHaveCount(4);
+  const titles = await buttons.evaluateAll((els) => els.map((b) => b.getAttribute('data-title')));
+  expect(titles).toEqual(['Zoom', 'Pan', 'Reset axes', 'Save as image']);
+});
+
+test('a bar chart only offers to save it', async ({ page }) => {
+  await load(page);
+  const buttons = await hoverChart(page, 'tornado-chart');
+  await expect(buttons).toHaveCount(1);
+  await expect(buttons).toHaveAttribute('data-title', 'Save as image');
+});
+
+test('Save as image downloads a named picture of the chart', async ({ page }) => {
+  await load(page);
+  await hoverChart(page, 'decision-chart');
+  const download = page.waitForEvent('download');
+  await page.locator('#decision-chart .modebar-btn[data-title="Save as image"]').click();
+  expect((await download).suggestedFilename()).toBe('rent-or-buy-net-value.png');
+});
+
+test('zoom narrows the chart and Reset axes restores it', async ({ page }) => {
+  await load(page);
+  const buttons = await hoverChart(page, 'decision-chart');
+  await page.locator('#decision-chart .modebar-btn[data-title="Zoom"]').click();
+  const box = await page.locator('#decision-chart .nsewdrag').boundingBox();
+  await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6, { steps: 8 });
+  await page.mouse.up();
+  const range = () => page.evaluate(() => document.getElementById('decision-chart')._fullLayout.xaxis.range);
+  await expect.poll(async () => (await range())[1] - (await range())[0]).toBeLessThan(5);
+  await hoverChart(page, 'decision-chart');
+  await page.locator('#decision-chart .modebar-btn[data-title="Reset axes"]').click();
+  await expect.poll(async () => (await range())[1]).toBeCloseTo(10, 5);
+  expect((await range())[0]).toBeCloseTo(0, 5);
+  await expect(buttons).toHaveCount(4);
+});
+
+test('the tornado tap line stays hidden with a mouse', async ({ page }) => {
+  await load(page);
+  await expect(page.locator('#tornado-detail')).toBeHidden();
+});
+
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 664 } });
 

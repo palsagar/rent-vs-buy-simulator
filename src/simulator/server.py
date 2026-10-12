@@ -68,6 +68,8 @@ UMAMI_DOMAIN, UMAMI_ID = _umami_config()
 # scripts and inline styles for the HTML's style="..." attributes. The Umami
 # origin joins script-src AND connect-src (the tag's script.js beacons to the
 # same origin) only when analytics is configured; otherwise the CSP is unchanged.
+# img-src allows blob: because Plotly's "Save as image" draws the chart
+# through a blob: URL before it becomes the PNG.
 _script_src = "script-src 'self' https://cdn.plot.ly"
 _connect_src = "connect-src 'self'"
 if UMAMI_DOMAIN:
@@ -77,7 +79,7 @@ _CSP = (
     "default-src 'self'; "
     f"{_script_src}; "
     "style-src 'self' 'unsafe-inline'; "
-    "img-src 'self' data:; "
+    "img-src 'self' data: blob:; "
     f"{_connect_src}; "
     "base-uri 'self'; "
     "frame-ancestors 'none'; "

@@ -534,6 +534,7 @@ input[type="range"]::-moz-range-thumb {
 #tornado-summary { margin: 0 0 8px; font-size: 13px; line-height: 1.5; color: var(--text); }
 #tornado-summary:empty { display: none; }
 #tornado-chart { height: 420px; }
+#tornado-detail { margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: var(--text-2); min-height: 1.5em; }
 #tornado-note { margin-top: 8px; font-size: 12px; line-height: 1.5; color: var(--muted); }
 #tornado-note summary { cursor: pointer; color: var(--text-2); }
 #tornado-note p { margin: 8px 0 0; }

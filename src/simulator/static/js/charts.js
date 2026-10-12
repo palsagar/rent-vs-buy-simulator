@@ -58,7 +58,35 @@ function moneyHover(values) {
   return Array.from(values, fmtMoney);
 }
 
-const PLOT_CONFIG = { displayModeBar: false, responsive: true, locale: CURRENCY_LOCALE };
+// The mode bar is for a mouse: on touch it would sit over the chart and a
+// drag mode would capture the page scroll. Zooming a category chart means
+// nothing, so the bar charts only offer the image.
+const CHART_EXPORTS = {
+  "decision-chart": { file: "rent-or-buy-net-value", zoom: true },
+  "fan-chart": { file: "rent-or-buy-futures", zoom: true },
+  "tornado-chart": { file: "rent-or-buy-what-could-change", zoom: false },
+  "outflow-chart": { file: "rent-or-buy-out-of-pocket", zoom: true },
+  "breakdown-chart": { file: "rent-or-buy-ownership-costs", zoom: false },
+};
+
+function plotConfig(el) {
+  const base = { responsive: true, locale: CURRENCY_LOCALE, displaylogo: false };
+  const mouse = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  const spec = CHART_EXPORTS[el.id];
+  if (!mouse || !spec) return { ...base, displayModeBar: false };
+  // Plotly's own title for this is "Download plot as a png".
+  const save = {
+    name: "save-image",
+    title: "Save as image",
+    icon: Plotly.Icons.camera,
+    click: (gd) => Plotly.downloadImage(gd, { format: "png", scale: 2, filename: spec.file }),
+  };
+  return {
+    ...base,
+    displayModeBar: "hover",
+    modeBarButtons: [spec.zoom ? ["zoom2d", "pan2d", "resetScale2d", save] : [save]],
+  };
+}
 
 function baseLayout(xTitle) {
   return {
@@ -71,6 +99,8 @@ function baseLayout(xTitle) {
     // No drag-to-zoom: on a touch screen it captures the swipe, so a page
     // scroll that starts on a chart zooms the chart instead. Taps still hover.
     dragmode: false,
+    // Upright in the right margin, clear of the labels along the top.
+    modebar: { orientation: "v", bgcolor: "rgba(0,0,0,0)", color: MUTED, activecolor: TEXT },
     xaxis: { title: { text: xTitle }, gridcolor: GRID, zerolinecolor: "#30363d" },
     yaxis: {
       gridcolor: GRID,
@@ -253,7 +283,7 @@ export function renderDecisionChart(el, series, breakevenYear) {
       text: `breakeven ${breakevenYear.toFixed(1)}y`, font: { color: MUTED, size: 11 }, showarrow: false,
     });
   }
-  Plotly.react(el, strategyTraces(x, series.netBuy, series.netRent, fwd), layout, PLOT_CONFIG);
+  Plotly.react(el, strategyTraces(x, series.netBuy, series.netRent, fwd), layout, plotConfig(el));
 }
 
 export function renderFanChart(el, mc) {
@@ -272,7 +302,7 @@ export function renderFanChart(el, mc) {
   layout.shapes = [
     { type: "line", x0: 0, x1: x.at(-1), y0: 0, y1: 0, line: { color: "#484f58", width: 1, dash: "dash" } },
   ];
-  Plotly.react(el, traces, layout, PLOT_CONFIG);
+  Plotly.react(el, traces, layout, plotConfig(el));
 }
 
 // Render a perturbed input the way its own slider would. INPUT_DEFS is
@@ -698,7 +728,27 @@ export function renderTornadoChart(el, tornado) {
       })),
     );
   }
-  Plotly.react(el, traces, layout, PLOT_CONFIG);
+  Plotly.react(el, traces, layout, plotConfig(el));
+  showTornadoDetail(el);
+}
+
+// On touch, a tapped bar's hover label shows only briefly, so the line
+// under the chart repeats it. A mouse keeps the hover alone.
+function showTornadoDetail(el) {
+  const detail = document.getElementById("tornado-detail");
+  if (!detail) return;
+  const touch = window.matchMedia("(hover: none)").matches;
+  detail.hidden = !touch;
+  detail.textContent = touch ? "Tap a bar to see what it tested." : "";
+  // Plotly keeps its event handlers across Plotly.react, so bind once.
+  if (el._tapDetailWired) return;
+  el._tapDetailWired = true;
+  const show = (e) => {
+    const text = e?.points?.[0]?.customdata;
+    if (text && !detail.hidden) detail.textContent = `${text.replace("<br>", ". ")}.`;
+  };
+  el.on("plotly_click", show);
+  el.on("plotly_hover", show);
 }
 
 export function renderOutflowChart(el, series) {
@@ -708,7 +758,7 @@ export function renderOutflowChart(el, series) {
   layout.xaxis.hoverformat = ".1f";
   const fwd = maybeSymlog(layout, series.outflowBuy, series.outflowRent);
   layout.annotations = endLabelAnnotations(x, series.outflowBuy, series.outflowRent, fwd, plotHeight(el, layout));
-  Plotly.react(el, strategyTraces(x, series.outflowBuy, series.outflowRent, fwd), layout, PLOT_CONFIG);
+  Plotly.react(el, strategyTraces(x, series.outflowBuy, series.outflowRent, fwd), layout, plotConfig(el));
 }
 
 export function renderBreakdownChart(el, payload, cfg) {
@@ -741,5 +791,5 @@ export function renderBreakdownChart(el, payload, cfg) {
   const layout = baseLayout(`Total over ${cfg.horizonYears} years`);
   moveCurrencyToXAxis(layout);
   layout.yaxis.automargin = true; // grow the left margin to fit category labels
-  Plotly.react(el, traces, layout, PLOT_CONFIG);
+  Plotly.react(el, traces, layout, plotConfig(el));
 }
