@@ -381,8 +381,15 @@ function lowerFirst(text) {
   return text.charAt(0).toLowerCase() + text.slice(1);
 }
 
-// What one side tested, as the start of a sentence: "Equity growth (CAGR)
-// at 11.7% instead of 7.0%", or "Higher equity growth" when the payload
+// A row's name without its bracketed qualifier, for sentences where the
+// tested value already carries the unit: "property levy at 1.70%", not
+// "property levy (% of value per year) at 1.70%".
+function shortLabel(label) {
+  return label.replace(/\s*\(.*\)$/, "");
+}
+
+// What one side tested, as the start of a sentence: "Equity growth at
+// 11.7% instead of 7.0%", or "Higher equity growth" when the payload
 // predates the tested values. The hover uses it as is, the summary
 // lower-cases its first letter.
 function testedPhrase(row, side) {
@@ -412,10 +419,7 @@ export function tornadoSummary(tornado, tossUp) {
   const buyAhead = tornado.base > 0;
   const flips = tornadoRows(tornado).flatMap((row) => {
     const side = row.sides.find((s) => !s.untested && s.end > 0 !== buyAhead);
-    // The tested value already carries the unit, so the sentence drops a
-    // label's bracketed qualifier: "property levy at 1.70%", not
-    // "property levy (% of value per year) at 1.70%".
-    const named = { ...row, label: row.label.replace(/\s*\(.*\)$/, "") };
+    const named = { ...row, label: shortLabel(row.label) };
     return side === undefined ? [] : [lowerFirst(testedPhrase(named, side))];
   });
   if (flips.length === 0) {
@@ -457,7 +461,7 @@ function sideCell(slot, k, base) {
   return {
     x: side.end - base,
     text: endLabel(side),
-    hover: `${testedPhrase(slot, side)}${atLimit}<br>${aheadBy(side.end)}`,
+    hover: `${testedPhrase({ ...slot, label: shortLabel(slot.label) }, side)}${atLimit}<br>${aheadBy(side.end)}`,
   };
 }
 
@@ -478,7 +482,7 @@ function limitAnnotations(slots, base) {
           xanchor: otherGoesRight ? "right" : "left",
           xshift: otherGoesRight ? -4 : 4,
           text: endLabel(side),
-          hovertext: `${slot.label} is already at its slider ${LIMIT_WORDS[side.limit]}, so it can't be tested ${side.direction}.`,
+          hovertext: `${shortLabel(slot.label)} is already at its slider ${LIMIT_WORDS[side.limit]}, so it can't be tested ${side.direction}.`,
           showarrow: false,
           font: { color: MUTED, size: 11 },
           hoverlabel: { bgcolor: BAR }, // the bars' own hover style

@@ -192,6 +192,22 @@ test.describe('the chart', () => {
     expect(label).toBe(bar);
   });
 
+  test('a limit hover names the row as the summary does, without its bracketed qualifier', async ({ page }) => {
+    await load(page, '?equityGrowthAnnual=13'); // the higher test stops at the 15% maximum
+    const hover = await page.evaluate(() => {
+      const el = document.getElementById('tornado-chart');
+      return el.data[1].customdata[el.data[1].y.indexOf('Equity growth (CAGR)')];
+    });
+    expect(hover).toMatch(/^Equity growth at 15\.0% instead of 13\.0% \(the slider maximum\)<br>/);
+
+    await load(page, '?propertyTaxRate=5'); // the slider maximum: it can only go down
+    const labels = await page.evaluate(() =>
+      document.getElementById('tornado-chart').layout.annotations.filter((a) => a.name === 'limit-label'),
+    );
+    expect(labels).toHaveLength(1);
+    expect(labels[0].hovertext).toBe("Property levy is already at its slider maximum, so it can't be tested higher.");
+  });
+
   test('a side already at its slider minimum says so', async ({ page }) => {
     await load(page, '?monthlyRent=500'); // the slider minimum: it can only go up
     const labels = await page.evaluate(() =>
@@ -210,6 +226,22 @@ test.describe('the chart', () => {
       await load(page, query);
       await expect(page.locator('#tornado-summary')).not.toContainText(/\((min|max)\)/);
     }
+  });
+
+  test('a clamped side that flips the verdict is named without its mark', async ({ page }) => {
+    // Buying is ahead in 68% of futures. +20% on the home price would be
+    // $2.04M; the slider stops at $2.0M, and there renting is ahead.
+    await load(page, '?propertyPrice=1700000&monthlyRent=9750');
+    const summary = page.locator('#tornado-summary');
+    await expect(summary).toContainText('could flip the answer to renting');
+    await expect(summary).toContainText('home price at $2.0M instead of $1.7M');
+    await expect(summary).not.toContainText(/\((min|max)\)/);
+    const ends = await page.evaluate(() => {
+      const el = document.getElementById('tornado-chart');
+      const row = el.data[0].y.indexOf('Home price');
+      return el.data.map((t) => t.text[row]);
+    });
+    expect(ends).toContain('$2.0M (max)');
   });
 
   test('the note says how a limit is marked', async ({ page }) => {

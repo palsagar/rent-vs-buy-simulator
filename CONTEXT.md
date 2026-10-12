@@ -42,7 +42,7 @@ How far a Sensitivity test moves an input from its current value: a share of the
 _Avoid_: Delta, shock
 
 **Slider limit**:
-The lowest or highest value a person can set for an input. The limits are the same in every Region. A Sensitivity test stops at the limit instead of going past it, except that property appreciation and equity growth may go below zero.
+The lowest or highest value a person can set for an input. The limits are the same in every Region. A Sensitivity test stops at the limit instead of going past it, except that property appreciation and equity growth may go below zero. In "What could change the answer?", a side that stops at a slider limit is marked "(min)" or "(max)".
 _Avoid_: Bound, clamp (in anything a user reads)
 
 **Cash-flow matching**:
