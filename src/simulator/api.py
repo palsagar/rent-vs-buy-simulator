@@ -12,7 +12,7 @@ from dataclasses import fields
 from types import UnionType
 from typing import Any, Literal, Union, get_args, get_origin, get_type_hints
 
-from .engine import calculate_scenarios
+from .engine import TIE_TOLERANCE, calculate_scenarios
 from .models import MonteCarloConfig, SimulationConfig
 from .monte_carlo import run_monte_carlo
 
@@ -173,6 +173,47 @@ def config_to_dict(config: SimulationConfig) -> dict[str, Any]:
     return {_camel(f.name): getattr(config, f.name) for f in fields(config)}
 
 
+def _winner(difference: float) -> str:
+    """Name the Verdict's winner from Buy - Rent at the Horizon.
+
+    A gap under ``TIE_TOLERANCE`` (half a unit of currency) is a tie,
+    because every surface would print it as "~$0" (ADR-0010 amendment).
+
+    Parameters
+    ----------
+    difference : float
+        The Verdict, ``final_net_buy - final_net_rent``.
+
+    Returns
+    -------
+    str
+        ``"buy"``, ``"rent"`` or ``"tie"``.
+
+    Raises
+    ------
+    RuntimeError
+        If ``difference`` is NaN or infinite. Valid input never produces
+        one, so it is a server error (HTTP 500), not a verdict: NaN fails
+        every comparison, so ``> 0`` used to report it as Rent.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from simulator.api import _winner
+
+        _winner(1248.0)   # "buy"
+        _winner(-0.3)     # "tie"
+        _winner(-5.0)     # "rent"
+
+    """
+    if not math.isfinite(difference):
+        raise RuntimeError(f"verdict is not a finite number (got {difference})")
+    if abs(difference) < TIE_TOLERANCE:
+        return "tie"
+    return "buy" if difference > 0 else "rent"
+
+
 def simulate_payload(config: SimulationConfig) -> dict[str, Any]:
     """Run the deterministic engine and serialize results for the wire.
 
@@ -184,10 +225,16 @@ def simulate_payload(config: SimulationConfig) -> dict[str, Any]:
     Returns
     -------
     dict[str, Any]
-        JSON-ready dict with ``verdict`` (winner, difference,
-        horizonYears), ``breakevenYear``, year-1 monthly costs,
-        ``totals`` (ownership-cost components), and ``series`` (the
-        monthly time series, each ``horizon_years * 12 + 1`` long).
+        JSON-ready dict with ``verdict`` (winner -- ``"buy"``, ``"rent"``
+        or ``"tie"`` -- difference, horizonYears), ``breakevenYear``,
+        year-1 monthly costs, ``totals`` (ownership-cost components), and
+        ``series`` (the monthly time series, each
+        ``horizon_years * 12 + 1`` long).
+
+    Raises
+    ------
+    RuntimeError
+        If the Verdict is not a finite number (see :func:`_winner`).
 
     Examples
     --------
@@ -197,7 +244,7 @@ def simulate_payload(config: SimulationConfig) -> dict[str, Any]:
         from tests.test_models import make_config
 
         payload = simulate_payload(make_config())
-        payload["verdict"]["winner"] in ("buy", "rent")  # True
+        payload["verdict"]["winner"] in ("buy", "rent", "tie")  # True
 
     """
     results = calculate_scenarios(config)
@@ -205,7 +252,7 @@ def simulate_payload(config: SimulationConfig) -> dict[str, Any]:
     breakeven = results.breakeven_year
     return {
         "verdict": {
-            "winner": "buy" if results.final_difference > 0 else "rent",
+            "winner": _winner(results.final_difference),
             "difference": results.final_difference,
             "horizonYears": config.horizon_years,
         },

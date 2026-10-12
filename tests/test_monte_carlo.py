@@ -21,6 +21,7 @@ from simulator.models import MonteCarloConfig, SimulationConfig
 from simulator.monte_carlo import (
     _UI_MAXIMUM,
     _UI_MINIMUM,
+    _buy_win_share,
     _compute_sensitivity,
     _simulate_single_path,
     run_monte_carlo,
@@ -72,6 +73,31 @@ class TestStatistics:
         a = run_monte_carlo(cfg, MonteCarloConfig(n_simulations=20, seed=7))
         b = run_monte_carlo(cfg, MonteCarloConfig(n_simulations=20, seed=7))
         np.testing.assert_array_equal(a.final_differences, b.final_differences)
+
+
+class TestBuyWinShare:
+    """A tied path (a gap under half a unit) counts half for each side,
+    so the two shares still add up to 100% (ADR-0010 amendment)."""
+
+    def test_ties_count_half_for_each_side(self):
+        assert _buy_win_share(np.array([1.0, -1.0, 0.0, 0.25])) == 50.0
+        assert math.isclose(
+            _buy_win_share(np.array([0.6, 0.6, -2.0])), 200 / 3, rel_tol=1e-12
+        )
+
+    def test_the_tie_band_matches_the_verdict_rule(self):
+        # Same boundary as api._winner: 0.5 is a win, 0.49 a tie.
+        assert _buy_win_share(np.array([0.5])) == 100.0
+        assert _buy_win_share(np.array([-0.5])) == 0.0
+        assert _buy_win_share(np.array([0.49, -0.49])) == 50.0
+
+    def test_a_non_finite_path_is_an_error(self):
+        with pytest.raises(RuntimeError, match="finite"):
+            _buy_win_share(np.array([1.0, float("nan")]))
+
+    def test_run_monte_carlo_reports_this_share(self):
+        res = run_monte_carlo(make_config(), MonteCarloConfig(n_simulations=50))
+        assert res.buy_wins_pct == _buy_win_share(res.final_differences)
 
 
 class TestSensitivity:

@@ -713,7 +713,9 @@ class MonteCarloResults:
         Percentiles of differences over time. Shape:
         (len(percentile_levels), n_months+1).
     buy_wins_pct : float
-        Percentage of simulations where buying wins (0-100).
+        Percentage of simulations where buying wins (0-100). A tied
+        simulation (a gap under half a unit of currency) counts half for
+        each side.
     median_difference : float
         Median final difference across simulations.
     p5_difference : float

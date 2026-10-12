@@ -13,6 +13,12 @@ from .models import SimulationConfig, SimulationResults
 # Floating-point tolerance for comparisons
 _FLOAT_TOLERANCE = 1e-9
 
+# A Buy - Rent gap smaller than this is a tie: half the smallest unit any
+# surface displays, so a smaller gap would print as "~$0". It is a money
+# threshold, not a float tolerance: rounding noise on the largest
+# reachable verdict (~1e11) is ~1e-5, far below it (ADR-0010 amendment).
+TIE_TOLERANCE = 0.5
+
 # Lowest yearly growth rate the monthly conversion accepts, as a decimal.
 # Below -100% a twelfth root is undefined; just above it the monthly
 # factor stays positive. Monte Carlo draws are the only input that can get
