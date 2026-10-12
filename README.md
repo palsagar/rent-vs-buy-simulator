@@ -55,7 +55,7 @@ Verified from source, not asserted:
 - **5 region bundles** (`src/simulator/regions.py`) — United States, France (Lyon), Germany (Köln), Netherlands, United Kingdom (England & NI); **United States** is the shipped default on a fresh load.
 - **Monte Carlo defaults** (`src/simulator/models.py`, `MonteCarloConfig`) — **500** simulations, seed **42**, property-appreciation σ **8.0 pp**, equity-growth σ **15.0 pp**, rent-inflation σ **1.5 pp**, correlation ρ **0.3**.
 - **12 pytest files** (`tests/test_*.py`), **5 Playwright spec files** (`tests/*.spec.js`): `tour`, `welcome`, `analytics`, `a11y`, `restore`.
-- Package **rent-vs-buy-simulator v2.0.0** (`pyproject.toml`).
+- Package **rent-vs-buy-simulator** on PyPI. The version lives in `pyproject.toml`, and release-please bumps it (see `CHANGELOG.md`).
 
 ## Develop
 
