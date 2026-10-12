@@ -26,4 +26,4 @@ Kept as records of the design process — ancestry, not living documents. See [A
 
 ## Tour & Tests
 
-The 12-step onboarding tour (`static/js/tour.js`) is covered by `tests/tour.spec.js`. The suite is **12 pytest files** under `tests/` (engine, api, regions, Monte Carlo, tornado bounds, Umami) plus **5 Playwright spec files** (`tour.spec.js`, `welcome.spec.js`, `analytics.spec.js`, `a11y.spec.js`, `restore.spec.js`) running in headless mode (the default Playwright leaves in place) on port 8323.
+The 12-step onboarding tour (`static/js/tour.js`) is covered by `tests/tour.spec.js`. The suite is **12 pytest files** under `tests/` (engine, api, regions, Monte Carlo, tornado bounds, Umami) plus **14 Playwright spec files** (`tests/*.spec.js`, among them `tour.spec.js`, `tornado.spec.js` and `analytics.spec.js`) running in headless mode (the default Playwright leaves in place) on ports 8323 and 8324.

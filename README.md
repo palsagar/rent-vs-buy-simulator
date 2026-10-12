@@ -1,67 +1,73 @@
-<div align="center">
+# Rent or Buy?
 
-# 🏠 Rent or Buy?
+**Should you buy a home, or rent and invest the money you would have put into it?** Rent or Buy? simulates both choices over the years you plan to stay. It tells you which one leaves you wealthier, by how much, and how sure you can be.
 
-**The buy-vs-rent decision simulator — which strategy leaves you wealthier, and how sure can you be.**
+Try it at **[rent-or-buy-sim.com](https://rent-or-buy-sim.com/)**. It opens in any web browser and needs no account.
 
-</div>
+![Rent or Buy? with the verdict at the top and the net value of buying and renting drawn year by year below it](https://raw.githubusercontent.com/palsagar/rent-vs-buy-simulator/main/src/simulator/static/screenshots/decision-chart.png)
 
-![Rent or Buy? verdict — how far apart buying and renting end at your horizon, how often each wins across simulated futures, and when it is too close to call](https://raw.githubusercontent.com/palsagar/rent-vs-buy-simulator/main/src/simulator/static/screenshots/verdict.png)
+## What it shows you
 
-## Run it
+- **The verdict.** The headline says which choice comes out ahead at the end of your stay and by how much. Below it are the breakeven year and the share of simulated futures in which that choice wins. When the two choices end close together, the app says the answer is too close to call instead of picking a side.
+- **The decision chart.** It draws the net value of buying and of renting for every year of your stay. Net value is what you would walk away with, minus everything you put in.
+- **How sure is this?** A fan chart shows the spread of outcomes across the simulated futures, where growth and inflation vary from year to year.
+- **What could change the answer?** A tornado chart tests one number at a time, lower and higher than yours. A sentence above it names the single changes that would flip the verdict. Each bar end prints the value that was tested. A side that stops at a slider limit is marked (min) or (max).
+- **Region presets.** The United States, France (Lyon), Germany (Köln), the Netherlands and the United Kingdom (England and Northern Ireland) each set local tax rules, buying costs, typical prices and the currency.
+- **First-time-buyer relief.** In regions that offer it, this is on by default. Where the law caps the price that qualifies, it switches itself off above that cap.
+- **Market outlook.** Pick conservative, historical or optimistic assumptions for home prices, investment returns and rent increases.
+- **Advanced settings in plain language.** Groups at the end of the inputs panel cover buying and selling costs, the yearly costs of owning, tax relief on the mortgage, tax when you sell the home, and tax on investments. Each group shows a one-line summary. A dot marks any value you changed from the region default, and you can reset a group to those defaults.
+- **Shareable links.** The address bar always holds your exact scenario, and the Share button copies or shares it.
+- **Help when you need it.** A guided tour is offered on your first visit, and the Guide explains the ideas behind the numbers. You can replay the tour from the Guide.
 
-Install from PyPI and start the app:
+You can also see how much cash each choice costs you over time, read every figure in a year-by-year table, and download that table as CSV.
+
+![The spread of simulated futures, and the tornado chart that shows which single change could flip the verdict](https://raw.githubusercontent.com/palsagar/rent-vs-buy-simulator/main/src/simulator/static/screenshots/fan-tornado.png)
+
+## Get started
+
+### Install from PyPI
+
+You need Python 3.12 or newer.
 
 ```bash
 pip install rent-vs-buy-simulator
-rent-vs-buy            # serves the app at http://localhost:8501 (set PORT to change it)
+rent-vs-buy
 ```
 
-Or run it from a clone of the repo:
+Open http://localhost:8501. To use another port, set `PORT`, for example `PORT=9000 rent-vs-buy`.
+
+### Run from a clone
+
+You need [uv](https://docs.astral.sh/uv/).
 
 ```bash
-uv run uvicorn simulator.server:app --port 8000
+git clone https://github.com/palsagar/rent-vs-buy-simulator.git
+cd rent-vs-buy-simulator
+uv run uvicorn simulator.server:app --reload --port 8501
 ```
 
-Open http://localhost:8000.
-
-## Using Rent or Buy?
-
-- A **12-step tour** walks you through every feature on first visit; replay it anytime via **Replay the Tour** in the guide.
-- The **`?` button** opens the in-app guide — the concepts behind the verdict, one click away.
-- **Region presets** — United States, France (Lyon), Germany (Köln), Netherlands, United Kingdom (England & NI) — fill in tax rules, buyer costs and typical prices, rendered in each market's currency.
-- **First-time-buyer relief** where a region enacts it — on by default, withdrawing itself above the statutory price cap.
-- **Market outlook** — conservative, historical, or optimistic growth and inflation assumptions.
-- **Advanced** — five groups at the end of the inputs panel (buying and selling costs, yearly costs of owning, mortgage tax relief, tax when you sell, tax on investments); every default follows the selected region.
-
-Every slider input updates the charts live, and the address bar is always a shareable link to your exact scenario.
-
-![Rent or Buy? guide — built-in documentation with the Replay the Tour entry point](https://raw.githubusercontent.com/palsagar/rent-vs-buy-simulator/main/src/simulator/static/screenshots/guide.png)
-
-## Understanding & hacking Rent or Buy?
-
-- [docs/README.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/docs/README.md) — full annotated index
-- [docs/architecture.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/docs/architecture.md) — system + module map
-- [docs/formulas.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/docs/formulas.md) — the math behind the engine (Net Value, Monte Carlo, tax primitives)
-- [docs/adr/README.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/docs/adr/README.md) — 9 design decisions
-- [CONTEXT.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/CONTEXT.md) — project vocabulary
-- [DEPLOYMENT.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/DEPLOYMENT.md) — Docker + analytics wiring
-
-## Numbers
-
-Verified from source, not asserted:
-
-- **12 tour steps** (`src/simulator/static/js/tour.js`) — welcome → region presets → first-time-buyer relief → outlook → situation → verdict → decision chart → fan/tornado → advanced → numbers → guide → all set.
-- **5 region bundles** (`src/simulator/regions.py`) — United States, France (Lyon), Germany (Köln), Netherlands, United Kingdom (England & NI); **United States** is the shipped default on a fresh load.
-- **Monte Carlo defaults** (`src/simulator/models.py`, `MonteCarloConfig`) — **500** simulations, seed **42**, property-appreciation σ **8.0 pp**, equity-growth σ **15.0 pp**, rent-inflation σ **1.5 pp**, correlation ρ **0.3**.
-- **12 pytest files** (`tests/test_*.py`), **5 Playwright spec files** (`tests/*.spec.js`): `tour`, `welcome`, `analytics`, `a11y`, `restore`.
-- Package **rent-vs-buy-simulator** (`pyproject.toml`). release-please sets its version.
+Open http://localhost:8501.
 
 ## Develop
 
-- No build step — a vanilla ES-module frontend served straight from `static/`.
-- `uv run pytest tests/ -q` — engine, API, region, Monte Carlo, and Umami tests.
-- `npx playwright test` — headless E2E (the config leaves Playwright's default headless mode) over the welcome modal, 12-step tour, analytics contract, a11y, and share/restore specs.
-- `Dockerfile` for deploy (FastAPI + static files, `PORT` selects the listen port).
+```bash
+uv venv --seed && uv pip install -e .        # set up
+uv run pytest                                # Python tests
+npm install && npx playwright install chromium
+npx playwright test                          # browser tests
+uv run ruff check src/ tests/                # lint
+uv run ruff format src/ tests/               # format
+uv run ty check src/                         # type check
+```
 
-See [docs/formulas.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/docs/formulas.md) for the mathematical reference and [CONTEXT.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/CONTEXT.md) for the vocabulary.
+The frontend has no build step. The browser loads the ES modules in `src/simulator/static/` as they are.
+
+## Learn more
+
+- [docs/README.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/docs/README.md): the index of all documentation.
+- [docs/architecture.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/docs/architecture.md): how the server, the engine and the frontend fit together.
+- [docs/formulas.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/docs/formulas.md): the math behind net value, the Monte Carlo simulation and the taxes.
+- [docs/adr/README.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/docs/adr/README.md): the design decisions and why they were made.
+- [CONTEXT.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/CONTEXT.md): the words the project uses and what each one means.
+- [DEPLOYMENT.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/DEPLOYMENT.md): running the app in Docker and wiring up analytics.
+- [CHANGELOG.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/CHANGELOG.md): what changed in each release.

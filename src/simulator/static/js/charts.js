@@ -319,10 +319,31 @@ const YOURS_GROUP = "Your numbers";
 // every real test moves by a whole step, whatever the field's units.
 const SAME_INPUT_TOLERANCE = 1e-9;
 
+// The slider limit a tested value sits on, if any: "min" for a lower side
+// at its slider's minimum, "max" for a higher side at its maximum. The
+// engine clamps every test to these same bounds (_UI_MINIMUM and
+// _UI_MAXIMUM mirror them), so a clamped side lands on the bound exactly.
+// Compared in stored units: rent inflation's slider shows 10% for 0.1.
+function sliderLimit(def, direction, stored) {
+  if (def?.min === undefined) return null;
+  const [limit, bound] = direction === "lower" ? ["min", def.min] : ["max", def.max];
+  return Math.abs(stored - bound / (def.scale ?? 1)) < SAME_INPUT_TOLERANCE ? limit : null;
+}
+
+const LIMIT_WORDS = { min: "minimum", max: "maximum" };
+
+// The value printed at a bar end, marked when its test stopped at a
+// slider limit instead of moving a full step.
+function endLabel(side) {
+  if (side.tested === null) return "";
+  return side.limit === null ? side.tested : `${side.tested} (${side.limit})`;
+}
+
 // One row per bar, widest first as the payload sends them. Each side
 // carries the verdict it produced and, when the payload has them, the
-// tested and current values formatted like their slider. A side clamped
-// at a slider limit is marked `untested`: there is no bar to draw for it.
+// tested and current values formatted like their slider. A side that is
+// already at a slider limit is marked `untested`: there is no bar to draw
+// for it. `limit` names the slider limit a side stopped at, if any.
 function tornadoRows(tornado) {
   const ranges = tornadoRanges(tornado, tornado.params.length);
   return tornado.params.map((name, i) => {
@@ -332,8 +353,8 @@ function tornadoRows(tornado) {
         future: false,
         current: null,
         sides: [
-          { end: tornado.low[i], tested: null, untested: false, direction: "lower" },
-          { end: tornado.high[i], tested: null, untested: false, direction: "higher" },
+          { end: tornado.low[i], tested: null, untested: false, direction: "lower", limit: null },
+          { end: tornado.high[i], tested: null, untested: false, direction: "higher", limit: null },
         ],
       };
     }
@@ -345,8 +366,8 @@ function tornadoRows(tornado) {
       future: def?.section === "assumptions",
       current: fmtFieldValue(fields[i], baseIn[i]),
       sides: [
-        { end: tornado.low[i], tested: fmtFieldValue(fields[i], lowIn[i]), untested: untested(lowIn[i]), direction: "lower" },
-        { end: tornado.high[i], tested: fmtFieldValue(fields[i], highIn[i]), untested: untested(highIn[i]), direction: "higher" },
+        { end: tornado.low[i], tested: fmtFieldValue(fields[i], lowIn[i]), untested: untested(lowIn[i]), direction: "lower", limit: sliderLimit(def, "lower", lowIn[i]) },
+        { end: tornado.high[i], tested: fmtFieldValue(fields[i], highIn[i]), untested: untested(highIn[i]), direction: "higher", limit: sliderLimit(def, "higher", highIn[i]) },
       ],
     };
   });
@@ -360,8 +381,15 @@ function lowerFirst(text) {
   return text.charAt(0).toLowerCase() + text.slice(1);
 }
 
-// What one side tested, as the start of a sentence: "Equity growth (CAGR)
-// at 11.7% instead of 7.0%", or "Higher equity growth" when the payload
+// A row's name without its bracketed qualifier, for sentences where the
+// tested value already carries the unit: "property levy at 1.70%", not
+// "property levy (% of value per year) at 1.70%".
+function shortLabel(label) {
+  return label.replace(/\s*\(.*\)$/, "");
+}
+
+// What one side tested, as the start of a sentence: "Equity growth at
+// 11.7% instead of 7.0%", or "Higher equity growth" when the payload
 // predates the tested values. The hover uses it as is, the summary
 // lower-cases its first letter.
 function testedPhrase(row, side) {
@@ -391,10 +419,7 @@ export function tornadoSummary(tornado, tossUp) {
   const buyAhead = tornado.base > 0;
   const flips = tornadoRows(tornado).flatMap((row) => {
     const side = row.sides.find((s) => !s.untested && s.end > 0 !== buyAhead);
-    // The tested value already carries the unit, so the sentence drops a
-    // label's bracketed qualifier: "property levy at 1.70%", not
-    // "property levy (% of value per year) at 1.70%".
-    const named = { ...row, label: row.label.replace(/\s*\(.*\)$/, "") };
+    const named = { ...row, label: shortLabel(row.label) };
     return side === undefined ? [] : [lowerFirst(testedPhrase(named, side))];
   });
   if (flips.length === 0) {
@@ -417,6 +442,28 @@ const MIN_HALF_FRACTION = 1 / 3;
 // Room past the outermost bar ends for the tested values printed there.
 const END_LABEL_PAD = 0.14;
 
+// The width of an 11 px label beside a line, estimated before Plotly lays
+// it out: pixels per character (about 6 when measured), plus its gap from
+// the line. Both err wide, so a label is never given too little room.
+const SIDE_LABEL_CHAR_PX = 7;
+const SIDE_LABEL_GAP_PX = 8;
+
+// The same estimate for the 12 px row names that set the left margin on a
+// wide chart. Erring wide here only reserves a little more room.
+const ROW_NAME_CHAR_PX = 7;
+
+// No label claims more than this share of the plot width, so two labels
+// that run towards each other's edges always fit together.
+const MAX_LABEL_SHARE = 0.45;
+
+// Rounds of growing the axis edges in turn. Each round shrinks what is
+// still missing to a fraction of what it was, so a few rounds settle it.
+const ROOM_ROUNDS = 10;
+
+// The tornado's side margins on a phone, where the row names sit above
+// their bars instead of in the left margin.
+const NARROW_MARGIN = { l: 16, r: 24 };
+
 // Behind the tornado, each half of the axis is tinted with the colour of
 // the strategy that is ahead there.
 const HALF_TINT_ALPHA = 0.1;
@@ -427,15 +474,88 @@ function tint(hex, alpha) {
 }
 
 // One side of one row as Plotly needs it. Headings and untested sides
-// draw nothing: no bar, no end label, no hover.
+// draw no bar; an untested side at a slider limit gets a label of its own
+// from limitAnnotations instead.
 function sideCell(slot, k, base) {
   const side = slot.heading ? null : slot.sides[k];
   if (side === null || side.untested) return { x: null, text: "", hover: "" };
+  const atLimit = side.limit === null ? "" : ` (the slider ${LIMIT_WORDS[side.limit]})`;
   return {
     x: side.end - base,
-    text: side.tested ?? "",
-    hover: `${testedPhrase(slot, side)}<br>${aheadBy(side.end)}`,
+    text: endLabel(side),
+    hover: `${testedPhrase({ ...slot, label: shortLabel(slot.label) }, side)}${atLimit}<br>${aheadBy(side.end)}`,
   };
+}
+
+// A side already at its slider limit tests nothing, so it has no bar. A
+// label at your verdict says why that side is empty. It sits where the
+// bar would have gone: away from the other side's bar.
+function limitAnnotations(slots, base) {
+  return slots.flatMap((slot) => {
+    if (slot.heading) return [];
+    return slot.sides.flatMap((side, k) => {
+      if (!side.untested || side.limit === null) return [];
+      const otherGoesRight = slot.sides[1 - k].end > base;
+      return [
+        {
+          name: "limit-label",
+          x: base,
+          y: slot.label,
+          xanchor: otherGoesRight ? "right" : "left",
+          xshift: otherGoesRight ? -4 : 4,
+          text: endLabel(side),
+          hovertext: `${shortLabel(slot.label)} is already at its slider ${LIMIT_WORDS[side.limit]}, so it can't be tested ${side.direction}.`,
+          showarrow: false,
+          font: { color: MUTED, size: 11 },
+          hoverlabel: { bgcolor: BAR }, // the bars' own hover style
+        },
+      ];
+    });
+  });
+}
+
+// The plot's width before Plotly lays it out. On a phone the margins are
+// fixed; on a wider chart the left margin grows to fit the longest row name.
+function plotWidthEstimate(el, slots) {
+  if (el.clientWidth < NARROW_CHART_PX) return el.clientWidth - NARROW_MARGIN.l - NARROW_MARGIN.r;
+  const longest = Math.max(...slots.map((s) => s.label.length));
+  return el.clientWidth - baseLayout("").margin.r - longest * ROW_NAME_CHAR_PX;
+}
+
+// The empty margin beside the plot that a label may run into. On a phone
+// both side margins are empty; on a wider chart the left one holds the row
+// names.
+function spareMargins(el) {
+  return el.clientWidth < NARROW_CHART_PX ? NARROW_MARGIN : { l: 0, r: baseLayout("").margin.r };
+}
+
+// The share of the plot width a label beside a line needs, after it uses
+// the empty margin on the side it runs to. A label anchored by its right
+// end runs left of its line.
+function sideLabelShare(label, plotPx, spare) {
+  const px = label.text.length * SIDE_LABEL_CHAR_PX + SIDE_LABEL_GAP_PX - (label.xanchor === "right" ? spare.l : spare.r);
+  return Math.min(MAX_LABEL_SHARE, Math.max(0, px) / plotPx);
+}
+
+// The share of the axis between a label's line and the edge it runs to.
+// A label anchored by its right end runs left of its line.
+function roomBeside(label, [x0, x1]) {
+  return (label.xanchor === "right" ? label.x - x0 : x1 - label.x) / (x1 - x0);
+}
+
+// Each request asks for at least `share` of the axis between a label's
+// line and the edge the label runs to. The axis grows on that side until
+// it has it. Growing one edge narrows the room beside every other line,
+// so the two edges are grown in turn.
+function roomForLabels(range, requests) {
+  let [x0, x1] = range;
+  for (let round = 0; round < ROOM_ROUNDS; round++) {
+    for (const { x, xanchor, share } of requests) {
+      if (xanchor === "right" && x - x0 < share * (x1 - x0)) x0 = x - (share * (x1 - x)) / (1 - share);
+      if (xanchor === "left" && x1 - x < share * (x1 - x0)) x1 = x + (share * (x - x0)) / (1 - share);
+    }
+  }
+  return [x0, x1];
 }
 
 export function renderTornadoChart(el, tornado) {
@@ -485,7 +605,31 @@ export function renderTornadoChart(el, tornado) {
   lo = Math.min(lo, -span * MIN_HALF_FRACTION);
   hi = Math.max(hi, span * MIN_HALF_FRACTION);
   const pad = (hi - lo) * END_LABEL_PAD;
-  const range = [lo - pad, hi + pad];
+  // The direction of each half, pinned to the tie line.
+  const directionLabels = [
+    { x: 0, xanchor: "right", xshift: -6, yref: "paper", y: 1, yanchor: "bottom", text: "← Renting ahead", showarrow: false, font: { color: RENT, size: 11 } },
+    { x: 0, xanchor: "left", xshift: 6, yref: "paper", y: 1, yanchor: "bottom", text: "Buying ahead →", showarrow: false, font: { color: BUY, size: 11 } },
+  ];
+  // A limit label starts at your verdict, and each tested value starts at
+  // its bar's end and runs outward, so each needs room of its own when it
+  // starts near an edge. Making that room squeezes the other side, so each
+  // direction label keeps the room it had, or what it needs if that is
+  // less. When every label already fits, the axis stays as it was.
+  const limitLabels = limitAnnotations(slots, base);
+  const endLabels = slots.flatMap((slot) =>
+    slot.heading
+      ? []
+      : slot.sides
+          .filter((side) => !side.untested && side.tested !== null)
+          .map((side) => ({ x: side.end, xanchor: side.end > base ? "left" : "right", text: endLabel(side) })),
+  );
+  const plotPx = plotWidthEstimate(el, slots);
+  const spare = spareMargins(el);
+  const start = [lo - pad, hi + pad];
+  const range = roomForLabels(start, [
+    ...[...limitLabels, ...endLabels].map((a) => ({ ...a, share: sideLabelShare(a, plotPx, spare) })),
+    ...directionLabels.map((a) => ({ ...a, share: Math.min(sideLabelShare(a, plotPx, spare), roomBeside(a, start)) })),
+  ]);
 
   const layout = baseLayout("Buy − Rent");
   moveCurrencyToXAxis(layout);
@@ -511,14 +655,14 @@ export function renderTornadoChart(el, tornado) {
   // of each half underneath, both pinned to the line they describe.
   layout.annotations = [
     { x: base, yref: "paper", y: 1, yanchor: "bottom", yshift: 18, text: "You are here", showarrow: false, font: { color: TEXT, size: 11 } },
-    { x: 0, xanchor: "right", xshift: -6, yref: "paper", y: 1, yanchor: "bottom", text: "← Renting ahead", showarrow: false, font: { color: RENT, size: 11 } },
-    { x: 0, xanchor: "left", xshift: 6, yref: "paper", y: 1, yanchor: "bottom", text: "Buying ahead →", showarrow: false, font: { color: BUY, size: 11 } },
+    ...directionLabels,
   ];
+  layout.annotations.push(...limitLabels);
   if (el.clientWidth < NARROW_CHART_PX) {
     layout.yaxis.showticklabels = false;
     layout.yaxis.automargin = false;
     layout.xaxis.automargin = true;
-    layout.margin = { ...layout.margin, l: 16, r: 24 };
+    layout.margin = { ...layout.margin, ...NARROW_MARGIN };
     layout.bargap = 0.5;
     // Each label's bottom edge sits on its bar's top edge: a bar fills
     // (1 - bargap) of its category slot, centred on the category. A

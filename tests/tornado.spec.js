@@ -131,15 +131,124 @@ test.describe('the chart', () => {
     expect(ends.sort()).toEqual(['$400k', '$600k']);
   });
 
-  test('a side stopped at its slider limit draws nothing', async ({ page }) => {
-    await load(page, '?downPaymentPct=50'); // the slider maximum: it can only go down
+  test('a side clamped at a slider limit says which limit', async ({ page }) => {
+    await load(page, '?downPaymentPct=47'); // +5 points would be 52%; the slider stops at 50%
     const sides = await page.evaluate(() => {
       const el = document.getElementById('tornado-chart');
       const row = el.data[0].y.indexOf('Down payment');
-      return el.data.map((t) => ({ x: t.x[row], text: t.text[row], hover: t.customdata[row] }));
+      return el.data.map((t) => ({ text: t.text[row], hover: t.customdata[row] }));
+    });
+    expect(sides[0].text).toBe('42%');
+    expect(sides[0].hover).not.toContain('slider');
+    expect(sides[1].text).toBe('50% (max)');
+    expect(sides[1].hover).toMatch(
+      /^Down payment at 50% instead of 47% \(the slider maximum\)<br>(Buying|Renting) ahead by /,
+    );
+  });
+
+  test('no end label is marked when no test reaches a limit', async ({ page }) => {
+    await load(page);
+    const texts = await page.evaluate(() =>
+      document.getElementById('tornado-chart').data.flatMap((t) => t.text),
+    );
+    expect(texts.filter((t) => /\((min|max)\)/.test(t))).toEqual([]);
+    expect(await page.evaluate(() =>
+      document.getElementById('tornado-chart').layout.annotations.filter((a) => a.name === 'limit-label').length,
+    )).toBe(0);
+  });
+
+  test('a side already at its slider limit is labelled at your verdict', async ({ page }) => {
+    await load(page, '?downPaymentPct=50'); // the slider maximum: it can only go down
+    const { sides, labels, base } = await page.evaluate(() => {
+      const el = document.getElementById('tornado-chart');
+      const row = el.data[0].y.indexOf('Down payment');
+      return {
+        sides: el.data.map((t) => ({ x: t.x[row], text: t.text[row], hover: t.customdata[row] })),
+        labels: el.layout.annotations.filter((a) => a.name === 'limit-label'),
+        base: el.data[0].base,
+      };
     });
     expect(sides[0].text).toBe('45%');
-    expect(sides[1]).toEqual({ x: null, text: '', hover: '' });
+    expect(sides[1]).toEqual({ x: null, text: '', hover: '' }); // still no bar
+    expect(labels).toHaveLength(1);
+    expect(labels[0]).toMatchObject({
+      y: 'Down payment',
+      x: base,
+      text: '50% (max)',
+      hovertext: "Down payment is already at its slider maximum, so it can't be tested higher.",
+    });
+    await expect(page.locator('#tornado-chart .annotation-text', { hasText: '50% (max)' })).toBeVisible();
+  });
+
+  test('a limit label hovers in the same style as the bars', async ({ page }) => {
+    await load(page, '?downPaymentPct=50');
+    const { label, bar } = await page.evaluate(() => {
+      const el = document.getElementById('tornado-chart');
+      return {
+        label: el.layout.annotations.find((a) => a.name === 'limit-label').hoverlabel?.bgcolor,
+        bar: el.data[0].marker.color,
+      };
+    });
+    expect(label).toBe(bar);
+  });
+
+  test('a limit hover names the row as the summary does, without its bracketed qualifier', async ({ page }) => {
+    await load(page, '?equityGrowthAnnual=13'); // the higher test stops at the 15% maximum
+    const hover = await page.evaluate(() => {
+      const el = document.getElementById('tornado-chart');
+      return el.data[1].customdata[el.data[1].y.indexOf('Equity growth (CAGR)')];
+    });
+    expect(hover).toMatch(/^Equity growth at 15\.0% instead of 13\.0% \(the slider maximum\)<br>/);
+
+    await load(page, '?propertyTaxRate=5'); // the slider maximum: it can only go down
+    const labels = await page.evaluate(() =>
+      document.getElementById('tornado-chart').layout.annotations.filter((a) => a.name === 'limit-label'),
+    );
+    expect(labels).toHaveLength(1);
+    expect(labels[0].hovertext).toBe("Property levy is already at its slider maximum, so it can't be tested higher.");
+  });
+
+  test('a side already at its slider minimum says so', async ({ page }) => {
+    await load(page, '?monthlyRent=500'); // the slider minimum: it can only go up
+    const labels = await page.evaluate(() =>
+      document.getElementById('tornado-chart').layout.annotations.filter((a) => a.name === 'limit-label'),
+    );
+    expect(labels).toHaveLength(1);
+    expect(labels[0]).toMatchObject({
+      y: 'Monthly rent',
+      text: '$500 (min)',
+      hovertext: "Monthly rent is already at its slider minimum, so it can't be tested lower.",
+    });
+  });
+
+  test('the summary never carries a limit mark', async ({ page }) => {
+    for (const query of ['?downPaymentPct=50', '?downPaymentPct=47', '?monthlyRent=500', '?propertyPrice=1900000']) {
+      await load(page, query);
+      await expect(page.locator('#tornado-summary')).not.toContainText(/\((min|max)\)/);
+    }
+  });
+
+  test('a clamped side that flips the verdict is named without its mark', async ({ page }) => {
+    // Buying is ahead in 68% of futures. +20% on the home price would be
+    // $2.04M; the slider stops at $2.0M, and there renting is ahead.
+    await load(page, '?propertyPrice=1700000&monthlyRent=9750');
+    const summary = page.locator('#tornado-summary');
+    await expect(summary).toContainText('could flip the answer to renting');
+    await expect(summary).toContainText('home price at $2.0M instead of $1.7M');
+    await expect(summary).not.toContainText(/\((min|max)\)/);
+    const ends = await page.evaluate(() => {
+      const el = document.getElementById('tornado-chart');
+      const row = el.data[0].y.indexOf('Home price');
+      return el.data.map((t) => t.text[row]);
+    });
+    expect(ends).toContain('$2.0M (max)');
+  });
+
+  test('the note says how a limit is marked', async ({ page }) => {
+    await load(page);
+    const note = page.locator('#tornado-note');
+    await note.locator('summary').click();
+    await expect(note).toContainText('A side that stops at a limit is marked (min) or (max).');
   });
 
   test('both sides of a bar share one neutral colour', async ({ page }) => {
@@ -196,6 +305,66 @@ test.describe('on a phone', () => {
     });
     expect([...labels].sort()).toEqual([...rows].sort());
   });
+
+  test('a limit label stays inside the chart', async ({ page }) => {
+    await load(page, '?downPaymentPct=50');
+    const out = await page.evaluate(() => {
+      const el = document.getElementById('tornado-chart');
+      const box = el.getBoundingClientRect();
+      const label = [...el.querySelectorAll('.annotation-text')].find((t) => t.textContent === '50% (max)');
+      if (label === undefined) return { found: false, inside: false };
+      const r = label.getBoundingClientRect();
+      return { found: true, inside: r.left >= box.left && r.right <= box.right };
+    });
+    expect(out).toEqual({ found: true, inside: true });
+  });
+
+  // Labels that start near an edge of the chart: in the first two, every
+  // input that can sit at a slider limit sits at one, and your verdict lies
+  // close to one edge; in the third, a marked bar end lies close to the
+  // right edge.
+  const EDGE_CASES = [
+    {
+      name: 'your verdict is near the left edge',
+      query: '?propertyPrice=2000000&downPaymentPct=50&mortgageRateAnnual=10&propertyAppreciationAnnual=0&equityGrowthAnnual=15&monthlyRent=500&horizonYears=40&rentInflationRate=0&propertyTaxRate=5',
+      limitLabels: 7,
+    },
+    {
+      name: 'your verdict is near the right edge',
+      query: '?propertyPrice=2000000&monthlyRent=10000&mortgageRateAnnual=1&propertyAppreciationAnnual=10&rentInflationRate=0.1&equityGrowthAnnual=15&propertyTaxRate=0&horizonYears=40&downPaymentPct=5',
+      limitLabels: 7,
+    },
+    {
+      name: 'a marked bar end is near the right edge',
+      query: '?propertyAppreciationAnnual=9.5&equityGrowthAnnual=0&horizonYears=40',
+      limitLabels: 0,
+    },
+  ];
+  for (const { name, query, limitLabels } of EDGE_CASES) {
+    test(`every label stays inside the chart when ${name}`, async ({ page }) => {
+      await load(page, query);
+      const out = await page.evaluate(() => {
+        const el = document.getElementById('tornado-chart');
+        const box = el.getBoundingClientRect();
+        const annotations = el.layout.annotations.flatMap((a, i) =>
+          a.name === 'limit-label' || /ahead/.test(a.text) ? [el.querySelector(`.annotation[data-index="${i}"]`)] : [],
+        );
+        const labels = [...annotations, ...el.querySelectorAll('text.bartext')];
+        return {
+          limitLabels: el.layout.annotations.filter((a) => a.name === 'limit-label').length,
+          endLabels: el.querySelectorAll('text.bartext').length,
+          outside: labels.flatMap((t) => {
+            const r = t.getBoundingClientRect();
+            const inside = r.left >= box.left && r.right <= box.right && r.top >= box.top && r.bottom <= box.bottom;
+            return inside ? [] : [t.textContent];
+          }),
+        };
+      });
+      expect(out.limitLabels).toBe(limitLabels);
+      expect(out.endLabels).toBeGreaterThan(0);
+      expect(out.outside).toEqual([]);
+    });
+  }
 
   test('the tested values at the bar ends stay inside the chart', async ({ page }) => {
     await load(page);
