@@ -17,7 +17,7 @@ function applySharedWelcome(welcome) {
   welcome.querySelector(".welcome-hero-sub").textContent = "Their numbers are already filled in";
   welcome.querySelector(".welcome-intro").textContent =
     "This calculator compares buying a home with renting and investing the difference. " +
-    "The link has already filled in their numbers, so the answer is ready. " +
+    "The answer for their numbers is ready below. " +
     "Change any number to try your own.";
   const view = document.getElementById("start-sim-btn");
   const tourBtn = document.getElementById("start-tour-btn");
@@ -283,14 +283,26 @@ let bannerSource = null;
 
 // Wired here (not inline onclick) so the CSP script-src can omit 'unsafe-inline'.
 export function initErrorBanner({ onRetry, onDismiss }) {
+  const banner = document.getElementById("error-banner");
+  // Focus on a button the banner just hid would be lost, so it moves to
+  // the results the banner was about.
+  const leaveBanner = () => {
+    if (!banner.classList.contains("visible") && banner.contains(document.activeElement)) {
+      document.getElementById("verdict-hero").focus({ preventScroll: true });
+    }
+  };
   document.getElementById("error-retry").addEventListener("click", (e) => {
     if (e.isTrusted) {
       trackEvent("error-retried", { source: bannerSource === "monteCarlo" ? "monte-carlo" : "simulate" });
     }
     onRetry(bannerSource);
+    leaveBanner();
   });
   document.getElementById("error-reload").addEventListener("click", () => location.reload());
-  document.getElementById("error-dismiss").addEventListener("click", onDismiss);
+  document.getElementById("error-dismiss").addEventListener("click", () => {
+    onDismiss();
+    leaveBanner();
+  });
 }
 
 // `action` is "retry" or "reload": the one fix the banner offers.

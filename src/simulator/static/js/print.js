@@ -75,7 +75,10 @@ export function initPrint(regions) {
   let printing = false;
   window.addEventListener("beforeprint", () => {
     fillSummary(regions);
-    if (!printing) caveatsWereOpen = caveats.open;
+    if (!printing) {
+      caveatsWereOpen = caveats.open;
+      trackEvent("page-printed");
+    }
     printing = true;
     caveats.open = true;
     sizeCharts(`${PRINT_CHART_PX}px`);
@@ -83,7 +86,6 @@ export function initPrint(regions) {
     for (const chart of document.querySelectorAll(".chart")) {
       if (chart._fullLayout) Plotly.relayout(chart, { paper_bgcolor: "#000", plot_bgcolor: "#000" });
     }
-    trackEvent("page-printed");
   });
   window.addEventListener("afterprint", () => {
     printing = false;

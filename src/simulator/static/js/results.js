@@ -163,8 +163,9 @@ const NUMBER_COLUMNS = [
   { label: "Net (rent)", csv: (c) => `Net value rent side (${c})`, key: "netRent" },
 ];
 
-// CSV headers name the currency as an ASCII code, which every spreadsheet reads.
-const CURRENCY_CODES = { $: "USD", "€": "EUR", "£": "GBP" };
+// CSV headers name the currency as an ASCII code, which every spreadsheet
+// reads. By region, because two regions can share a symbol.
+const REGION_CURRENCY = { us: "USD", fr: "EUR", de: "EUR", nl: "EUR", uk: "GBP" };
 
 function renderTable(series) {
   // Yearly rows for readability; CSV export (below) keeps every month.
@@ -185,8 +186,8 @@ function renderTable(series) {
 // `cfg` is the config the table on screen was computed for, so the file
 // name always matches the rows in the file.
 export function downloadCsv(series, cfg) {
-  const symbol = getCurrencySymbol();
-  const code = CURRENCY_CODES[symbol] ?? symbol;
+  // A link that matches no region keeps its symbol.
+  const code = REGION_CURRENCY[getRegionId()] ?? getCurrencySymbol();
   const lines = [
     ["Month", "Year", ...NUMBER_COLUMNS.map((c) => c.csv(code))].join(","),
     ...series.year.map((year, i) =>

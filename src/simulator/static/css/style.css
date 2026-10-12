@@ -209,17 +209,17 @@ body {
   flex-direction: column;
   gap: 16px;
 }
+/* A readable line length on very wide screens. Width 100%, because auto
+   side margins would otherwise stop the cards from stretching. */
+#results > * { width: 100%; max-width: 1200px; margin-inline: auto; }
 /* Floats over the top of the results and stays in view when they scroll.
    It is always in the layout (zero height, negative margin cancelling the
    column gap), so showing it never moves the cards. The sticky offset
    counts from inside #results' 20px top padding: the chip's centre sits
-   21px below the top of the visible results, its top edge 8px below. */
-/* A readable line length on very wide screens. Width 100%, because auto
-   side margins would otherwise stop the cards from stretching. */
-#results > * { width: 100%; max-width: 1200px; margin-inline: auto; }
+   26px below the top of the visible results, its top edge 13px below. */
 #results-spinner {
   position: sticky;
-  top: 1px;
+  top: 6px;
   z-index: 5;
   height: 0;
   margin-bottom: -16px;
@@ -239,7 +239,9 @@ body {
   border: 1px solid var(--border);
   color: var(--text-2);
   font-size: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  /* A ring of page colour keeps it clear of the card edges and chart text
+     it floats over. */
+  box-shadow: 0 0 0 6px var(--bg), 0 4px 12px rgba(0, 0, 0, 0.35);
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.15s ease, visibility 0s linear 0.15s;
@@ -469,6 +471,8 @@ input[type="range"]::-moz-range-thumb {
 #print-summary { display: none; }
 
 /* Verdict hero */
+/* Focusable only from script (after the error banner closes), so no ring. */
+#verdict-hero:focus { outline: none; }
 #verdict-hero {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -825,7 +829,7 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   /* Bottom room so the pinned Edit button never covers the footer. */
   #results { padding: 14px 14px 88px; }
   /* The page scrolls here, so the offset is from the top of the screen. */
-  #results-spinner { top: 21px; }
+  #results-spinner { top: 26px; }
   /* One line: the name and (from layout.js) the Guide button. The author
      and repo links live in the footer. */
   #title-bar .badge,

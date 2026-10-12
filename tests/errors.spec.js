@@ -138,6 +138,46 @@ test('a failed update can be tried again', async ({ page }) => {
   await expect(page.locator('#verdict-confidence')).toContainText('% of simulated futures');
 });
 
+test('a change retires the banner for the config it left', async ({ page }) => {
+  await load(page);
+  const mcRequests = countRequests(page, '/api/monte-carlo');
+  await page.route('**/api/monte-carlo', (route) => route.fulfill(BOOM));
+  await dragPrice(page, 1295000);
+  await expect(banner(page)).toHaveText(/Couldn't work out how sure the answer is: boom/);
+  await expect.poll(mcRequests).toBe(1);
+
+  // The next price's run is pending: the old failure no longer applies.
+  await page.unroute('**/api/monte-carlo');
+  const held = [];
+  await page.route('**/api/monte-carlo', async (route) => {
+    const response = await route.fetch();
+    held.push(() => route.fulfill({ response }));
+  });
+  await dragPrice(page, 1300000);
+  await expect(banner(page)).toBeHidden();
+  await expect(page.locator('#results-spinner .busy-chip')).toBeVisible();
+
+  await expect.poll(() => held.length).toBe(1);
+  await Promise.all(held.map((answer) => answer()));
+  await expect(page.locator('#verdict-confidence')).toContainText('% of simulated futures');
+  expect(mcRequests()).toBe(2);
+  expect(await banner(page).isVisible()).toBe(false);
+});
+
+for (const button of ['#error-dismiss', '#error-retry']) {
+  test(`focus moves to the results when ${button} closes the banner`, async ({ page }) => {
+    await load(page);
+    await page.route('**/api/simulate', (route) => route.fulfill(BOOM));
+    await dragPrice(page, 1295000);
+    await expect(banner(page)).toBeVisible();
+    await page.unroute('**/api/simulate');
+    await page.locator(button).focus();
+    await page.keyboard.press('Enter');
+    await expect(banner(page)).toBeHidden();
+    await expect(page.locator('#verdict-hero')).toBeFocused();
+  });
+}
+
 test('a dismissed banner comes back on the next failure', async ({ page }) => {
   await load(page);
   await page.route('**/api/simulate', (route) => route.fulfill(BOOM));

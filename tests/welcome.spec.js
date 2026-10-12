@@ -86,6 +86,9 @@ test('a shared link opens on a welcome that offers to view it', async ({ page })
   await openFresh(page, SHARED);
   await expect(page.locator('#welcome-title')).toHaveText('Someone shared a scenario with you');
   await expect(page.locator('.welcome-hero-sub')).toHaveText('Their numbers are already filled in');
+  await expect(page.locator('.welcome-intro')).toHaveText(
+    'This calculator compares buying a home with renting and investing the difference. The answer for their numbers is ready below. Change any number to try your own.',
+  );
   const first = page.locator('.welcome-actions button').first();
   await expect(first).toHaveId('start-sim-btn');
   await expect(first).toHaveText('View this shared scenario');

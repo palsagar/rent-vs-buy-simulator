@@ -164,8 +164,13 @@ test('csv-downloaded fires when the CSV is downloaded', async ({ page }) => {
 
 test('page-printed fires when the page is printed', async ({ page }) => {
   await loadTracked(page);
-  await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
+  // Twice, as Chromium does for a print-to-PDF inside a print preview.
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('beforeprint'));
+    window.dispatchEvent(new Event('beforeprint'));
+  });
   await expect.poll(() => eventNames(page)).toContain('page-printed');
+  expect((await eventNames(page)).filter((n) => n === 'page-printed')).toHaveLength(1);
 });
 
 test('error-retried fires when Try again is clicked', async ({ page }) => {
