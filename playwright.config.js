@@ -6,8 +6,17 @@ export default defineConfig({
   timeout: 30_000,
   fullyParallel: false,
   workers: 1,
+  // CI only: fail the build on a stray test.only, retry once to absorb a CDN
+  // (Plotly) or runner-speed blip, and write an HTML report for the artifact
+  // upload. Locally the html reporter would open a server, so keep it off.
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 1 : 0,
+  reporter: process.env.CI
+    ? [['list'], ['github'], ['html', { open: 'never' }]]
+    : 'list',
   use: {
     baseURL: 'http://127.0.0.1:8323',
+    trace: 'on-first-retry',
   },
   webServer: [
     {
