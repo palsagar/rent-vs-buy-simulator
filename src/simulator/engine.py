@@ -141,7 +141,8 @@ def _net_value_series(
     through t (CONTEXT.md: "Net Value"). Both strategies commit the same
     cash each month; the cheaper side invests the difference in equities
     (CONTEXT.md: "Cash-flow matching"). Capital-gains and deduction tax
-    primitives are applied inline (ADR-0007).
+    primitives are applied inline (ADR-0007), and the buyer invests each
+    year's deduction refund as it arrives (ADR-0013).
 
     Parameters
     ----------
@@ -298,6 +299,33 @@ def _net_value_series(
     contrib_rent = np.maximum(surplus, 0.0)
     contrib_buy = np.maximum(-surplus, 0.0)
 
+    # --- Deduction savings: (interest + capped levy) * marginal rate,
+    # refunded at the end of each completed year. cum_tax_savings records
+    # what has been received, at face value; the refunds themselves are
+    # invested below (ADR-0013).
+    cum_tax_savings = np.zeros(h + 1)
+    refunds = np.zeros(h + 1)
+    if (
+        config.interest_deduction_enabled
+        and config.marginal_tax_rate_pct > _FLOAT_TOLERANCE
+    ):
+        yearly_interest = interest[1:].reshape(config.horizon_years, 12).sum(axis=1)
+        yearly_levy = levy[1:].reshape(config.horizon_years, 12).sum(axis=1)
+        if config.levy_deduction_cap is not None:
+            yearly_levy = np.minimum(yearly_levy, config.levy_deduction_cap)
+        yearly_savings = (yearly_interest + yearly_levy) * (
+            config.marginal_tax_rate_pct / 100
+        )
+        cum_by_year = np.concatenate([[0.0], np.cumsum(yearly_savings)])
+        cum_tax_savings = cum_by_year[t_arr // 12]
+        # Each year's refund arrives in the month that closes the year.
+        refunds[12::12] = yearly_savings
+
+    # The buyer invests each refund as it arrives, alongside any monthly
+    # surplus (ADR-0013). It is money coming back, not a lower cost, so
+    # neither side's costs nor the cash both sides commit change.
+    invested_buy = contrib_buy + refunds
+
     # Portfolio value with varying growth: V[t] = G[t]*(V0 + sum c[m]/G[m])
     # NL box 3 (Wet IB 2001 art. 5.25): taxed on min(deemed, actual)
     # return, floored at nil. Both operands are proportional to wealth,
@@ -314,9 +342,9 @@ def _net_value_series(
     drag_monthly = np.repeat(taxable * (config.portfolio_drag_rate_pct / 100) / 12, 12)
     eq_growth = np.concatenate([[1.0], np.cumprod(1 + eq_rate_monthly - drag_monthly)])
     rent_portfolio = eq_growth * (initial_outlay + np.cumsum(contrib_rent / eq_growth))
-    buy_portfolio = eq_growth * np.cumsum(contrib_buy / eq_growth)
+    buy_portfolio = eq_growth * np.cumsum(invested_buy / eq_growth)
     basis_rent = initial_outlay + np.cumsum(contrib_rent)
-    basis_buy = np.cumsum(contrib_buy)
+    basis_buy = np.cumsum(invested_buy)
 
     # --- Cash committed: identical for both strategies by construction
     cash_committed = initial_outlay + np.cumsum(
@@ -324,23 +352,6 @@ def _net_value_series(
     )
     outflow_buy = initial_outlay + np.cumsum(housing_cost_buy)
     outflow_rent = np.cumsum(housing_cost_rent)
-
-    # --- Deduction savings: (interest + capped levy) * marginal rate,
-    # credited at the end of each completed year
-    cum_tax_savings = np.zeros(h + 1)
-    if (
-        config.interest_deduction_enabled
-        and config.marginal_tax_rate_pct > _FLOAT_TOLERANCE
-    ):
-        yearly_interest = interest[1:].reshape(config.horizon_years, 12).sum(axis=1)
-        yearly_levy = levy[1:].reshape(config.horizon_years, 12).sum(axis=1)
-        if config.levy_deduction_cap is not None:
-            yearly_levy = np.minimum(yearly_levy, config.levy_deduction_cap)
-        yearly_savings = (yearly_interest + yearly_levy) * (
-            config.marginal_tax_rate_pct / 100
-        )
-        cum_by_year = np.concatenate([[0.0], np.cumsum(yearly_savings)])
-        cum_tax_savings = cum_by_year[t_arr // 12]
 
     # --- Sale capital gains: the profit after buying and selling costs
     # (ADR-0012), then the region's regime (ADR-0007). What the sale
@@ -367,7 +378,8 @@ def _net_value_series(
 
     # --- Liquidation-priced Net Value at every t (ADR-0001). Selling
     # costs are paid out of the sale here and, above, reduce the taxed
-    # profit: both are real, so neither is counted twice.
+    # profit: both are real, so neither is counted twice. The tax refunds
+    # are inside buy_portfolio, so they are not added again (ADR-0013).
     net_buy = (
         home_value
         - balance
@@ -375,7 +387,6 @@ def _net_value_series(
         - sale_cg_tax
         + buy_portfolio
         - portfolio_tax_buy
-        + cum_tax_savings
         - cash_committed
     )
     net_rent = rent_portfolio - portfolio_tax_rent - cash_committed

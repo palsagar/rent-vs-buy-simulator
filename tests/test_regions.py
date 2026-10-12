@@ -13,12 +13,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-import numpy as np
-
 from simulator.api import config_from_dict
-from simulator.engine import monthly_rate_from_annual
 from simulator.regions import list_regions
-from tests.test_engine_core import run_flat
 
 _FIELDS_JS = Path(__file__).parent.parent / "src/simulator/static/js/fields.js"
 
@@ -307,52 +303,15 @@ class TestMortgageInsuranceAcrossRegions:
                 ), region["id"]
 
 
-def _refund_growth(region_id: str) -> float:
-    """What investing each year's tax refund would add to Buy.
-
-    Each refund is credited at a year end and grows to the horizon at the
-    equity rate less any box-3 drag; the growth is taxed at the portfolio
-    rate. At the bundle's own defaults with the first-time-buyer relief.
-
-    Examples
-    --------
-    .. code-block:: python
-
-        assert 24_000 < _refund_growth("us") < 26_000
-
-    """
-    region = next(r for r in _available() if r["id"] == region_id)
-    config = _config_for(region, first_time_buyer=True)
-    savings = run_flat(config)["cum_tax_savings"]
-    refunds = np.diff(savings[::12])
-    monthly = monthly_rate_from_annual(config.equity_growth_annual / 100)
-    drag = (
-        min(config.portfolio_deemed_return_pct, config.equity_growth_annual)
-        * config.portfolio_drag_rate_pct
-        / 100
-        / 100
-        / 12
-    )
-    yearly = (1 + monthly - drag) ** 12
-    years_left = config.horizon_years - np.arange(1, config.horizon_years + 1)
-    growth = float(np.sum(refunds * (yearly**years_left - 1)))
-    return growth * (1 - config.portfolio_cg_rate_pct / 100)
-
-
-class TestDeductionSavingsDisclosure:
-    def test_regions_with_the_deduction_on_say_the_savings_are_not_invested(self):
-        # formulas.md section 6: the yearly tax saving counts at face value
-        # and is never invested, a simplification that favours renting.
+class TestDeductionRefunds:
+    def test_regions_with_the_deduction_on_say_the_refund_is_invested(self):
+        # ADR-0013: each year's refund is invested as it arrives. The note
+        # states that assumption, since a person might spend it instead.
         for region in _available():
             if region["taxPrimitives"]["interestDeductionEnabled"]:
-                assert any("face value" in note for note in region["notes"]), region[
-                    "id"
-                ]
-
-    def test_the_stated_size_of_that_bias_matches_the_engine(self):
-        # The notes say "about $25,000" (US) and "about €14,500" (NL).
-        assert 24_500 <= _refund_growth("us") <= 25_500
-        assert 14_000 <= _refund_growth("nl") <= 15_000
+                assert any(
+                    "assumes you invest it" in note for note in region["notes"]
+                ), region["id"]
 
 
 class TestFrance:

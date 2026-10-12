@@ -7,15 +7,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import numpy as np
+import numpy_financial as npf
 
+from simulator.engine import monthly_rate_from_annual
 from simulator.models import SimulationConfig
 from tests.test_engine_core import run_flat, taxfree_config
 
 
 class TestInterestDeduction:
     def test_savings_credited_after_each_completed_year(self):
-        # At face value and never invested: disclosed in formulas.md §6 and
-        # the US and NL notes, which test_regions.py checks.
+        # cum_tax_savings records the refunds received, at face value. The
+        # refunds themselves are invested (TestRefundsAreInvested).
         cfg = taxfree_config(
             interest_deduction_enabled=True,
             marginal_tax_rate_pct=25.0,
@@ -50,6 +52,83 @@ class TestInterestDeduction:
     def test_disabled_means_zero(self):
         s = run_flat(taxfree_config(property_tax_rate=1.2))
         assert np.all(np.abs(s["cum_tax_savings"]) < 1e-9)
+
+
+def _yearly_refunds(rate: float) -> tuple[float, float]:
+    """The two yearly refunds of the taxfree_config mortgage, by npf.
+
+    90,000 borrowed at 6% over 30 years; the refund is the year's
+    interest times the marginal rate (taxfree_config has no levy).
+
+    Examples
+    --------
+    .. code-block:: python
+
+        r1, r2 = _yearly_refunds(0.25)   # about 1,342 and 1,325
+
+    """
+    interest = [-npf.ipmt(0.06 / 12, per, 360, 90_000) for per in range(1, 25)]
+    return rate * sum(interest[:12]), rate * sum(interest[12:])
+
+
+class TestRefundsAreInvested:
+    """Each year's tax refund joins the buyer's portfolio in the month it
+    arrives, then grows and is taxed like the rest of it (ADR-0013).
+
+    In taxfree_config the buyer pays 539.60 a month against 500 rent, so
+    buying is the dearer side throughout and the buyer invests nothing
+    else: the buyer's portfolio holds the refunds alone.
+    """
+
+    @staticmethod
+    def _pair(**overrides: object) -> tuple[dict, dict]:
+        kwargs = dict(marginal_tax_rate_pct=25.0, equity_growth_annual=7.0)
+        kwargs.update(overrides)
+        on = run_flat(taxfree_config(interest_deduction_enabled=True, **kwargs))
+        off = run_flat(taxfree_config(interest_deduction_enabled=False, **kwargs))
+        return on, off
+
+    def test_a_refund_compounds_to_the_horizon_and_its_gain_is_taxed(self):
+        # Refund 1 arrives at month 12 and grows exactly 7% by month 24.
+        # Refund 2 arrives at month 24 and has not grown. At a 15% rate
+        # only refund 1's gain is taxed when the portfolio is cashed in.
+        r1, r2 = _yearly_refunds(0.25)
+        on, off = self._pair(portfolio_cg_rate_pct=15.0)
+        expected = r1 * 1.07 + r2 - 0.15 * (r1 * 0.07)
+        assert abs((on["net_buy"][24] - off["net_buy"][24]) - expected) < 1e-6
+        np.testing.assert_allclose(on["net_rent"], off["net_rent"], atol=1e-9)
+
+    def test_a_refund_counts_at_face_value_in_the_month_it_arrives(self):
+        r1, _ = _yearly_refunds(0.25)
+        on, off = self._pair()
+        assert abs(on["net_buy"][11] - off["net_buy"][11]) < 1e-9
+        assert abs((on["net_buy"][12] - off["net_buy"][12]) - r1) < 1e-6
+
+    def test_refunds_pay_the_wealth_tax_like_other_investments(self):
+        # NL box 3: at 7% against a 6% deemed return the portfolio loses
+        # 6% x 36% = 2.16% a year, refunds included.
+        r1, r2 = _yearly_refunds(0.25)
+        on, off = self._pair(
+            portfolio_deemed_return_pct=6.0, portfolio_drag_rate_pct=36.0
+        )
+        growth = (1 + monthly_rate_from_annual(0.07) - 0.06 * 0.36 / 12) ** 12
+        expected = r1 * growth + r2
+        assert abs((on["net_buy"][24] - off["net_buy"][24]) - expected) < 1e-6
+
+    def test_refunds_change_no_cost_and_no_cash_committed(self):
+        # A refund is money coming back, not a lower cost: what each side
+        # pays and commits each month, and the renter's portfolio, are the
+        # same with or without it. Only what the buyer invests grows.
+        r1, r2 = _yearly_refunds(0.25)
+        on, off = self._pair()
+        for key in (
+            "housing_cost_buy",
+            "housing_cost_rent",
+            "cash_committed",
+            "rent_portfolio",
+        ):
+            np.testing.assert_allclose(on[key], off[key], atol=1e-9, err_msg=key)
+        assert abs((on["_basis_buy"][24] - off["_basis_buy"][24]) - (r1 + r2)) < 1e-6
 
 
 def _taxed_sale(**overrides: object) -> SimulationConfig:

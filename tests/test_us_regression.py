@@ -17,10 +17,17 @@ test_fields_untouched_by_the_rate_convention pins them at their old
 values. Every other field moved, because the home value, the rent, the
 cost index and the portfolios all compound at the stated yearly rate.
 
+It was regenerated a second time, deliberately, for ADR-0013: the buyer
+now invests each year's tax refund instead of holding it at face value.
+Exactly three fields moved. final_net_buy and final_difference each rose
+by 24,595.62, the refunds' growth to the horizon after the 15% tax on
+it; breakeven_year moved from 9.000 to 6.979. Nothing else moved, because
+investing a refund changes no cost and no cash committed.
+
 The TORNADO_* constants are perturbation output, and have been
-regenerated three times, deliberately: twice when the perturbation rule
-itself was redefined and once for ADR-0011; see the note above them for
-the standard that applies.
+regenerated four times, deliberately: twice when the perturbation rule
+itself was redefined, once for ADR-0011 and once for ADR-0013; see the
+note above them for the standard that applies.
 """
 
 import sys
@@ -46,10 +53,10 @@ US_PRESET = dict(
 )
 
 GOLDENS = {
-    "final_net_buy": -192348.12944373256,
+    "final_net_buy": -167752.51407563343,
     "final_net_rent": -196408.41741621884,
-    "final_difference": 4060.287972486287,
-    "breakeven_year": 8.999823497118234,
+    "final_difference": 28655.903340585413,
+    "breakeven_year": 6.978868460474478,
     "monthly_mortgage_payment": 2528.2720939718615,
     "monthly_cost_buy_year1": 3558.616384594503,
     "monthly_cost_rent_year1": 2432.8238813857533,
@@ -127,6 +134,21 @@ RATE_INDEPENDENT_GOLDENS = {
 # premium (ADR-0002), so the verdict falls by more than was paid. The
 # US default is 20% down, so the summary GOLDENS, the base and the other
 # 15 tornado values stay bit-identical.
+#
+# Regenerated again, deliberately, for ADR-0013 (the buyer invests each
+# year's tax refund). Every bar is an engine re-run with its own refunds,
+# so all 16 values move and the base moves with the verdict; the tested
+# inputs and the rank order are unchanged. Diffed by name:
+#   - Monthly Rent and Rent Inflation move by exactly +24,595.62 on both
+#     sides, the base's own shift: rent changes neither the refunds nor
+#     what they earn.
+#   - Equity Growth moves by +6,950 (low) and +47,283 (high): the refunds
+#     grow at the tested equity rate.
+#   - Property Price, Mortgage Rate, Property Levy and Down Payment move
+#     by +19,676 to +29,515: they change the interest or levy deducted,
+#     so the refunds themselves differ.
+#   - Property Appreciation moves by +24,224 (low) and +25,002 (high): the
+#     levy deducted follows the home's value up to the $10,000 cap.
 TORNADO_NAMES = [
     "Property Appreciation",
     "Equity Growth",
@@ -138,26 +160,26 @@ TORNADO_NAMES = [
     "Down Payment %",
 ]
 TORNADO_LOW = [
-    -118458.07718956331,
-    105699.40307721135,
-    -85744.64550278307,
-    89395.62214526985,
-    45461.37478180759,
-    36065.72384167119,
-    -5546.580837710353,
-    -13813.85702451726,
+    -94233.84686121764,
+    112649.32056000171,
+    -61149.03013468394,
+    109072.11443974907,
+    66942.81779421563,
+    58532.955340805755,
+    19049.034530388773,
+    11999.72672374337,
 ]
 TORNADO_HIGH = [
-    152592.98506998102,
-    -141912.00960823428,
-    93865.22144775564,
-    -81275.04620029719,
-    -38227.09712143912,
-    -28675.280619678786,
-    13912.243867753597,
-    1883.9220347741502,
+    177595.2191370236,
+    -94628.9801950978,
+    118460.83681585477,
+    -51760.307758578216,
+    -10495.243375922146,
+    -1995.2224645387614,
+    38507.859235852724,
+    25261.569022711774,
 ]
-TORNADO_BASE = 4060.287972486287
+TORNADO_BASE = 28655.903340585413
 
 
 class TestUsPresetUnchanged:

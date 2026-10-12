@@ -41,14 +41,14 @@ async function loadTie(page) {
 }
 
 test('a typed price where the two end level reads as a tie, end to end', async ({ page }) => {
-  // At a $504,758 home and every other US default, Buy - Rent is +$0.03.
+  // At a $535,634 home and every other US default, Buy - Rent is +$0.39.
   // Found by bisecting the price; like the amounts in verdict.spec.js, an
-  // engine change can move it ($504,757 is +$0.89, $504,759 is -$0.82).
+  // engine change can move it ($535,633 is +$1.19, $535,636 is -$1.22).
   await page.addInitScript(() => {
     try { localStorage.setItem('rvb.tour.v1', 'done'); } catch (e) {}
   });
   const simulated = page.waitForResponse('**/api/simulate');
-  await page.goto('/?propertyPrice=504758');
+  await page.goto('/?propertyPrice=535634');
   expect((await (await simulated).json()).verdict.winner).toBe('tie');
   await page.waitForFunction(
     () => document.getElementById('verdict-confidence').textContent.length > 0,

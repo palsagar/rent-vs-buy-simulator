@@ -79,7 +79,7 @@ test('while the new result is loading, Share sends the link without the old verd
   // Once the new result is on screen, its verdict travels with the link.
   await held[0].continue();
   const line = page.locator('#verdict-line');
-  await expect(line).not.toContainText('~$4,060');
+  await expect(line).not.toContainText('~$28,656');
   // Read the headline and click in one task, so a later repaint of the
   // headline cannot come between the two.
   const onScreen = await page.evaluate(() => {

@@ -254,11 +254,17 @@ class TestOccupierBorneLevy:
             annual_property_levy=2392.0, levy_paid_by_occupier=True, **kwargs
         )
         r_none, r_both = calculate_scenarios(none), calculate_scenarios(both)
-        # The gap is exactly the tax shield on the levy:
-        #   2392/yr x 5 years x 24% = 2,870.40
-        shield = 2392.0 * 5 * 0.24
-        assert abs(r_both.final_difference - r_none.final_difference - shield) < 1e-6
-        assert abs(r_both.total_tax_savings - r_none.total_tax_savings - shield) < 1e-6
+        # The gap is the tax shield on the levy, invested as it arrives
+        # (ADR-0013): 2392/yr x 24% = 574.08 at the end of each of the 5
+        # years, each grown at 7% to the horizon (no tax in this fixture):
+        #   574.08 x (1 + 1.07 + 1.07^2 + 1.07^3 + 1.07^4) = 3,301.38
+        # The refunds received are still 5 x 574.08 = 2,870.40 at face value.
+        yearly_shield = 2392.0 * 0.24
+        invested = sum(yearly_shield * 1.07**k for k in range(5))
+        gap = r_both.final_difference - r_none.final_difference
+        assert abs(gap - invested) < 1e-6
+        received = r_both.total_tax_savings - r_none.total_tax_savings
+        assert abs(received - yearly_shield * 5) < 1e-6
 
     def test_renter_year1_monthly_cost_rises_by_exactly_the_mean_levy(self):
         off, on = self._incidence_pair()

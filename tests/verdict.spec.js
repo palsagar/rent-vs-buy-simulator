@@ -3,8 +3,8 @@ import { test, expect } from '@playwright/test';
 /**
  * Verdict wording. Monte Carlo is seeded (seed 42), so these configs give
  * stable results:
- *   default config            -> Buying ahead by $4,060, wins 49% of futures (toss-up)
- *   ?propertyPrice=1295000    -> Renting ahead by $701,511, wins 95% (clear)
+ *   default config            -> Buying ahead by $28,656, wins 54% of futures (toss-up)
+ *   ?propertyPrice=1295000    -> Renting ahead by $643,253, wins 94% (clear)
  */
 
 async function load(page, query = '') {
@@ -22,7 +22,7 @@ async function load(page, query = '') {
 test('a winner that wins 40-60% of futures reads as a toss-up', async ({ page }) => {
   await load(page);
   await expect(page.locator('#verdict-line')).toHaveText(
-    'Too close to call: buying and renting end within ~$4,060 of each other after 10 years',
+    'Too close to call: buying and renting end within ~$28,656 of each other after 10 years',
   );
 });
 
@@ -30,12 +30,12 @@ test('a winner that wins 40-60% of futures reads as a toss-up', async ({ page })
 test('a clear verdict still names the winner', async ({ page }) => {
   await load(page, '?propertyPrice=1295000&r=us&v=2');
   await expect(page.locator('#verdict-line')).toHaveText(
-    'Renting leaves you ~$701,511 wealthier if you sell after 10 years',
+    'Renting leaves you ~$643,253 wealthier if you sell after 10 years',
   );
 });
 
 test('negative net values come with a one-line explanation', async ({ page }) => {
-  await load(page); // Buy -$192,348, Rent -$196,408
+  await load(page); // Buy -$167,753, Rent -$196,408
   await expect(page.locator('#net-note')).toBeVisible();
   await expect(page.locator('#net-note')).toHaveText(
     'Both net values count rent, mortgage payments and other costs as money spent, so they are often below zero. What decides the verdict is the gap between them.',
@@ -44,7 +44,7 @@ test('negative net values come with a one-line explanation', async ({ page }) =>
 
 // Guard: toBeHidden also passes while #net-note does not exist yet.
 test('the explanation stays hidden when both net values are positive', async ({ page }) => {
-  // Buy ends at about +$2.20M and Rent at about +$2.59M.
+  // Buy ends at about +$3.52M and Rent at about +$2.59M.
   await load(page, '?horizonYears=40&propertyPrice=50000&monthlyRent=500&propertyAppreciationAnnual=10&equityGrowthAnnual=15&r=us&v=2');
   await expect(page.locator('#net-note')).toBeHidden();
 });
@@ -93,12 +93,12 @@ test('a region switch names the winner while its Monte Carlo run is pending', as
 test('a slider drag inside a toss-up keeps the toss-up wording until Monte Carlo reports', async ({ page }) => {
   await load(page);
   const line = page.locator('#verdict-line');
-  await expect(line).toContainText('~$4,060');
+  await expect(line).toContainText('~$28,656');
   const mc = await holdMonteCarlo(page);
 
   await dragPrice(page, 505000);
   // The new result is shown; its Monte Carlo run has not answered.
-  await expect(line).not.toContainText('~$4,060');
+  await expect(line).not.toContainText('~$28,656');
   await expect(page.locator('#verdict-confidence')).toHaveText('');
   await expect(line).toContainText('Too close to call');
 
@@ -166,7 +166,7 @@ test('when a drag fails in both requests, the verdict keeps the confidence besid
   // beside its own confidence.
   await expect(page.locator('#error-banner')).toContainText('Simulation failed: boom');
   await expect(line).toHaveText(
-    'Too close to call: buying and renting end within ~$4,060 of each other after 10 years',
+    'Too close to call: buying and renting end within ~$28,656 of each other after 10 years',
   );
   await expect(confidence).toHaveText(shownConfidence);
 });

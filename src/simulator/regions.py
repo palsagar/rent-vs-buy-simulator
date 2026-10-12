@@ -66,10 +66,11 @@ REGIONS: list[dict[str, Any]] = [
             "or less, where it ends automatically by law. If your quote "
             "differs, change it in Advanced under Yearly costs of owning.",
             "The tax you save by deducting mortgage interest and the "
-            "property levy is counted at face value at the end of each "
-            "year. It is not invested, so it does not grow. This favours "
-            "renting: at this region's default settings, investing it "
-            "would add about $25,000 to buying after 10 years.",
+            "property levy comes back as a refund at the end of each year. "
+            "The model assumes you invest it: it grows with your other "
+            "investments and is taxed on its gains when you cash them in. "
+            "If you would spend it instead, buying comes out worse than "
+            "shown.",
         ],
     },
     {
@@ -297,11 +298,11 @@ REGIONS: list[dict[str, Any]] = [
             "the Netherlands. A loan under the NHG limit can carry a "
             "one-off guarantee fee instead; the figures here are for a "
             "loan above that limit.",
-            "The tax you save by deducting mortgage interest is counted at "
-            "face value at the end of each year. It is not invested, so it "
-            "does not grow. This favours renting: at this region's default "
-            "settings, investing it would add about €14,500 to buying "
-            "after 10 years.",
+            "The tax you save by deducting mortgage interest comes back as "
+            "a refund at the end of each year. The model assumes you invest "
+            "it: it grows with your other investments and pays the box 3 "
+            "wealth tax like them. If you would spend it instead, buying "
+            "comes out worse than shown.",
             "Portfolios are modelled as plain taxable accounts (ADR-0009).",
         ],
     },
