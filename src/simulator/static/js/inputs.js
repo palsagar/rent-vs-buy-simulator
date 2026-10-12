@@ -376,7 +376,10 @@ function ftbMatchesConfig(region) {
 
 /** Put the relief setting in the share link, for a region that has one. */
 function rememberFtb() {
-  setFtb(hasRelief(selectedRegion) ? ftbOn : null);
+  setFtb(
+    hasRelief(selectedRegion) ? ftbOn : null,
+    Object.keys(selectedRegion?.firstTimeBuyerOverrides ?? {}),
+  );
 }
 
 /**

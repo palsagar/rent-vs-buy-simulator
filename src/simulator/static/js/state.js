@@ -143,16 +143,28 @@ export function getFtb() {
   return ftb;
 }
 
-export function setFtb(on) {
+// The region's relief keys, written to the link while the relief is on
+// even when they equal the default: a link without them reads as one that
+// states the relief without its numbers, and gets the relief values
+// (inputs.js), which would undo an edit back to the default.
+let reliefKeys = [];
+
+export function getReliefKeys() {
+  return reliefKeys;
+}
+
+/** `keys` are the selected region's relief keys. */
+export function setFtb(on, keys = []) {
   ftb = on;
+  reliefKeys = on ? keys : [];
   // Through the same delay as config changes, like setRegionId.
   scheduleUrlWrite();
 }
 
-function currentQuery(cfg = config, region = regionId, relief = ftb) {
+function currentQuery(cfg = config, region = regionId, relief = ftb, keys = reliefKeys) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(cfg)) {
-    if (value !== DEFAULT_CONFIG[key]) params.set(key, value);
+    if (value !== DEFAULT_CONFIG[key] || keys.includes(key)) params.set(key, value);
   }
   if (region) params.set("r", region);
   if (relief !== null) params.set("ftb", relief ? "1" : "0");
@@ -172,11 +184,12 @@ function writeUrl() {
 /**
  * An absolute link to the current scenario. Built from the live config,
  * so it is current even while the debounced address-bar write is pending.
- * Given a `{ cfg, regionId, ftb }` scenario, the link to that one instead.
+ * Given a `{ cfg, regionId, ftb, reliefKeys }` scenario, the link to that
+ * one instead.
  */
 export function shareUrl(scenario) {
   const query = scenario
-    ? currentQuery(scenario.cfg, scenario.regionId, scenario.ftb)
+    ? currentQuery(scenario.cfg, scenario.regionId, scenario.ftb, scenario.reliefKeys)
     : currentQuery();
   return `${location.origin}${location.pathname}${query}`;
 }

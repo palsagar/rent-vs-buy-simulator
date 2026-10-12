@@ -231,8 +231,8 @@ export function downloadCsv({ data, cfg, regionId, symbol }) {
 }
 
 // `scenario` is what the request was made for, `{ cfg, regionId, symbol,
-// ftb }`, captured when it was sent: by the time the answer lands the
-// page can already be on another region.
+// ftb, reliefKeys }`, captured when it was sent: by the time the answer
+// lands the page can already be on another region.
 export function renderSimulate(data, scenario) {
   const { cfg } = scenario;
   verdictHash = configHash(cfg);
@@ -252,10 +252,17 @@ export function renderSimulate(data, scenario) {
 
 /**
  * The scenario the results on screen were computed for, as
- * `{ cfg, regionId, ftb }`, or null before the first result.
+ * `{ cfg, regionId, ftb, reliefKeys }`, or null before the first result.
  */
 export function shownScenario() {
-  return lastSim && { cfg: lastSim.cfg, regionId: lastSim.regionId, ftb: lastSim.ftb };
+  return (
+    lastSim && {
+      cfg: lastSim.cfg,
+      regionId: lastSim.regionId,
+      ftb: lastSim.ftb,
+      reliefKeys: lastSim.reliefKeys,
+    }
+  );
 }
 
 // Whether the verdict on screen belongs to the live config, so Share

@@ -8,7 +8,7 @@ import { trackEvent } from "./analytics.js";
 import { INPUT_DEFS } from "./fields.js";
 import { regionDefaults } from "./inputs.js";
 import { redrawCharts, shownScenario, verdictIsCurrent } from "./results.js";
-import { getConfig, getFtb, getRegionId, shareUrl } from "./state.js";
+import { getConfig, getFtb, getRegionId, getReliefKeys, shareUrl } from "./state.js";
 
 // About the width of an A4 or Letter page inside the default margins, less
 // the card's padding.
@@ -26,7 +26,12 @@ function formatValue(def, stored) {
 // which differ from the live ones while a change is updating or after it
 // failed (the page then also says so).
 function fillSummary(regions) {
-  const shown = shownScenario() ?? { cfg: getConfig(), regionId: getRegionId(), ftb: getFtb() };
+  const shown = shownScenario() ?? {
+    cfg: getConfig(),
+    regionId: getRegionId(),
+    ftb: getFtb(),
+    reliefKeys: getReliefKeys(),
+  };
   const { cfg } = shown;
   document.getElementById("print-stale").hidden = verdictIsCurrent();
   const list = document.getElementById("print-summary-list");

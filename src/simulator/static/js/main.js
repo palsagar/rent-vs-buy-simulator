@@ -21,6 +21,7 @@ import {
   getConfig,
   getFtb,
   getRegionId,
+  getReliefKeys,
   onConfigChange,
   readUrl,
   setCached,
@@ -125,7 +126,13 @@ async function runSimulate() {
   const hash = configHash(cfg);
   // The scenario as asked for: the region, currency and relief can change
   // before the answer lands.
-  const scenario = { cfg, regionId: getRegionId(), symbol: getCurrencySymbol(), ftb: getFtb() };
+  const scenario = {
+    cfg,
+    regionId: getRegionId(),
+    symbol: getCurrencySymbol(),
+    ftb: getFtb(),
+    reliefKeys: getReliefKeys(),
+  };
   const cached = getCached("simulate", hash);
   if (cached) {
     lastWinner = cached.verdict.winner;

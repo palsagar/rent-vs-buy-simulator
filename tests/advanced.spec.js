@@ -549,6 +549,32 @@ test.describe('first-time-buyer relief in a shared link', () => {
     });
   }
 
+  // A relief value edited to exactly the app-wide default must still travel.
+  for (const [region, edits] of [
+    ['FR', { closingCostBuyerPct: 3 }],
+    ['UK', { closingCostBuyerPct: 3, closingCostBuyerAmount: 0 }],
+  ]) {
+    test(`${region}: relief values edited to the default values travel`, async ({ page }) => {
+      await boot(page);
+      await page.locator('#region-pills .preset-btn', { hasText: region }).click();
+      await expect(ftbPill(page)).toHaveClass(/active/);
+      await openGroup(page, 'transaction');
+      for (const [key, value] of Object.entries(edits)) await typeAdvanced(page, key, String(value));
+
+      const link = await shareLink(page);
+      await boot(page, link);
+      const cfg = await page.evaluate(async () => (await import('./js/state.js')).getConfig());
+      for (const [key, value] of Object.entries(edits)) expect(cfg[key]).toBe(value);
+      await expect(ftbPill(page)).toHaveClass(/active/);
+    });
+  }
+
+  test('a link for a region without relief writes no relief values', async ({ page }) => {
+    await boot(page);
+    const params = new URL(await shareLink(page)).searchParams;
+    expect([...params.keys()]).toEqual(['r', 'v']);
+  });
+
   test('a hand-built link that states the relief without its numbers gets the relief values', async ({ page }) => {
     await boot(page, '/?r=uk&ftb=1&v=2');
     await expect(ftbPill(page)).toHaveClass(/active/);
