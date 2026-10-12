@@ -223,9 +223,25 @@ test.describe('rotating a landscape phone to portrait', () => {
 
 test('tapping a chart still shows its values', async ({ page }) => {
   await page.evaluate(() => document.getElementById('decision-chart').scrollIntoView({ block: 'center' }));
+  // This proves the tap made the chart render its values ("Buy ..."). It does
+  // not prove they stay visible: on Linux Chromium a synthetic mouseout clears
+  // the hover within milliseconds, so polling the hover layer would miss it and
+  // we record what was added in response to the tap instead.
+  await page.evaluate(() => {
+    window.__tapHover = '';
+    new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (node.parentElement?.closest('.hoverlayer') || node.matches?.('.hoverlayer *')) {
+            window.__tapHover += node.textContent;
+          }
+        }
+      }
+    }).observe(document.getElementById('decision-chart'), { childList: true, subtree: true });
+  });
   const box = await page.locator('#decision-chart').boundingBox();
   await page.touchscreen.tap(box.x + box.width * 0.4, box.y + box.height / 2);
-  await expect(page.locator('#decision-chart .hoverlayer')).toContainText('Buy');
+  await expect.poll(() => page.evaluate(() => window.__tapHover)).toContain('Buy');
 });
 
 test('the phone-size slider thumb rule survives CSS parsing', async ({ page }) => {

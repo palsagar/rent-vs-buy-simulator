@@ -12,6 +12,7 @@ Hub: [../README.md](../README.md)
 | [Mathematical Reference](formulas.md) | The exact formulas behind `_net_value_series()`: Net Value, cash-flow matching, Monte Carlo, tax primitives |
 | [Decision Records](adr/README.md) | 9 ADRs covering shipped and rejected decisions |
 | [Project Vocabulary](../CONTEXT.md) | Canonical terms and what to call them |
+| [Contributing](../CONTRIBUTING.md) | Setup, tests, branch and PR-title rules, financial-change rules, troubleshooting |
 
 ### Historical specs
 

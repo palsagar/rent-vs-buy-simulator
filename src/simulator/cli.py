@@ -21,6 +21,7 @@ def main() -> None:
 
     uvicorn.run(
         "simulator.server:app",
-        host="0.0.0.0",
+        # Must listen on all interfaces to be reachable from outside a container.
+        host="0.0.0.0",  # noqa: S104
         port=int(os.environ.get("PORT", "8501")),
     )

@@ -51,19 +51,22 @@ Open http://localhost:8501.
 ## Develop
 
 ```bash
-uv venv --seed && uv pip install -e .        # set up
+uv sync                                      # set up
 uv run pytest                                # Python tests
-npm install && npx playwright install chromium
+npm ci && npx playwright install chromium
 npx playwright test                          # browser tests
 uv run ruff check src/ tests/                # lint
 uv run ruff format src/ tests/               # format
 uv run ty check src/                         # type check
 ```
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide: branches, pull-request titles, financial-change rules and troubleshooting.
+
 The frontend has no build step. The browser loads the ES modules in `src/simulator/static/` as they are.
 
 ## Learn more
 
+- [CONTRIBUTING.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/CONTRIBUTING.md): how to set up, test and submit a change.
 - [docs/README.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/docs/README.md): the index of all documentation.
 - [docs/architecture.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/docs/architecture.md): how the server, the engine and the frontend fit together.
 - [docs/formulas.md](https://github.com/palsagar/rent-vs-buy-simulator/blob/main/docs/formulas.md): the math behind net value, the Monte Carlo simulation and the taxes.
