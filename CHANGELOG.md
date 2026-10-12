@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.2.0](https://github.com/palsagar/rent-vs-buy-simulator/compare/v2.1.0...v2.2.0) (2026-10-12)
+
+
+### Features
+
+* growth rates compound as stated, home-sale tax counts buying and selling costs, tax refunds are invested, mortgage insurance below 20% down, and an explicit tie ([#68](https://github.com/palsagar/rent-vs-buy-simulator/issues/68)) ([c99fc69](https://github.com/palsagar/rent-vs-buy-simulator/commit/c99fc69196c633f1fc64ba4d776de9c506d43a0d))
+* show when results are updating, retry failed runs, and polish shared links, charts, print and accessibility ([#67](https://github.com/palsagar/rent-vs-buy-simulator/issues/67)) ([a2748d5](https://github.com/palsagar/rent-vs-buy-simulator/commit/a2748d51d87c7cd2df298cb299a2dacd5195f671))
+
+
+### Bug Fixes
+
+* shared links keep the first-time-buyer relief, and the tornado chart follows a width change ([#59](https://github.com/palsagar/rent-vs-buy-simulator/issues/59)) ([a70dee0](https://github.com/palsagar/rent-vs-buy-simulator/commit/a70dee0840517f84ab0c10d804dc8f5804721bfe))
+
 ## [2.1.0](https://github.com/palsagar/rent-vs-buy-simulator/compare/v2.0.0...v2.1.0) (2026-10-12)
 
 
