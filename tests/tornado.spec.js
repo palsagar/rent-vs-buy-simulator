@@ -319,6 +319,35 @@ test.describe('on a phone', () => {
     expect(out).toEqual({ found: true, inside: true });
   });
 
+  // Every input that can sit at a slider limit sits at one, and your verdict
+  // lies close to one edge of the chart, so each label starts near it.
+  const EDGE_CASES = {
+    left: '?propertyPrice=2000000&downPaymentPct=50&mortgageRateAnnual=10&propertyAppreciationAnnual=0&equityGrowthAnnual=15&monthlyRent=500&horizonYears=40&rentInflationRate=0&propertyTaxRate=5',
+    right: '?propertyPrice=2000000&monthlyRent=10000&mortgageRateAnnual=1&propertyAppreciationAnnual=10&rentInflationRate=0.1&equityGrowthAnnual=15&propertyTaxRate=0&horizonYears=40&downPaymentPct=5',
+  };
+  for (const [edge, query] of Object.entries(EDGE_CASES)) {
+    test(`limit labels, and the direction labels above them, stay inside the chart when your verdict is near the ${edge} edge`, async ({ page }) => {
+      await load(page, query);
+      const out = await page.evaluate(() => {
+        const el = document.getElementById('tornado-chart');
+        const box = el.getBoundingClientRect();
+        const indices = el.layout.annotations.flatMap((a, i) =>
+          a.name === 'limit-label' || /ahead/.test(a.text) ? [i] : [],
+        );
+        return {
+          count: el.layout.annotations.filter((a) => a.name === 'limit-label').length,
+          outside: indices.flatMap((i) => {
+            const r = el.querySelector(`.annotation[data-index="${i}"]`).getBoundingClientRect();
+            const inside = r.left >= box.left && r.right <= box.right && r.top >= box.top && r.bottom <= box.bottom;
+            return inside ? [] : [el.layout.annotations[i].text];
+          }),
+        };
+      });
+      expect(out.count).toBeGreaterThan(2);
+      expect(out.outside).toEqual([]);
+    });
+  }
+
   test('the tested values at the bar ends stay inside the chart', async ({ page }) => {
     await load(page);
     const out = await page.evaluate(() => {
