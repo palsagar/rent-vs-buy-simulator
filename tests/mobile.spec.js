@@ -223,13 +223,24 @@ test.describe('rotating a landscape phone to portrait', () => {
 
 test('tapping a chart still shows its values', async ({ page }) => {
   await page.evaluate(() => document.getElementById('decision-chart').scrollIntoView({ block: 'center' }));
-  // A tap that lands while Plotly is still settling (slower Linux runners) can be
-  // dropped, so measure and tap again until the values appear.
-  await expect(async () => {
-    const box = await page.locator('#decision-chart').boundingBox();
-    await page.touchscreen.tap(box.x + box.width * 0.4, box.y + box.height / 2);
-    await expect(page.locator('#decision-chart .hoverlayer')).toContainText('Buy', { timeout: 1_500 });
-  }).toPass({ timeout: 15_000 });
+  // On Linux Chromium the tap is followed within milliseconds by a synthetic
+  // mouseout that clears the hover again, so polling the hover layer can miss
+  // it. Record what the chart showed in response to the tap instead.
+  await page.evaluate(() => {
+    window.__tapHover = '';
+    new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (node.parentElement?.closest('.hoverlayer') || node.matches?.('.hoverlayer *')) {
+            window.__tapHover += node.textContent;
+          }
+        }
+      }
+    }).observe(document.getElementById('decision-chart'), { childList: true, subtree: true, characterData: true });
+  });
+  const box = await page.locator('#decision-chart').boundingBox();
+  await page.touchscreen.tap(box.x + box.width * 0.4, box.y + box.height / 2);
+  await expect.poll(() => page.evaluate(() => window.__tapHover)).toContain('Buy');
 });
 
 test('the phone-size slider thumb rule survives CSS parsing', async ({ page }) => {
