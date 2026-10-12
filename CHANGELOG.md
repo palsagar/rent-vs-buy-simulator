@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.1](https://github.com/palsagar/rent-vs-buy-simulator/compare/v2.2.0...v2.2.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* tornado bar labels no longer print one value over the other ([#70](https://github.com/palsagar/rent-vs-buy-simulator/issues/70)) ([52ee892](https://github.com/palsagar/rent-vs-buy-simulator/commit/52ee8927f16a1e16fccea3912b5aa912b9da56b6))
+
 ## [2.2.0](https://github.com/palsagar/rent-vs-buy-simulator/compare/v2.1.0...v2.2.0) (2026-10-12)
 
 
