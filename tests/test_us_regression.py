@@ -6,10 +6,21 @@ engine primitive existed (docs/multi-region-spec.md 7.2). A failure here
 means a "default-inert" primitive is not inert. Never regenerate these
 numbers to make a test pass -- find the primitive that leaked instead.
 
-The GOLDENS block below is engine output and has never been regenerated.
+The GOLDENS block below is engine output. It was regenerated once,
+deliberately, for ADR-0011: yearly growth rates now compound as stated
+instead of as annual/12. That is an engine convention, not a primitive.
+Diffed by name, three fields do not depend on any growth rate and are
+bit-identical before and after -- monthly_mortgage_payment,
+total_closing_costs_buyer, total_mortgage_interest_paid -- because the
+mortgage rate stays a nominal rate split over twelve months;
+test_fields_untouched_by_the_rate_convention pins them at their old
+values. Every other field moved, because the home value, the rent, the
+cost index and the portfolios all compound at the stated yearly rate.
+
 The TORNADO_* constants are perturbation output, and have been
-regenerated twice, deliberately, when the perturbation rule itself was
-redefined; see the note above them for the standard that applies.
+regenerated three times, deliberately: twice when the perturbation rule
+itself was redefined and once for ADR-0011; see the note above them for
+the standard that applies.
 """
 
 import sys
@@ -35,20 +46,30 @@ US_PRESET = dict(
 )
 
 GOLDENS = {
-    "final_net_buy": -190046.1963301368,
-    "final_net_rent": -191294.19028574793,
-    "final_difference": 1247.9939556111349,
-    "breakeven_year": 9.985013469190408,
+    "final_net_buy": -192348.12944373256,
+    "final_net_rent": -196408.41741621884,
+    "final_difference": 4060.287972486287,
+    "breakeven_year": 8.999823497118234,
     "monthly_mortgage_payment": 2528.2720939718615,
-    "monthly_cost_buy_year1": 3558.802383151073,
-    "monthly_cost_rent_year1": 2433.2765530805855,
+    "monthly_cost_buy_year1": 3558.616384594503,
+    "monthly_cost_rent_year1": 2432.8238813857533,
     "total_closing_costs_buyer": 15000.0,
-    "total_closing_costs_seller": 40480.60641572473,
-    "total_property_tax_paid": 69870.70943816642,
-    "total_insurance_paid": 13617.194024549852,
-    "total_maintenance_paid": 58225.591198472015,
+    "total_closing_costs_seller": 40317.49138032407,
+    "total_property_tax_paid": 69723.9984056755,
+    "total_insurance_paid": 13597.417828637674,
+    "total_maintenance_paid": 58103.33200472958,
     "total_mortgage_interest_paid": 242497.15672867812,
-    "total_tax_savings": 74968.2878800427,
+    "total_tax_savings": 74933.07723224488,
+}
+
+# The three fields no growth rate reaches, at their values from before
+# ADR-0011. The mortgage payment, the buyer's closing costs and the
+# interest all follow from the price, the down payment and the nominal
+# mortgage rate alone.
+RATE_INDEPENDENT_GOLDENS = {
+    "monthly_mortgage_payment": 2528.2720939718615,
+    "total_closing_costs_buyer": 15000.0,
+    "total_mortgage_interest_paid": 242497.15672867812,
 }
 
 # The 8 tornado bars, in rank order. _compute_sensitivity orders by
@@ -78,9 +99,19 @@ GOLDENS = {
 # from fixed steps (100k, 500) to 20% of their own value. At the US preset
 # the price step is still exactly 100k, so only Monthly Rent moves (its
 # step goes from 500 to 480), and the rank order holds.
+#
+# REGENERATED a third time, deliberately, for ADR-0011 (yearly growth
+# rates compound as stated). Every bar is a re-run of the engine, so all
+# eight move on both sides, and the base moves with the verdict above.
+# The tested INPUTS are bit-identical: no perturbation rule changed. The
+# rank order moves once: Property Appreciation now ranks above Equity
+# Growth. Equity's higher side tests 11.74%, which annual/12 compounded
+# to 12.40% a year, so its bar was the most inflated of the eight; it
+# narrows from 271.5k to 247.6k while Property Appreciation's narrows
+# from 268.8k to 261.1k.
 TORNADO_NAMES = [
-    "Equity Growth",
     "Property Appreciation",
+    "Equity Growth",
     "Monthly Rent",
     "Property Price",
     "Mortgage Rate",
@@ -89,26 +120,26 @@ TORNADO_NAMES = [
     "Down Payment %",
 ]
 TORNADO_LOW = [
-    108315.2700715856,
-    -123364.65793813154,
-    -89635.06653487147,
-    88181.87658442234,
-    43093.40687027981,
-    33706.69579412212,
-    -8688.793081999,
-    4054.6262869769125,
+    -118458.07718956331,
+    105699.40307721135,
+    -85744.64550278307,
+    89395.62214526985,
+    45461.37478180759,
+    36065.72384167119,
+    -5546.580837710353,
+    6236.65391019854,
 ]
 TORNADO_HIGH = [
-    -163200.45114455867,
-    145428.83590766793,
-    92131.0544460938,
-    -85685.88867319992,
-    -41503.53846349695,
-    -31976.807946117828,
-    11489.229746876867,
-    -1558.6383757545846,
+    142634.5791709717,
+    -141912.00960823428,
+    93865.22144775564,
+    -81275.04620029719,
+    -38227.09712143912,
+    -28675.280619678786,
+    13912.243867753597,
+    1883.9220347741502,
 ]
-TORNADO_BASE = 1247.9939556111349
+TORNADO_BASE = 4060.287972486287
 
 
 class TestUsPresetUnchanged:
@@ -119,6 +150,16 @@ class TestUsPresetUnchanged:
             assert abs(actual - expected) < 1e-6, (
                 f"{name}: got {actual!r}, golden {expected!r}"
             )
+
+    def test_fields_untouched_by_the_rate_convention(self):
+        # ADR-0011 changed how yearly GROWTH rates become monthly ones and
+        # deliberately left the mortgage rate a nominal rate split over
+        # twelve months. These three fields depend on no growth rate, so
+        # they must still equal their pre-ADR-0011 values bit for bit;
+        # exact equality is the assertion, as no arithmetic changed.
+        results = calculate_scenarios(SimulationConfig(**US_PRESET))
+        for name, expected in RATE_INDEPENDENT_GOLDENS.items():
+            assert getattr(results, name) == expected, name
 
     def test_us_config_uses_only_default_optional_fields(self):
         # Guards the goldens' provenance: if a future default changes,

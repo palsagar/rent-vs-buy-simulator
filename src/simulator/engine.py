@@ -13,6 +13,54 @@ from .models import SimulationConfig, SimulationResults
 # Floating-point tolerance for comparisons
 _FLOAT_TOLERANCE = 1e-9
 
+# Lowest yearly growth rate the monthly conversion accepts, as a decimal.
+# Below -100% a twelfth root is undefined; just above it the monthly
+# factor stays positive. Monte Carlo draws are the only input that can get
+# near it, and the tornado's growth-rate floor (-99.0%) matches it.
+_ANNUAL_RATE_FLOOR = -0.99
+
+
+def monthly_rate_from_annual(annual: float | np.ndarray) -> float | np.ndarray:
+    """Monthly rate equivalent to a yearly growth rate (ADR-0011).
+
+    Returns ``(1 + annual) ** (1/12) - 1``, so twelve months compound
+    back to exactly the yearly rate: 7% a year is worth exactly 7% after
+    twelve months, not the 7.23% that ``annual / 12`` compounds to. The
+    input is floored at -99% so the monthly factor stays positive.
+
+    Only growth rates go through here (home appreciation, equity growth,
+    rent and cost inflation). The mortgage rate does not: it is a nominal
+    yearly rate split over twelve payments, as lenders quote it and as
+    ``numpy_financial.pmt`` expects.
+
+    Parameters
+    ----------
+    annual : float | np.ndarray
+        Yearly growth rate as a decimal (0.07 for 7%), or an array of
+        them.
+
+    Returns
+    -------
+    float | np.ndarray
+        The equivalent monthly rate as a decimal: a float for a scalar
+        input, an array of the same shape for an array.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import numpy as np
+        from simulator.engine import monthly_rate_from_annual
+
+        monthly = monthly_rate_from_annual(0.07)    # 0.005654145...
+        (1 + monthly) ** 12                         # 1.07
+        monthly_rate_from_annual(np.array([0.03, -0.1]))
+
+    """
+    floored = np.maximum(np.asarray(annual, dtype=float), _ANNUAL_RATE_FLOOR)
+    monthly = (1.0 + floored) ** (1.0 / 12.0) - 1.0
+    return float(monthly) if monthly.ndim == 0 else monthly
+
 
 def _is_close_to_zero(value: float) -> bool:
     """Check if a value is effectively zero within tolerance.
@@ -138,9 +186,9 @@ def _net_value_series(
         h = config.horizon_years * 12
         series = _net_value_series(
             config,
-            np.full(h, 0.03 / 12),
-            np.full(h, 0.07 / 12),
-            np.full(h, config.rent_inflation_rate / 12),
+            np.full(h, monthly_rate_from_annual(0.03)),
+            np.full(h, monthly_rate_from_annual(0.07)),
+            np.full(h, monthly_rate_from_annual(config.rent_inflation_rate)),
         )
         print(f"Net Value (buy): ${series['net_buy'][-1]:,.0f}")
 
@@ -187,7 +235,9 @@ def _net_value_series(
 
     # --- Ongoing ownership costs paid during month m (prior-month value base)
     # Hoisted: three cost lines are now absolute amounts sharing one index.
-    cost_index = (1 + config.cost_inflation_rate / 12) ** (t_arr[1:] - 1)
+    # The yearly cost inflation compounds as stated (ADR-0011): month 13's
+    # bill is exactly one year's inflation above month 1's.
+    cost_index = (1 + config.cost_inflation_rate) ** ((t_arr[1:] - 1) / 12)
 
     # No new region's levy base tracks market prices (FR valeur locative
     # cadastrale, DE Grundsteuerwert, UK 1991 bands), so the flat component
@@ -233,11 +283,13 @@ def _net_value_series(
     # NL box 3 (Wet IB 2001 art. 5.25): taxed on min(deemed, actual)
     # return, floored at nil. Both operands are proportional to wealth,
     # so the min reduces to a rate comparison and the closed form
-    # survives. Summed, not compounded: both callers -- this module's
-    # calculate_scenarios and monte_carlo._simulate_single_path -- feed
-    # an arithmetic annual/100/12, so twelve of them sum back to the
-    # annual draw exactly.
-    annual_return = eq_rate_monthly.reshape(config.horizon_years, 12).sum(axis=1)
+    # survives. The year's actual return is the product of its twelve
+    # monthly factors: both callers convert yearly rates with
+    # monthly_rate_from_annual (ADR-0011), so the product is exactly the
+    # yearly rate or draw. A sum of the twelve would fall short of it.
+    annual_return = (
+        np.prod(1 + eq_rate_monthly.reshape(config.horizon_years, 12), axis=1) - 1
+    )
     deemed = config.portfolio_deemed_return_pct / 100
     taxable = np.clip(np.minimum(deemed, annual_return), 0.0, None)
     drag_monthly = np.repeat(taxable * (config.portfolio_drag_rate_pct / 100) / 12, 12)
@@ -436,11 +488,13 @@ def calculate_scenarios(config: SimulationConfig) -> SimulationResults:
 
     """
     h = config.horizon_years * 12
+    # Yearly growth rates compound as stated (ADR-0011); the mortgage rate
+    # is converted inside the core as a nominal rate.
     series = _net_value_series(
         config,
-        np.full(h, (config.property_appreciation_annual / 100) / 12),
-        np.full(h, (config.equity_growth_annual / 100) / 12),
-        np.full(h, config.rent_inflation_rate / 12),
+        np.full(h, monthly_rate_from_annual(config.property_appreciation_annual / 100)),
+        np.full(h, monthly_rate_from_annual(config.equity_growth_annual / 100)),
+        np.full(h, monthly_rate_from_annual(config.rent_inflation_rate)),
     )
 
     t_arr = np.arange(h + 1)

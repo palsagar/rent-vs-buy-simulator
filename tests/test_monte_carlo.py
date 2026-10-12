@@ -12,14 +12,20 @@ from dataclasses import fields as dataclass_fields
 import numpy as np
 import pytest
 
-from simulator.engine import _FLOAT_TOLERANCE, calculate_scenarios
+from simulator.engine import (
+    _FLOAT_TOLERANCE,
+    calculate_scenarios,
+    monthly_rate_from_annual,
+)
 from simulator.models import MonteCarloConfig, SimulationConfig
 from simulator.monte_carlo import (
     _UI_MAXIMUM,
     _UI_MINIMUM,
     _compute_sensitivity,
+    _simulate_single_path,
     run_monte_carlo,
 )
+from tests.test_engine_core import taxfree_config
 from tests.test_models import make_config
 from tests.test_us_regression import (
     TORNADO_BASE,
@@ -248,15 +254,49 @@ class TestPortfolioDragIsPathDependent:
         )
         flat = make_config(horizon_years=30)
         mc = MonteCarloConfig(n_simulations=200, seed=42)
-        drag_results = run_monte_carlo(config, mc)
         # Deterministic reference: 7% > 6% every year, so exactly 2.16%.
         deterministic = calculate_scenarios(config).final_difference
         flat_det = calculate_scenarios(flat).final_difference
         # The drag reduces the renter's portfolio, so it RAISES
-        # (net_buy - net_rent). Under MC the mean drag is smaller, so the
-        # median difference must sit below the deterministic one.
+        # (net_buy - net_rent).
         assert deterministic > flat_det
-        assert drag_results.median_difference < deterministic
+        # Under MC the mean drag is smaller, so on average it raises each
+        # path's difference by less than it raises the deterministic one.
+        # Paired by path (same seed, same draws), so only the drag differs.
+        # Comparing the MC median with the deterministic verdict instead
+        # also measures volatility's own effect on compounding, which
+        # lowers the median renter portfolio with or without any drag;
+        # the old annual/12 conversion hid it by adding about
+        # (11/24) * E[r^2] to every volatile year (ADR-0011).
+        per_path = (
+            run_monte_carlo(config, mc).final_differences
+            - run_monte_carlo(flat, mc).final_differences
+        )
+        assert np.mean(per_path) < deterministic - flat_det
+
+    def test_each_year_is_taxed_on_its_own_draw(self):
+        # One path, three yearly equity draws: 10% (the 6% deemed return
+        # binds, drag 2.16%), 2% (the actual return binds, drag 0.72%) and
+        # -5% (no drag). All cash, so the renter holds the 120,000 outlay
+        # alone and net_rent(t) = 120,000 * G(t) - 120,000 - 500 * t.
+        config = taxfree_config(
+            horizon_years=3,
+            down_payment_pct=100,
+            closing_cost_buyer_pct=0.0,
+            closing_cost_seller_pct=0.0,
+            portfolio_deemed_return_pct=6.0,
+            portfolio_drag_rate_pct=36.0,
+        )
+        _, net_rent = _simulate_single_path(
+            config, np.zeros(3), np.array([10.0, 2.0, -5.0]), np.zeros(3)
+        )
+        expected = (
+            (1 + monthly_rate_from_annual(0.10) - 0.06 * 0.36 / 12) ** 12
+            * (1 + monthly_rate_from_annual(0.02) - 0.02 * 0.36 / 12) ** 12
+            * (1 + monthly_rate_from_annual(-0.05)) ** 12
+        )
+        growth = (net_rent[36] + 120_000 + 500 * 36) / 120_000
+        assert math.isclose(growth, expected, rel_tol=1e-12)
 
     def test_every_path_does_not_share_one_drag(self):
         # Two configs differing only in equity draws must produce

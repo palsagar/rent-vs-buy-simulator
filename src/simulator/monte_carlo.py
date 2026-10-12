@@ -11,7 +11,7 @@ import math
 
 import numpy as np
 
-from .engine import _net_value_series
+from .engine import _net_value_series, monthly_rate_from_annual
 from .models import (
     MonteCarloConfig,
     MonteCarloResults,
@@ -100,7 +100,8 @@ _UI_MAXIMUM = {
 # model must represent even though the UI will not let you type a
 # negative growth rate -- see test_tornado_low_uses_negative_growth_rate,
 # which pins that. Their floor is -99.0, just above where the monthly
-# compounding factor would turn non-positive.
+# compounding factor would turn non-positive; engine.monthly_rate_from_annual
+# floors at the same -99%, which also covers the Monte Carlo draws.
 #
 # The quantities below have no such reading. property_price once took a
 # fixed 100k step, so every home price in the 50k-100k band drove its low
@@ -314,10 +315,12 @@ def _simulate_single_path(
         net_buy, net_rent = _simulate_single_path(config, prop, eq, rent)
 
     """
-    # Expand annual percentage draws to per-month decimal rates
-    prop_m = np.repeat(annual_prop_rates / 100 / 12, 12)
-    eq_m = np.repeat(annual_equity_rates / 100 / 12, 12)
-    rent_m = np.repeat(annual_rent_rates / 100 / 12, 12)
+    # Expand each yearly percentage draw to twelve equal monthly rates that
+    # compound back to exactly that draw (ADR-0011), as the deterministic
+    # engine does for its constant rates.
+    prop_m = np.repeat(monthly_rate_from_annual(annual_prop_rates / 100), 12)
+    eq_m = np.repeat(monthly_rate_from_annual(annual_equity_rates / 100), 12)
+    rent_m = np.repeat(monthly_rate_from_annual(annual_rent_rates / 100), 12)
     series = _net_value_series(config, prop_m, eq_m, rent_m)
     return series["net_buy"], series["net_rent"]
 

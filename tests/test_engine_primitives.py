@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import numpy as np
 
-from simulator.engine import calculate_scenarios
+from simulator.engine import calculate_scenarios, monthly_rate_from_annual
 from tests.test_engine_core import run_flat, taxfree_config
 
 
@@ -82,13 +82,13 @@ class TestFlatPropertyLevy:
         assert abs(series["_levy"][1] - 100.0) < 1e-9
 
     def test_flat_levy_is_indexed_by_cost_inflation(self):
-        # cost_index(t) = (1 + cir/12) ** (t - 1); at 12% annual the
-        # month-13 charge has compounded for 12 months.
+        # cost_index(t) = (1 + cir) ** ((t - 1) / 12) (ADR-0011); at 12% a
+        # year the month-13 charge is exactly 12% above month 1's.
         cfg = taxfree_config(
             horizon_years=3, annual_property_levy=1200.0, cost_inflation_rate=0.12
         )
         series = run_flat(cfg)
-        assert abs(series["_levy"][13] - 100.0 * 1.01**12) < 1e-9
+        assert abs(series["_levy"][13] - 100.0 * 1.12) < 1e-9
 
     def test_ad_valorem_and_flat_paths_are_independently_additive(self):
         # Proves the US ad-valorem path is untouched by the new term.
@@ -120,7 +120,7 @@ class TestFlatMaintenanceAmount:
             cost_inflation_rate=0.12,
         )
         series = run_flat(cfg)
-        assert abs(series["_maintenance"][13] - 100.0 * 1.01**12) < 1e-9
+        assert abs(series["_maintenance"][13] - 100.0 * 1.12) < 1e-9
 
     def test_pct_and_amount_paths_are_independently_additive(self):
         kwargs = dict(horizon_years=3, property_appreciation_annual=3.0)
@@ -327,7 +327,7 @@ class TestPortfolioDrag:
         # the drag is 6.00% x 36% = 2.16%/yr every year.
         series = run_flat(self._all_cash_config(6.0, 36.0))
         initial_outlay = series["rent_portfolio"][0]
-        monthly = 0.07 / 12 - 0.0216 / 12
+        monthly = monthly_rate_from_annual(0.07) - 0.0216 / 12
         assert math.isclose(
             series["rent_portfolio"][360] / initial_outlay,
             (1 + monthly) ** 360,
@@ -335,14 +335,16 @@ class TestPortfolioDrag:
         )
 
     def test_terminal_shortfall_against_a_zero_drag_run(self):
-        # ((1 + 0.07/12 - 0.0216/12) / (1 + 0.07/12)) ** 360
-        #   = 0.5247574800635896  ->  a 47.52% terminal shortfall.
+        # ((1 + g - 0.0216/12) / (1 + g)) ** 360, g = 1.07 ** (1/12) - 1
+        #   = 0.5246971379172647  ->  a 47.53% terminal shortfall.
         # The engine applies the drag MONTHLY, so the monthly form
         # governs; the annual form (0.542372) is what real box 3 does at
-        # the 1 January peildatum, and the 3.36% gap is disclosed as S10.
+        # the 1 January peildatum. The annual form is 3.37% above the
+        # monthly one, disclosed as S10 (3.36% before ADR-0011, when g
+        # was 0.07/12).
         with_drag = run_flat(self._all_cash_config(6.0, 36.0))["rent_portfolio"][360]
         without = run_flat(self._all_cash_config(0.0, 0.0))["rent_portfolio"][360]
-        assert abs(with_drag / without - 0.5247574800635896) < 1e-9
+        assert abs(with_drag / without - 0.5246971379172647) < 1e-9
 
     def test_min_binds_on_the_actual_return_when_it_is_lower(self):
         # 4% actual < 6% deemed -> drag is 4% x 36% = 1.44%/yr, NOT 2.16%.
@@ -350,7 +352,7 @@ class TestPortfolioDrag:
         # 2.16 has already discarded the operand the min needs.
         series = run_flat(self._all_cash_config(6.0, 36.0, growth=4.0))
         initial_outlay = series["rent_portfolio"][0]
-        monthly = 0.04 / 12 - 0.0144 / 12
+        monthly = monthly_rate_from_annual(0.04) - 0.0144 / 12
         assert math.isclose(
             series["rent_portfolio"][360] / initial_outlay,
             (1 + monthly) ** 360,
@@ -376,7 +378,7 @@ class TestPortfolioDrag:
         # the comparison below then deviates by ~0.09 and can never pass.
         for growth in (7.0, -10.0):
             series = run_flat(self._all_cash_config(0.0, 0.0, growth))
-            eq_rate = np.full(360, (growth / 100) / 12)
+            eq_rate = np.full(360, monthly_rate_from_annual(growth / 100))
             expected = np.concatenate([[1.0], np.cumprod(1 + eq_rate)])
             initial_outlay = series["rent_portfolio"][0]
             assert np.array_equal(series["rent_portfolio"], initial_outlay * expected)
