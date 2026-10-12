@@ -14,7 +14,7 @@ test('the Guide defines Net Value with exit costs and taxes', async ({ page }) =
   const body = page.locator('#guide-b-netvalue');
   await expect(body).toContainText("Net Value = what you'd walk away with − everything you paid in");
   await expect(body).toContainText('selling costs');
-  await expect(body).toContainText('any tax savings from deducting mortgage interest and levies');
+  await expect(body).toContainText('including any tax savings from deducting mortgage interest and levies');
   await expect(body).toContainText('the larger of the rent and the cost of owning');
   await expect(body).not.toContainText('Asset Value − Total Outflows');
 });

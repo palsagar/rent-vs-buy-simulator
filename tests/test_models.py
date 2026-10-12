@@ -127,6 +127,19 @@ class TestMultiRegionPrimitiveValidation:
         assert config.portfolio_drag_rate_pct == 36.0
 
 
+class TestMortgageInsuranceValidation:
+    def test_default_mirrors_the_us_bundle(self):
+        # Like every other SimulationConfig default, the US value.
+        assert make_config().mortgage_insurance_rate_pct == 0.5
+
+    def test_bounds(self):
+        for value in (-0.1, 5.1):
+            with pytest.raises(ValueError, match="mortgage_insurance_rate_pct"):
+                make_config(mortgage_insurance_rate_pct=value)
+        for value in (0.0, 5.0):
+            assert make_config(mortgage_insurance_rate_pct=value) is not None
+
+
 class TestSiblingCostFieldValidation:
     """These five fields shipped with no validation at all (spec 6.3)."""
 

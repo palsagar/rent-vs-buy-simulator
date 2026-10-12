@@ -34,7 +34,7 @@ _FIELDS_JS = Path(__file__).parent.parent / "src/simulator/static/js/fields.js"
 # count: it only has to be high enough that a reformat that silently
 # drops entries trips it. Raise it deliberately, never to make a
 # failure pass.
-_EXPECTED_FORMATTED_FIELDS = 25
+_EXPECTED_FORMATTED_FIELDS = 26
 
 
 def _slider_bounds(bound: str) -> dict[str, Fraction]:

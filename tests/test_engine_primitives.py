@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import numpy as np
 
-from simulator.engine import calculate_scenarios
+from simulator.engine import calculate_scenarios, monthly_rate_from_annual
 from tests.test_engine_core import run_flat, taxfree_config
 
 
@@ -82,13 +82,13 @@ class TestFlatPropertyLevy:
         assert abs(series["_levy"][1] - 100.0) < 1e-9
 
     def test_flat_levy_is_indexed_by_cost_inflation(self):
-        # cost_index(t) = (1 + cir/12) ** (t - 1); at 12% annual the
-        # month-13 charge has compounded for 12 months.
+        # cost_index(t) = (1 + cir) ** ((t - 1) / 12) (ADR-0011); at 12% a
+        # year the month-13 charge is exactly 12% above month 1's.
         cfg = taxfree_config(
             horizon_years=3, annual_property_levy=1200.0, cost_inflation_rate=0.12
         )
         series = run_flat(cfg)
-        assert abs(series["_levy"][13] - 100.0 * 1.01**12) < 1e-9
+        assert abs(series["_levy"][13] - 100.0 * 1.12) < 1e-9
 
     def test_ad_valorem_and_flat_paths_are_independently_additive(self):
         # Proves the US ad-valorem path is untouched by the new term.
@@ -120,7 +120,7 @@ class TestFlatMaintenanceAmount:
             cost_inflation_rate=0.12,
         )
         series = run_flat(cfg)
-        assert abs(series["_maintenance"][13] - 100.0 * 1.01**12) < 1e-9
+        assert abs(series["_maintenance"][13] - 100.0 * 1.12) < 1e-9
 
     def test_pct_and_amount_paths_are_independently_additive(self):
         kwargs = dict(horizon_years=3, property_appreciation_annual=3.0)
@@ -254,11 +254,17 @@ class TestOccupierBorneLevy:
             annual_property_levy=2392.0, levy_paid_by_occupier=True, **kwargs
         )
         r_none, r_both = calculate_scenarios(none), calculate_scenarios(both)
-        # The gap is exactly the tax shield on the levy:
-        #   2392/yr x 5 years x 24% = 2,870.40
-        shield = 2392.0 * 5 * 0.24
-        assert abs(r_both.final_difference - r_none.final_difference - shield) < 1e-6
-        assert abs(r_both.total_tax_savings - r_none.total_tax_savings - shield) < 1e-6
+        # The gap is the tax shield on the levy, invested as it arrives
+        # (ADR-0013): 2392/yr x 24% = 574.08 at the end of each of the 5
+        # years, each grown at 7% to the horizon (no tax in this fixture):
+        #   574.08 x (1 + 1.07 + 1.07^2 + 1.07^3 + 1.07^4) = 3,301.38
+        # The refunds received are still 5 x 574.08 = 2,870.40 at face value.
+        yearly_shield = 2392.0 * 0.24
+        invested = sum(yearly_shield * 1.07**k for k in range(5))
+        gap = r_both.final_difference - r_none.final_difference
+        assert abs(gap - invested) < 1e-6
+        received = r_both.total_tax_savings - r_none.total_tax_savings
+        assert abs(received - yearly_shield * 5) < 1e-6
 
     def test_renter_year1_monthly_cost_rises_by_exactly_the_mean_levy(self):
         off, on = self._incidence_pair()
@@ -327,7 +333,7 @@ class TestPortfolioDrag:
         # the drag is 6.00% x 36% = 2.16%/yr every year.
         series = run_flat(self._all_cash_config(6.0, 36.0))
         initial_outlay = series["rent_portfolio"][0]
-        monthly = 0.07 / 12 - 0.0216 / 12
+        monthly = monthly_rate_from_annual(0.07) - 0.0216 / 12
         assert math.isclose(
             series["rent_portfolio"][360] / initial_outlay,
             (1 + monthly) ** 360,
@@ -335,14 +341,16 @@ class TestPortfolioDrag:
         )
 
     def test_terminal_shortfall_against_a_zero_drag_run(self):
-        # ((1 + 0.07/12 - 0.0216/12) / (1 + 0.07/12)) ** 360
-        #   = 0.5247574800635896  ->  a 47.52% terminal shortfall.
+        # ((1 + g - 0.0216/12) / (1 + g)) ** 360, g = 1.07 ** (1/12) - 1
+        #   = 0.5246971379172647  ->  a 47.53% terminal shortfall.
         # The engine applies the drag MONTHLY, so the monthly form
         # governs; the annual form (0.542372) is what real box 3 does at
-        # the 1 January peildatum, and the 3.36% gap is disclosed as S10.
+        # the 1 January peildatum. The annual form is 3.37% above the
+        # monthly one, disclosed as S10 (3.36% before ADR-0011, when g
+        # was 0.07/12).
         with_drag = run_flat(self._all_cash_config(6.0, 36.0))["rent_portfolio"][360]
         without = run_flat(self._all_cash_config(0.0, 0.0))["rent_portfolio"][360]
-        assert abs(with_drag / without - 0.5247574800635896) < 1e-9
+        assert abs(with_drag / without - 0.5246971379172647) < 1e-9
 
     def test_min_binds_on_the_actual_return_when_it_is_lower(self):
         # 4% actual < 6% deemed -> drag is 4% x 36% = 1.44%/yr, NOT 2.16%.
@@ -350,7 +358,7 @@ class TestPortfolioDrag:
         # 2.16 has already discarded the operand the min needs.
         series = run_flat(self._all_cash_config(6.0, 36.0, growth=4.0))
         initial_outlay = series["rent_portfolio"][0]
-        monthly = 0.04 / 12 - 0.0144 / 12
+        monthly = monthly_rate_from_annual(0.04) - 0.0144 / 12
         assert math.isclose(
             series["rent_portfolio"][360] / initial_outlay,
             (1 + monthly) ** 360,
@@ -376,7 +384,7 @@ class TestPortfolioDrag:
         # the comparison below then deviates by ~0.09 and can never pass.
         for growth in (7.0, -10.0):
             series = run_flat(self._all_cash_config(0.0, 0.0, growth))
-            eq_rate = np.full(360, (growth / 100) / 12)
+            eq_rate = np.full(360, monthly_rate_from_annual(growth / 100))
             expected = np.concatenate([[1.0], np.cumprod(1 + eq_rate)])
             initial_outlay = series["rent_portfolio"][0]
             assert np.array_equal(series["rent_portfolio"], initial_outlay * expected)
@@ -414,3 +422,84 @@ class TestPortfolioDrag:
         none = run_flat(taxfree_config(**kwargs))
         assert np.allclose(drag["_basis_buy"], none["_basis_buy"], rtol=1e-12)
         assert np.allclose(drag["_basis_rent"], none["_basis_rent"], rtol=1e-12)
+
+
+class TestMortgageInsurance:
+    """A yearly % of the ORIGINAL loan, billed monthly, on a down payment
+    under 20%, until the scheduled balance falls to 78% of the price (US
+    Homeowners Protection Act, 12 U.S.C. 4901(18) "termination date").
+
+    taxfree_config: price 120,000 at 6% over 30 years. At 10% down the
+    loan is 108,000, so 0.5% a year is 45.00 a month.
+    """
+
+    @staticmethod
+    def _insured(**overrides: object):
+        base = dict(
+            horizon_years=10, down_payment_pct=10, mortgage_insurance_rate_pct=0.5
+        )
+        base.update(overrides)
+        return taxfree_config(**base)
+
+    def test_no_insurance_at_or_above_20_pct_down(self):
+        # 20% exactly is uninsured: lenders require it only below 20%.
+        for down in (20, 25):
+            series = run_flat(self._insured(down_payment_pct=down))
+            assert np.all(np.abs(series["_mortgage_insurance"]) < 1e-9), down
+
+    def test_monthly_charge_is_a_twelfth_of_the_yearly_rate_on_the_loan(self):
+        series = run_flat(self._insured())
+        assert abs(series["_mortgage_insurance"][0]) < 1e-9
+        assert abs(series["_mortgage_insurance"][1] - 108_000 * 0.005 / 12) < 1e-9
+
+    def test_charge_stops_once_the_balance_falls_to_78_pct_of_the_price(self):
+        # 78% of 120,000 is 93,600. By npf.fv the balance is 93,739.78
+        # after payment 102 and 93,560.96 after payment 103. Each month is
+        # judged on the balance it starts with, so month 103 is the last
+        # one charged and month 104 the first one free.
+        series = run_flat(self._insured())
+        balance = series["mortgage_balance"]
+        assert balance[102] > 93_600 >= balance[103]
+        charge = series["_mortgage_insurance"]
+        assert np.all(np.abs(charge[1:104] - 45.0) < 1e-9)
+        assert np.all(np.abs(charge[104:]) < 1e-9)
+
+    def test_the_premium_is_part_of_the_cost_of_buying(self):
+        # ADR-0002: buying is already the dearer side here (a 647.51
+        # payment against 500 rent), so each premium raises the buyer's
+        # cost, the cash both sides commit, and what the renter invests,
+        # all by exactly the premium.
+        with_premium = run_flat(self._insured())
+        without = run_flat(self._insured(mortgage_insurance_rate_pct=0.0))
+        premium = with_premium["_mortgage_insurance"]
+        np.testing.assert_allclose(
+            with_premium["housing_cost_buy"] - without["housing_cost_buy"],
+            premium,
+            atol=1e-9,
+        )
+        for key in ("cash_committed", "_basis_rent"):
+            np.testing.assert_allclose(
+                with_premium[key] - without[key], np.cumsum(premium), atol=1e-6
+            )
+
+    def test_rate_zero_means_no_insurance(self):
+        series = run_flat(self._insured(mortgage_insurance_rate_pct=0.0))
+        assert np.all(np.abs(series["_mortgage_insurance"]) < 1e-9)
+
+    def test_the_premium_is_not_tax_deductible(self):
+        # Only interest and the levy are deductible; US rules on deducting
+        # this premium have changed several times and are not modelled.
+        kwargs = dict(interest_deduction_enabled=True, marginal_tax_rate_pct=24.0)
+        with_premium = run_flat(self._insured(**kwargs))
+        without = run_flat(self._insured(mortgage_insurance_rate_pct=0.0, **kwargs))
+        np.testing.assert_array_equal(
+            with_premium["cum_tax_savings"], without["cum_tax_savings"]
+        )
+
+    def test_reported_totals_match_the_series(self):
+        config = self._insured()
+        results = calculate_scenarios(config)
+        assert abs(results.total_mortgage_insurance_paid - 45.0 * 103) < 1e-6
+        without = calculate_scenarios(self._insured(mortgage_insurance_rate_pct=0.0))
+        gap = results.monthly_cost_buy_year1 - without.monthly_cost_buy_year1
+        assert abs(gap - 45.0) < 1e-9

@@ -16,7 +16,7 @@ export function trackEvent(name, props) {
 
 // The share-URL params the app writes into the address bar (state.js).
 // Other params, such as utm_* and ref, are campaign data and stay.
-const APP_PARAMS = [...Object.keys(DEFAULT_CONFIG), "r", "v"];
+const APP_PARAMS = [...Object.keys(DEFAULT_CONFIG), "r", "ftb", "v"];
 
 function stripAppParams(url) {
     const u = new URL(url);

@@ -295,7 +295,7 @@ FTB relief changes only **which buyer-cost numbers apply**. That is region data.
 
 The toggle applies or omits that dict when a region is applied (`inputs.js:140`). DE and US ship `{}` — the toggle is visible and inert, which is exactly what keeps it consistent across regions per locked decision 3.
 
-**Share-URL behaviour.** The toggle changes only real config fields, so a shared URL reproduces the numbers exactly. The toggle's own on/off state is *not* persisted — identical to the existing outlook pills (`inputs.js:148-160`), which also apply a preset without persisting which pill was pressed. Consistent with the shipped design; no new machinery.
+**Share-URL behaviour.** The toggle changes only real config fields, so a shared URL reproduces the numbers exactly. The toggle's own on/off state is *not* persisted — identical to the existing outlook pills (`inputs.js:148-160`), which also apply a preset without persisting which pill was pressed. Consistent with the shipped design; no new machinery. Superseded by #51: the link carries the setting as `ftb`, because once a relief value is edited the numbers can no longer say whether the relief was on.
 
 **Magnitudes justifying default-TRUE:** UK £0 vs £4,455 at the preset price. NL startersvrijstelling 0% vs 2% (age 18–35, own occupancy, value ≤ €555,000) — a **~€9,000** swing. FR primo-accédant carve-out from the departmental increase, worth **~0.51pp** (*not* the 1.5pp claimed in earlier research — the arithmetic was checked and corrected). DE: none enacted.
 

@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 import numpy as np
 import numpy_financial as npf
 
-from simulator.engine import _net_value_series
+from simulator.engine import _net_value_series, monthly_rate_from_annual
 from simulator.models import SimulationConfig
 
 
@@ -39,13 +39,17 @@ def taxfree_config(**overrides: object) -> SimulationConfig:
 
 
 def run_flat(config: SimulationConfig) -> dict[str, np.ndarray]:
-    """Run the core with constant monthly rates derived from the config."""
+    """Run the core with constant monthly rates derived from the config.
+
+    Uses the engine's own yearly-to-monthly conversion (ADR-0011), so the
+    fixture and ``calculate_scenarios`` cannot disagree on it.
+    """
     h = config.horizon_years * 12
     return _net_value_series(
         config,
-        np.full(h, config.property_appreciation_annual / 100 / 12),
-        np.full(h, config.equity_growth_annual / 100 / 12),
-        np.full(h, config.rent_inflation_rate / 12),
+        np.full(h, monthly_rate_from_annual(config.property_appreciation_annual / 100)),
+        np.full(h, monthly_rate_from_annual(config.equity_growth_annual / 100)),
+        np.full(h, monthly_rate_from_annual(config.rent_inflation_rate)),
     )
 
 

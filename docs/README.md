@@ -10,7 +10,7 @@ Hub: [../README.md](../README.md)
 |---|---|
 | [System Architecture](architecture.md) | Stack, static-JS module map, server middleware, API endpoints, tour & analytics flow, test layout |
 | [Mathematical Reference](formulas.md) | The exact formulas behind `_net_value_series()`: Net Value, cash-flow matching, Monte Carlo, tax primitives |
-| [Decision Records](adr/README.md) | 9 ADRs covering shipped and rejected decisions |
+| [Decision Records](adr/README.md) | 13 ADRs covering shipped and rejected decisions |
 | [Project Vocabulary](../CONTEXT.md) | Canonical terms and what to call them |
 | [Contributing](../CONTRIBUTING.md) | Setup, tests, branch and PR-title rules, financial-change rules, troubleshooting |
 
@@ -27,4 +27,4 @@ Kept as records of the design process — ancestry, not living documents. See [A
 
 ## Tour & Tests
 
-The 12-step onboarding tour (`static/js/tour.js`) is covered by `tests/tour.spec.js`. The suite is **12 pytest files** under `tests/` (engine, api, regions, Monte Carlo, tornado bounds, Umami) plus **14 Playwright spec files** (`tests/*.spec.js`, among them `tour.spec.js`, `tornado.spec.js` and `analytics.spec.js`) running in headless mode (the default Playwright leaves in place) on ports 8323 and 8324.
+The 12-step onboarding tour (`static/js/tour.js`) is covered by `tests/tour.spec.js`. The suite is **13 pytest files** under `tests/` (engine, rate conversion, api, regions, Monte Carlo, tornado bounds, Umami) plus **16 Playwright spec files** (`tests/*.spec.js`, among them `tour.spec.js`, `tornado.spec.js` and `analytics.spec.js`) running in headless mode (the default Playwright leaves in place) on ports 8323 and 8324.

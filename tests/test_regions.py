@@ -20,7 +20,7 @@ _FIELDS_JS = Path(__file__).parent.parent / "src/simulator/static/js/fields.js"
 
 # Every INPUT_DEFS entry that declares min/max. Update deliberately when
 # a slider is added or removed -- see the canary test below.
-_EXPECTED_BOUNDED_FIELDS = 25
+_EXPECTED_BOUNDED_FIELDS = 26
 
 
 def _field_steps() -> dict[str, tuple[Fraction, Fraction]]:
@@ -262,6 +262,56 @@ class TestUnitedStates:
         assert primitives["annualMaintenanceAmount"] == 0.0
         assert primitives["portfolioDeemedReturnPct"] == 0.0
         assert primitives["portfolioDragRatePct"] == 0.0
+
+    def test_mortgage_insurance_sits_in_freddie_macs_quoted_range(self):
+        # Freddie Mac, "What Is Private Mortgage Insurance?" (My Home by
+        # Freddie Mac, last reviewed 2025-01-03): "You can expect to pay
+        # between $30 and $70 per month for every $100,000 you borrowed",
+        # i.e. 0.36% to 0.84% of the loan a year. Its "Breaking down PMI"
+        # page works its example at 0.51%. Rated M: the real premium
+        # depends on the credit score and the share of the price borrowed.
+        primitives = next(r for r in list_regions() if r["id"] == "us")["taxPrimitives"]
+        rate = primitives["mortgageInsuranceRatePct"]
+        assert rate == 0.5
+        assert 30 * 12 / 100_000 * 100 <= rate <= 70 * 12 / 100_000 * 100
+
+    def test_mortgage_insurance_note_says_when_it_applies_and_when_it_ends(self):
+        # CFPB ("What is private mortgage insurance?"): required on a
+        # conventional loan with a down payment under 20% of the price.
+        # 12 U.S.C. 4901(18)(A): it terminates on the date the balance is
+        # first scheduled to reach 78% of the original value.
+        notes = " ".join(next(r for r in list_regions() if r["id"] == "us")["notes"])
+        assert "20%" in notes
+        assert "78%" in notes
+
+
+class TestMortgageInsuranceAcrossRegions:
+    def test_only_the_us_charges_a_yearly_premium(self):
+        # FR: a one-off guarantee; DE and UK: a higher rate on a small
+        # deposit; NL: the one-off NHG fee. None is a yearly premium.
+        rates = {
+            r["id"]: r["taxPrimitives"]["mortgageInsuranceRatePct"]
+            for r in _available()
+        }
+        assert rates == {"us": 0.5, "fr": 0.0, "de": 0.0, "nl": 0.0, "uk": 0.0}
+
+    def test_every_zero_rate_is_explained_in_the_notes(self):
+        for region in _available():
+            if region["taxPrimitives"]["mortgageInsuranceRatePct"] == 0.0:
+                assert any(
+                    "Mortgage insurance is set to 0" in note for note in region["notes"]
+                ), region["id"]
+
+
+class TestDeductionRefunds:
+    def test_regions_with_the_deduction_on_say_the_refund_is_invested(self):
+        # ADR-0013: each year's refund is invested as it arrives. The note
+        # states that assumption, since a person might spend it instead.
+        for region in _available():
+            if region["taxPrimitives"]["interestDeductionEnabled"]:
+                assert any(
+                    "assumes you invest it" in note for note in region["notes"]
+                ), region["id"]
 
 
 class TestFrance:

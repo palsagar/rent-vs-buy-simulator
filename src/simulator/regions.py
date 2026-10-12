@@ -38,6 +38,9 @@ REGIONS: list[dict[str, Any]] = [
             "annualPropertyLevy": 0.0,
             "levyPaidByOccupier": False,
             "annualHomeInsurance": 1200.0,
+            # M — Freddie Mac: $30-$70/month per $100,000 borrowed
+            # (0.36-0.84%/yr); charged below 20% down, ends at 78%
+            "mortgageInsuranceRatePct": 0.5,
             "annualMaintenancePct": 1.0,
             "annualMaintenanceAmount": 0.0,
             "interestDeductionEnabled": True,
@@ -57,6 +60,17 @@ REGIONS: list[dict[str, Any]] = [
             "Portfolios are modelled as plain taxable brokerage accounts. "
             "401(k)/IRA sheltering is not modelled, which understates the "
             "renter's after-tax returns (ADR-0009).",
+            "If you put down less than 20%, lenders charge mortgage "
+            "insurance. It is modelled at 0.5% of the amount you borrow "
+            "per year, and it stops once you owe 78% of the purchase price "
+            "or less, where it ends automatically by law. If your quote "
+            "differs, change it in Advanced under Yearly costs of owning.",
+            "The tax you save by deducting mortgage interest and the "
+            "property levy comes back as a refund at the end of each year. "
+            "The model assumes you invest it: it grows with your other "
+            "investments and is taxed on its gains when you cash them in. "
+            "If you would spend it instead, buying comes out worse than "
+            "shown.",
         ],
     },
     {
@@ -81,6 +95,9 @@ REGIONS: list[dict[str, Any]] = [
             # H — taxe d'habitation on main residences abolished 2023
             "levyPaidByOccupier": False,
             "annualHomeInsurance": 220.0,  # M — multirisque habitation
+            # H — no yearly premium; the loan guarantee (caution or
+            # hypothèque) is paid when the loan is taken out
+            "mortgageInsuranceRatePct": 0.0,
             "annualMaintenancePct": 0.0,
             "annualMaintenanceAmount": 1300.0,  # L — owner-only estimate; see notes
             "interestDeductionEnabled": False,  # H — abolished 2011
@@ -114,6 +131,11 @@ REGIONS: list[dict[str, Any]] = [
             "flat, a ≤0.2pp error on a 7.9% cost.",
             "Rent regulation (encadrement) is not modelled; rent grows at "
             "the selected outlook rate.",
+            "Mortgage insurance is set to 0. French lenders ask for a "
+            "guarantee on almost every home loan: a guarantee company "
+            "vouches for you, or the lender registers a charge on the "
+            "home. It is paid when you take out the loan, not every year, "
+            "and it is not modelled separately.",
             "Portfolios are modelled as plain taxable accounts — no PEA (ADR-0009).",
         ],
     },
@@ -140,6 +162,8 @@ REGIONS: list[dict[str, Any]] = [
             "levyPaidByOccupier": True,  # H — BetrKV §2 Nr.1, umlagefähig
             # H — condo: inside Hausgeld, umlagefähig (BetrKV §2 Nr.13)
             "annualHomeInsurance": 0.0,
+            # H — no premium; a small deposit is priced into the rate
+            "mortgageInsuranceRatePct": 0.0,
             "annualMaintenancePct": 0.0,
             # M — §28 Abs.2 II.BV €9.00/m² x 80 + Verwalter + Sondereigentum
             "annualMaintenanceAmount": 1700.0,
@@ -176,6 +200,10 @@ REGIONS: list[dict[str, Any]] = [
             "are not modelled, nor is the §489 BGB exit right after 10 yrs.",
             "Heating and water Nebenkosten are omitted from both arms — "
             "both parties pay them, so they are decision-neutral.",
+            "Mortgage insurance is set to 0. German lenders charge a "
+            "higher interest rate when your deposit is small, not a "
+            "separate premium. If your quote reflects that, raise the "
+            "mortgage rate.",
             "Portfolios are modelled as plain taxable accounts — no "
             "Sparer-Pauschbetrag (ADR-0009).",
         ],
@@ -204,6 +232,9 @@ REGIONS: list[dict[str, Any]] = [
             "levyPaidByOccupier": False,
             # M — opstalverzekering, €1.30/€1,000 herbouwwaarde
             "annualHomeInsurance": 550.0,
+            # H — no yearly premium; NHG is a one-off fee, and this loan
+            # is above the NHG limit
+            "mortgageInsuranceRatePct": 0.0,
             "annualMaintenancePct": 1.0,  # M-H — Nibud "ruim 1%"/yr; VEH 1% of WOZ
             # deliberate: the sources are value-proportional
             "annualMaintenanceAmount": 0.0,
@@ -261,8 +292,17 @@ REGIONS: list[dict[str, Any]] = [
             "interest exceeds the eigenwoningforfait throughout. It would "
             "only bite above a ~91.9% down payment.",
             "Box 3 uses a 1 January peildatum; the model applies the drag "
-            "monthly, which overstates it by ~3.36% of the terminal "
+            "monthly, which overstates it by ~3.37% of the terminal "
             "portfolio over 30 years, biased toward buying.",
+            "Mortgage insurance is set to 0. There is no yearly premium in "
+            "the Netherlands. A loan under the NHG limit can carry a "
+            "one-off guarantee fee instead; the figures here are for a "
+            "loan above that limit.",
+            "The tax you save by deducting mortgage interest comes back as "
+            "a refund at the end of each year. The model assumes you invest "
+            "it: it grows with your other investments and pays the box 3 "
+            "wealth tax like them. If you would spend it instead, buying "
+            "comes out worse than shown.",
             "Portfolios are modelled as plain taxable accounts (ADR-0009).",
         ],
     },
@@ -288,6 +328,8 @@ REGIONS: list[dict[str, Any]] = [
             "annualPropertyLevy": 2392.0,
             "levyPaidByOccupier": True,  # H — LGFA 1992 s.6(2), resident liable
             "annualHomeInsurance": 310.0,  # M
+            # H — no premium; a small deposit is priced into the rate
+            "mortgageInsuranceRatePct": 0.0,
             "annualMaintenancePct": 0.0,
             # M — ONS Family Spending FYE2025, LOWER bound
             "annualMaintenanceAmount": 900.0,
@@ -340,6 +382,9 @@ REGIONS: list[dict[str, Any]] = [
             "The mortgage rate is held fixed for the full 25 years; "
             "reversion from the 5yr fix to SVR (currently ~195bp higher) "
             "is not modelled.",
+            "Mortgage insurance is set to 0. UK lenders charge a higher "
+            "interest rate when your deposit is small, not a separate "
+            "premium. If your quote reflects that, raise the mortgage rate.",
             "Portfolios are modelled as plain taxable accounts — no ISA (ADR-0009).",
         ],
     },

@@ -11,7 +11,7 @@ import math
 
 import numpy as np
 
-from .engine import _net_value_series
+from .engine import TIE_TOLERANCE, _net_value_series, monthly_rate_from_annual
 from .models import (
     MonteCarloConfig,
     MonteCarloResults,
@@ -100,7 +100,8 @@ _UI_MAXIMUM = {
 # model must represent even though the UI will not let you type a
 # negative growth rate -- see test_tornado_low_uses_negative_growth_rate,
 # which pins that. Their floor is -99.0, just above where the monthly
-# compounding factor would turn non-positive.
+# compounding factor would turn non-positive; engine.monthly_rate_from_annual
+# floors at the same -99%, which also covers the Monte Carlo draws.
 #
 # The quantities below have no such reading. property_price once took a
 # fixed 100k step, so every home price in the 50k-100k band drove its low
@@ -314,10 +315,12 @@ def _simulate_single_path(
         net_buy, net_rent = _simulate_single_path(config, prop, eq, rent)
 
     """
-    # Expand annual percentage draws to per-month decimal rates
-    prop_m = np.repeat(annual_prop_rates / 100 / 12, 12)
-    eq_m = np.repeat(annual_equity_rates / 100 / 12, 12)
-    rent_m = np.repeat(annual_rent_rates / 100 / 12, 12)
+    # Expand each yearly percentage draw to twelve equal monthly rates that
+    # compound back to exactly that draw (ADR-0011), as the deterministic
+    # engine does for its constant rates.
+    prop_m = np.repeat(monthly_rate_from_annual(annual_prop_rates / 100), 12)
+    eq_m = np.repeat(monthly_rate_from_annual(annual_equity_rates / 100), 12)
+    rent_m = np.repeat(monthly_rate_from_annual(annual_rent_rates / 100), 12)
     series = _net_value_series(config, prop_m, eq_m, rent_m)
     return series["net_buy"], series["net_rent"]
 
@@ -561,6 +564,47 @@ def _compute_sensitivity(  # noqa: C901
     )
 
 
+def _buy_win_share(final_diffs: np.ndarray) -> float:
+    """Share of simulated futures in which buying wins, in percent.
+
+    Uses the Verdict's own rule (``api._winner``): a gap under
+    ``TIE_TOLERANCE`` is a tie, and a tied future counts as half a win for
+    each side, so buying's share and renting's still add up to 100%,
+    which the page relies on (ADR-0010 amendment).
+
+    Parameters
+    ----------
+    final_diffs : np.ndarray
+        Buy - Rent at the Horizon, one per simulated future.
+
+    Returns
+    -------
+    float
+        Buying's share, 0 to 100.
+
+    Raises
+    ------
+    RuntimeError
+        If any future's gap is NaN or infinite: a broken path is an
+        error, never a win for either side.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import numpy as np
+        from simulator.monte_carlo import _buy_win_share
+
+        _buy_win_share(np.array([1.0, -1.0, 0.0, 0.25]))  # 50.0
+
+    """
+    if not np.all(np.isfinite(final_diffs)):
+        raise RuntimeError("a simulated verdict is not a finite number")
+    tied = np.abs(final_diffs) < TIE_TOLERANCE
+    wins = np.sum((final_diffs > 0) & ~tied) + 0.5 * np.sum(tied)
+    return float(wins / final_diffs.size * 100)
+
+
 def run_monte_carlo(
     base_config: SimulationConfig,
     mc_config: MonteCarloConfig,
@@ -643,7 +687,7 @@ def run_monte_carlo(
     diff_percentiles = np.percentile(all_diffs, percentile_levels, axis=0)
 
     # Summary statistics
-    buy_wins_pct = float(np.mean(final_diffs > 0) * 100)
+    buy_wins_pct = _buy_win_share(final_diffs)
     median_diff = float(np.median(final_diffs))
     p5_diff = float(np.percentile(final_diffs, 5))
     p95_diff = float(np.percentile(final_diffs, 95))
