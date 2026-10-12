@@ -8,7 +8,27 @@ import { moveFocusIn, restoreFocus, trapFocus } from "./focus.js";
 import { verdictIsCurrent } from "./results.js";
 import { shareUrl } from "./state.js";
 
-export function initUi(tour) {
+// A first visit through a link someone sent opens on their scenario:
+// viewing it is the main action and the tour the second. The buttons keep
+// their ids and handlers, so View still marks the welcome as skipped.
+function applySharedWelcome(welcome) {
+  welcome.querySelector("h1").textContent = "Someone shared a scenario with you";
+  welcome.querySelector(".welcome-hero-sub").textContent = "Their numbers are already filled in";
+  welcome.querySelector(".welcome-intro").textContent =
+    "This calculator compares buying a home with renting and investing the difference. " +
+    "The link has already filled in their numbers, so the answer is ready. " +
+    "Change any number to try your own.";
+  const view = document.getElementById("start-sim-btn");
+  const tourBtn = document.getElementById("start-tour-btn");
+  view.textContent = "View this shared scenario";
+  view.className = "btn-primary";
+  tourBtn.textContent = "Take the tour first";
+  tourBtn.className = "btn";
+  tourBtn.before(view);
+}
+
+// `sharedLink`: the page opened on a link that sets its own numbers.
+export function initUi(tour, { sharedLink = false } = {}) {
   // Desktop only: on a phone the preset bar is hidden, and the groups sit
   // in the inputs sheet right below the outlook section.
   document.getElementById("advanced-btn").addEventListener("click", () => {
@@ -118,13 +138,14 @@ export function initUi(tour) {
     releaseWelcomeTrap = null;
     welcome.classList.add("hidden");
   };
+  if (sharedLink) applySharedWelcome(welcome);
   // First visit only: returning visitors hold the tour flag. Markup starts
   // hidden and JS reveals it, so no inline script is needed (CSP-safe).
   if (!Tour.readFlag()) {
     welcomeActive = true;
     welcome.classList.remove("hidden");
     releaseWelcomeTrap = trapFocus(welcome);
-    moveFocusIn(welcome, document.getElementById("start-tour-btn"));
+    moveFocusIn(welcome, document.getElementById(sharedLink ? "start-sim-btn" : "start-tour-btn"));
   }
   document.getElementById("start-tour-btn").addEventListener("click", () => {
     dismissWelcome();

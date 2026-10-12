@@ -635,6 +635,7 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
 /* Welcome CTAs + guide link */
 .welcome-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   justify-content: center;
   padding-top: 20px;

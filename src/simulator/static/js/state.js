@@ -190,6 +190,13 @@ function isValidNumber(key, n) {
   return !range || (n >= range.min && n <= range.max);
 }
 
+/**
+ * Restore the config from the address bar. Returns `shared`, true when
+ * the link sets at least one value that differs from the defaults or turns
+ * the first-time-buyer relief off (a scenario someone sent), and `dropped`,
+ * the keys (config keys, or `ftb`) whose values the link carries but the
+ * calculator cannot use.
+ */
 export function readUrl() {
   const params = new URLSearchParams(location.search);
   // A link with no version marker predates the sentinel move, so its
@@ -212,6 +219,8 @@ export function readUrl() {
   const ftbRaw = params.get("ftb");
   ftb = ftbRaw === "1" ? true : ftbRaw === "0" ? false : null;
   const restored = {};
+  const dropped = [];
+  if (params.has("ftb") && ftb === null) dropped.push("ftb");
   for (const [key, def] of Object.entries(DEFAULT_CONFIG)) {
     if (!params.has(key)) continue;
     const raw = params.get(key);
@@ -224,18 +233,24 @@ export function readUrl() {
     // Drop values outside the field's known range or allowed set so a
     // hand-edited share URL can't push an invalid config into the API.
     if (typeof def === "boolean") {
-      restored[key] = raw === "true";
+      if (raw === "true" || raw === "false") restored[key] = raw === "true";
+      else dropped.push(key);
     } else if (typeof def === "number") {
       const n = Number(raw);
       if (!Number.isNaN(n) && isValidNumber(key, n)) restored[key] = n;
+      else dropped.push(key);
     } else {
       const allowed = ALLOWED_VALUES.get(key);
       if (!allowed || allowed.has(raw)) restored[key] = raw;
+      else dropped.push(key);
     }
   }
   if (Object.keys(restored).length > 0) {
     config = { ...DEFAULT_CONFIG, ...restored };
   }
+  // Relief is on unless a link turns it off, so only "off" is a choice.
+  const shared = ftb === false || Object.entries(restored).some(([k, v]) => v !== DEFAULT_CONFIG[k]);
+  return { shared, dropped };
 }
 
 // --- result cache, keyed by the serialized config ---

@@ -249,21 +249,23 @@ test('starting a second tour while one is active tears the first down', async ({
   expect(registry).toBe(null);
 });
 
-test('welcome dialog is labelled by an existing heading', async ({ page }) => {
-  await page.addInitScript(() => {
-    try { localStorage.removeItem('rvb.tour.v1'); } catch (e) {}
-  });
-  await page.goto('/');
-  await page.waitForFunction(() => window.__rvb?.tour, null, { timeout: 20_000 });
-  await expect(page.locator('#welcome-overlay')).toBeVisible();
+for (const url of ['/', '/?propertyPrice=750000&r=us&v=2']) {
+  test(`welcome dialog is labelled by an existing heading (${url})`, async ({ page }) => {
+    await page.addInitScript(() => {
+      try { localStorage.removeItem('rvb.tour.v1'); } catch (e) {}
+    });
+    await page.goto(url);
+    await page.waitForFunction(() => window.__rvb?.tour, null, { timeout: 20_000 });
+    await expect(page.locator('#welcome-overlay')).toBeVisible();
 
-  const probe = await page.evaluate(() => {
-    const w = document.getElementById('welcome-overlay');
-    const labelledby = w.getAttribute('aria-labelledby');
-    const el = labelledby ? document.getElementById(labelledby) : null;
-    return { labelledby, exists: !!el, tag: el?.tagName ?? null };
+    const probe = await page.evaluate(() => {
+      const w = document.getElementById('welcome-overlay');
+      const labelledby = w.getAttribute('aria-labelledby');
+      const el = labelledby ? document.getElementById(labelledby) : null;
+      return { labelledby, exists: !!el, tag: el?.tagName ?? null };
+    });
+    expect(probe.labelledby).toBe('welcome-title');
+    expect(probe.exists).toBe(true);
+    expect(probe.tag).toBe('H1');
   });
-  expect(probe.labelledby).toBe('welcome-title');
-  expect(probe.exists).toBe(true);
-  expect(probe.tag).toBe('H1');
-});
+}

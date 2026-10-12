@@ -199,7 +199,7 @@ const scheduleMonteCarlo = debounce(runMonteCarlo, 600);
 async function init() {
   // First: the regions request below can already fail.
   initErrorBanner({ onRetry: retry, onDismiss: dismissError });
-  readUrl();
+  const link = readUrl();
   const tour = new Tour({ steps: STEPS });
   window.__rvb = { tour }; // test handle for browser-driven verification
   // Before the regions request: the move needs only static markup, so phones
@@ -229,7 +229,7 @@ async function init() {
   initInputs(regions);
   // After initInputs: the groups reuse its builders and its region state.
   initAdvanced();
-  initUi(tour);
+  initUi(tour, { sharedLink: link.shared });
   syncInputs();
   onConfigChange((_cfg, { drag }) => {
     // Only a slider drag keeps the toss-up wording until Monte Carlo
