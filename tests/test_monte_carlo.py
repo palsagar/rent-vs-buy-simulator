@@ -10,10 +10,12 @@ import math
 from dataclasses import fields as dataclass_fields
 
 import numpy as np
+import pytest
 
 from simulator.engine import calculate_scenarios
 from simulator.models import MonteCarloConfig, SimulationConfig
 from simulator.monte_carlo import (
+    _UI_MAXIMUM,
     _UI_MINIMUM,
     _compute_sensitivity,
     run_monte_carlo,
@@ -173,12 +175,12 @@ class TestSensitivityReportsPerturbedInputs:
         assert sens.high_input[i] == 15.0
 
     def test_input_reflects_the_slider_floor_rather_than_base_minus_delta(self):
-        # Each of these takes a fixed absolute step, so a base at the
-        # slider minimum drives the low side below what the app can be
-        # set to. Asserted as equality against the slider minimum, not
-        # ">= 0": the old 0.001 backstop also satisfies ">= 0", and it is
-        # exactly what this replaced -- it rendered "$500 -> $0", the
-        # chart's widest bar claiming to have modelled a free house.
+        # Each of these takes a step that can carry the low side below
+        # what the app can be set to. Asserted as equality against the
+        # slider minimum, not ">= 0": the old 0.001 backstop also
+        # satisfies ">= 0", and it is exactly what this replaced -- it
+        # rendered "$500 -> $0", the chart's widest bar claiming to have
+        # modelled a free house.
         for field, bar in (
             ("property_price", "Property Price"),
             ("monthly_rent", "Monthly Rent"),
@@ -190,6 +192,33 @@ class TestSensitivityReportsPerturbedInputs:
             assert sens.low_input[i] == floor, (
                 f"{bar} floored to {sens.low_input[i]}, not the slider minimum {floor}"
             )
+
+    @pytest.mark.parametrize(
+        ("price", "rent"),
+        [(500_000, 2_400), (290_000, 812), (1_500_000, 6_000)],
+    )
+    def test_price_and_rent_move_by_a_fifth_of_their_own_value(self, price, rent):
+        # A fixed step in local currency made the bar width depend on the
+        # size of the number: +-500 was +-62% of a EUR 812 rent and +-21%
+        # of a $2,400 one. A share of the value tests every region alike.
+        sens = _compute_sensitivity(
+            make_config(property_price=price, monthly_rent=rent)
+        )
+        for bar, base in (("Property Price", price), ("Monthly Rent", rent)):
+            i = sens.params.index(bar)
+            assert math.isclose(sens.low_input[i], base * 0.8, rel_tol=1e-12)
+            assert math.isclose(sens.high_input[i], base * 1.2, rel_tol=1e-12)
+
+    def test_a_relative_step_still_stops_exactly_at_the_slider_limits(self):
+        # The chart marks a side at a limit by comparing its tested value
+        # with the slider's own bound, so the clamp must land on it exactly.
+        sens = _compute_sensitivity(make_config(property_price=1_900_000))
+        i = sens.params.index("Property Price")
+        assert sens.high_input[i] == _UI_MAXIMUM["property_price"]
+
+        sens = _compute_sensitivity(make_config(monthly_rent=550))
+        i = sens.params.index("Monthly Rent")
+        assert sens.low_input[i] == _UI_MINIMUM["monthly_rent"]
 
 
 class TestPortfolioDragIsPathDependent:
