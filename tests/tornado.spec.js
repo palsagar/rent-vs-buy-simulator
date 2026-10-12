@@ -131,6 +131,29 @@ test.describe('the chart', () => {
     expect(ends.sort()).toEqual(['$400k', '$600k']);
   });
 
+  test('a side clamped at a slider limit says which limit', async ({ page }) => {
+    await load(page, '?downPaymentPct=47'); // +5 points would be 52%; the slider stops at 50%
+    const sides = await page.evaluate(() => {
+      const el = document.getElementById('tornado-chart');
+      const row = el.data[0].y.indexOf('Down payment');
+      return el.data.map((t) => ({ text: t.text[row], hover: t.customdata[row] }));
+    });
+    expect(sides[0].text).toBe('42%');
+    expect(sides[0].hover).not.toContain('slider');
+    expect(sides[1].text).toBe('50% (max)');
+    expect(sides[1].hover).toMatch(
+      /^Down payment at 50% instead of 47% \(the slider maximum\)<br>(Buying|Renting) ahead by /,
+    );
+  });
+
+  test('no end label is marked when no test reaches a limit', async ({ page }) => {
+    await load(page);
+    const texts = await page.evaluate(() =>
+      document.getElementById('tornado-chart').data.flatMap((t) => t.text),
+    );
+    expect(texts.filter((t) => /\((min|max)\)/.test(t))).toEqual([]);
+  });
+
   test('a side stopped at its slider limit draws nothing', async ({ page }) => {
     await load(page, '?downPaymentPct=50'); // the slider maximum: it can only go down
     const sides = await page.evaluate(() => {

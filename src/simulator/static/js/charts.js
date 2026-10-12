@@ -319,10 +319,31 @@ const YOURS_GROUP = "Your numbers";
 // every real test moves by a whole step, whatever the field's units.
 const SAME_INPUT_TOLERANCE = 1e-9;
 
+// The slider limit a tested value sits on, if any: "min" for a lower side
+// at its slider's minimum, "max" for a higher side at its maximum. The
+// engine clamps every test to these same bounds (_UI_MINIMUM and
+// _UI_MAXIMUM mirror them), so a clamped side lands on the bound exactly.
+// Compared in stored units: rent inflation's slider shows 10% for 0.1.
+function sliderLimit(def, direction, stored) {
+  if (def?.min === undefined) return null;
+  const [limit, bound] = direction === "lower" ? ["min", def.min] : ["max", def.max];
+  return Math.abs(stored - bound / (def.scale ?? 1)) < SAME_INPUT_TOLERANCE ? limit : null;
+}
+
+const LIMIT_WORDS = { min: "minimum", max: "maximum" };
+
+// The value printed at a bar end, marked when its test stopped at a
+// slider limit instead of moving a full step.
+function endLabel(side) {
+  if (side.tested === null) return "";
+  return side.limit === null ? side.tested : `${side.tested} (${side.limit})`;
+}
+
 // One row per bar, widest first as the payload sends them. Each side
 // carries the verdict it produced and, when the payload has them, the
-// tested and current values formatted like their slider. A side clamped
-// at a slider limit is marked `untested`: there is no bar to draw for it.
+// tested and current values formatted like their slider. A side that is
+// already at a slider limit is marked `untested`: there is no bar to draw
+// for it. `limit` names the slider limit a side stopped at, if any.
 function tornadoRows(tornado) {
   const ranges = tornadoRanges(tornado, tornado.params.length);
   return tornado.params.map((name, i) => {
@@ -332,8 +353,8 @@ function tornadoRows(tornado) {
         future: false,
         current: null,
         sides: [
-          { end: tornado.low[i], tested: null, untested: false, direction: "lower" },
-          { end: tornado.high[i], tested: null, untested: false, direction: "higher" },
+          { end: tornado.low[i], tested: null, untested: false, direction: "lower", limit: null },
+          { end: tornado.high[i], tested: null, untested: false, direction: "higher", limit: null },
         ],
       };
     }
@@ -345,8 +366,8 @@ function tornadoRows(tornado) {
       future: def?.section === "assumptions",
       current: fmtFieldValue(fields[i], baseIn[i]),
       sides: [
-        { end: tornado.low[i], tested: fmtFieldValue(fields[i], lowIn[i]), untested: untested(lowIn[i]), direction: "lower" },
-        { end: tornado.high[i], tested: fmtFieldValue(fields[i], highIn[i]), untested: untested(highIn[i]), direction: "higher" },
+        { end: tornado.low[i], tested: fmtFieldValue(fields[i], lowIn[i]), untested: untested(lowIn[i]), direction: "lower", limit: sliderLimit(def, "lower", lowIn[i]) },
+        { end: tornado.high[i], tested: fmtFieldValue(fields[i], highIn[i]), untested: untested(highIn[i]), direction: "higher", limit: sliderLimit(def, "higher", highIn[i]) },
       ],
     };
   });
@@ -427,14 +448,16 @@ function tint(hex, alpha) {
 }
 
 // One side of one row as Plotly needs it. Headings and untested sides
-// draw nothing: no bar, no end label, no hover.
+// draw no bar; an untested side at a slider limit gets a label of its own
+// from limitAnnotations instead.
 function sideCell(slot, k, base) {
   const side = slot.heading ? null : slot.sides[k];
   if (side === null || side.untested) return { x: null, text: "", hover: "" };
+  const atLimit = side.limit === null ? "" : ` (the slider ${LIMIT_WORDS[side.limit]})`;
   return {
     x: side.end - base,
-    text: side.tested ?? "",
-    hover: `${testedPhrase(slot, side)}<br>${aheadBy(side.end)}`,
+    text: endLabel(side),
+    hover: `${testedPhrase(slot, side)}${atLimit}<br>${aheadBy(side.end)}`,
   };
 }
 
