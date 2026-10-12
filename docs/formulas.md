@@ -305,13 +305,14 @@ The drag applies symmetrically to both portfolios; any asymmetry between
 the two strategies emerges from their different sizes, not from a branch.
 
 Applied with `eq_rate_monthly` as the rate and `c = contrib_rent` /
-`contrib_buy`:
+`contrib_buy + refund`, where `refund(m)` is the tax refund the buyer
+receives in month m (§6, ADR-0013):
 
 ```
 eq_growth(t)     = G(t) using eq_rate_monthly
 
 rent_portfolio(t) = eq_growth(t) × ( initial_outlay + Σ_{m=1}^{t} contrib_rent(m) / eq_growth(m) )
-buy_portfolio(t)  = eq_growth(t) × Σ_{m=1}^{t} contrib_buy(m) / eq_growth(m)
+buy_portfolio(t)  = eq_growth(t) × Σ_{m=1}^{t} (contrib_buy(m) + refund(m)) / eq_growth(m)
 ```
 
 (`rent_portfolio` starts with `V0 = initial_outlay`; `buy_portfolio` starts
@@ -322,7 +323,7 @@ is the un-discounted running total of contributions:
 
 ```
 basis_rent(t) = initial_outlay + Σ_{m=1}^{t} contrib_rent(m)
-basis_buy(t)  = Σ_{m=1}^{t} contrib_buy(m)
+basis_buy(t)  = Σ_{m=1}^{t} (contrib_buy(m) + refund(m))
 ```
 
 ## 6. Taxes
@@ -354,16 +355,33 @@ cum_tax_savings(t) = cum_by_year(t // 12)
 the 12 months of a year and jumps once, at the year boundary, by that
 year's full savings.
 
-**Not invested.** `cum_tax_savings(t)` enters Net Value at face value. The
-refunds are not added to the buyer's portfolio and earn nothing, so a buyer
-who invested them would end up better off than shown. This simplification
-favours renting, by the growth the refunds would have earned. At the US
-defaults the refunds total $74,933 over 10 years, and investing each one at
-7% until the Horizon would add about $24,600 after tax: six times the
-default Verdict of $4,060. At the NL defaults it is about €14,500 against
-a Verdict of about €237,500. Both figures are disclosed in the regions'
-notes and checked against the engine in `tests/test_regions.py`. Mortgage
-insurance (§3) is not deductible, so it never enters `yearly_savings`.
+**Invested as they arrive (ADR-0013).** Each year's savings come back as a
+refund in the month that closes the year, and the buyer invests it:
+
+```
+refund(t) = yearly_savings(y)    if t = 12 × y for a year y = 1..horizon_years
+            0                    otherwise
+```
+
+`refund` joins the buyer's portfolio in §5, so it grows at the equity rate,
+pays the box-3 drag where there is one, and its gain is taxed at
+`portfolio_cg_rate_pct` when the portfolio is cashed in (§6, ADR-0001). The
+refund is money coming back, not a lower cost: no housing cost, outflow or
+`cash_committed` changes. `cum_tax_savings(t)` still records the refunds
+received, at face value. It is reported (`totals.taxSavings`, the "Tax
+savings (offset)" bar) but not added to Net Value, because the refunds are
+inside `buy_portfolio`. The last year's refund arrives at the Horizon and
+counts at face value, having had no time to grow.
+
+Netting each refund against the buyer's cost in that month instead, so that
+cash-flow matching does the investing, gives the same Verdict: when buying
+is the dearer side the renter invests that much less, and when it is the
+cheaper side the buyer invests that much more, and both portfolio taxes are
+proportional to the money invested. It was not chosen because it would show
+a refund as a cost: a negative buyer cost in the month that closes each
+year (−$4,096 at the US defaults) and a lower "Buy cost · yr 1" (ADR-0013).
+Mortgage insurance (§3) is not deductible, so it never enters
+`yearly_savings`.
 
 `yearly_levy(y)` sums the **whole** `levy(t)` term, so the deduction base
 includes both the ad-valorem component and the flat `annual_property_levy`.
@@ -429,8 +447,7 @@ this is what makes it liquidation-based (ADR-0001):
 seller_cost(t) = home_value(t) × (closing_cost_seller_pct / 100)       # as in §6
 
 Net_Buy(t) = home_value(t) - B(t) - seller_cost(t) - sale_cg_tax(t)
-             + buy_portfolio(t) - portfolio_tax_buy(t)
-             + cum_tax_savings(t)
+             + buy_portfolio(t) - portfolio_tax_buy(t)                # holds the refunds (§6)
              - cash_committed(t)
 
 Net_Rent(t) = rent_portfolio(t) - portfolio_tax_rent(t) - cash_committed(t)

@@ -11,7 +11,7 @@ The single headline answer the app produces for a given set of inputs: which str
 _Avoid_: Winner, difference, result
 
 **Net Value**:
-The wealth you would walk away with if you exited a strategy at year t, minus all cash you put in through t. Exit is priced fully and symmetrically: for Buy, home value − mortgage balance − seller closing costs − capital-gains tax on the home's profit after buying and selling costs, under the region's sale-CG regime (exempt amount, exempt after N years, or fully exempt) + accrued tax savings; for Rent, portfolio value − capital-gains tax on gains − cumulative rent. One formula, applied at every t, used by the verdict, the charts, the breakeven, and Monte Carlo alike.
+The wealth you would walk away with if you exited a strategy at year t, minus all cash you put in through t. Exit is priced fully and symmetrically: for Buy, home value − mortgage balance − seller closing costs − capital-gains tax on the home's profit after buying and selling costs, under the region's sale-CG regime (exempt amount, exempt after N years, or fully exempt) + the buyer's portfolio (any monthly surplus and the yearly tax refunds, invested as they arrive) − capital-gains tax on its gains; for Rent, portfolio value − capital-gains tax on gains − cumulative rent. One formula, applied at every t, used by the verdict, the charts, the breakeven, and Monte Carlo alike.
 _Avoid_: Net worth, equity, asset value minus outflows
 
 **Breakeven**:
@@ -22,7 +22,7 @@ The number of years the person expects to stay before exiting the strategy.
 _Avoid_: Duration, simulation period
 
 **Buy strategy**:
-Purchase the home with a mortgage. Monthly cost is mortgage + property levy + insurance + maintenance, plus mortgage insurance on a down payment under 20%. When buying is the cheaper side in a given month, the surplus is invested in equities within this strategy.
+Purchase the home with a mortgage. Monthly cost is mortgage + property levy + insurance + maintenance, plus mortgage insurance on a down payment under 20%. When buying is the cheaper side in a given month, the surplus is invested in equities within this strategy, and so is each year's tax refund where interest is deductible (ADR-0013).
 _Avoid_: Scenario A
 
 **Rent strategy**:

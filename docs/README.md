@@ -10,7 +10,7 @@ Hub: [../README.md](../README.md)
 |---|---|
 | [System Architecture](architecture.md) | Stack, static-JS module map, server middleware, API endpoints, tour & analytics flow, test layout |
 | [Mathematical Reference](formulas.md) | The exact formulas behind `_net_value_series()`: Net Value, cash-flow matching, Monte Carlo, tax primitives |
-| [Decision Records](adr/README.md) | 12 ADRs covering shipped and rejected decisions |
+| [Decision Records](adr/README.md) | 13 ADRs covering shipped and rejected decisions |
 | [Project Vocabulary](../CONTEXT.md) | Canonical terms and what to call them |
 | [Contributing](../CONTRIBUTING.md) | Setup, tests, branch and PR-title rules, financial-change rules, troubleshooting |
 

@@ -29,4 +29,6 @@ The region's regime (tax-free up to an amount, tax-free after N years, or always
   | NL | Always tax-free (box 1) | No capital-gains tax on the home |
 
   Outside the US the rule matters only if a person changes the regime in Advanced. No new primitive was needed, so ADR-0007's "countries are data" holds.
+
+  CGI art. 150 VA and 150 VB were verified through the French tax administration's published doctrine (BOFiP, the two BOI-RFPI-PVI documents cited above, which quote and apply them), because Légifrance, the official text, could not be reached when this was written. The other rows were checked against the primary text.
 - Two simplifications remain. The whole buyer closing cost counts towards what the home cost, while US law leaves out financing costs such as loan points; that overstates the US cost slightly and favours buying when the profit exceeds the exclusion. France's optional flat 7.5% for purchase costs is not modelled; the actual buyer costs are used.

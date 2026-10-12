@@ -16,7 +16,8 @@ Each ADR records one load-bearing decision and why the alternatives lost. "Imple
 | [0010](0010-close-verdicts-read-as-toss-up.md) | Close verdicts read as a toss-up | Accepted, amended in 2026-10 (an exact tie) | Yes |
 | [0011](0011-growth-rates-are-effective-annual-rates.md) | Yearly growth rates compound as stated | Accepted | Yes |
 | [0012](0012-home-sale-gain-uses-adjusted-basis.md) | The taxed home-sale profit is net of buying and selling costs | Accepted | Yes |
+| [0013](0013-tax-relief-refunds-are-invested.md) | Tax-relief refunds are invested in the buyer's portfolio | Accepted | Yes |
 
-The vocabulary in [CONTEXT.md](../../CONTEXT.md) covers both shipped and target-state features. Two deliberate simplifications remain known biases, and both are disclosed per region in `regions.py`'s `notes`. Unsheltered portfolios understate after-tax returns in every region, which favours buying (ADR-0009). The yearly tax saving from deducting mortgage interest counts at face value and is never invested, which favours renting: about $25,000 at the US defaults (`formulas.md` §6).
+The vocabulary in [CONTEXT.md](../../CONTEXT.md) covers both shipped and target-state features. The one deliberate omission that remains a known bias — unsheltered portfolios understating after-tax returns in every region — is recorded in ADR-0009 and disclosed per region in `regions.py`'s `notes`.
 
 The four design specs under `docs/` ([redesign-spec](../redesign-spec.md), [multi-region-spec](../multi-region-spec.md), [frontend-migration-design](../frontend-migration-design.md), [frontend-migration-plan](../frontend-migration-plan.md)) are historical records of how these decisions were reached, not living documents — see [the docs index](../README.md).
