@@ -31,6 +31,10 @@ graph TD
     print --> results
     print --> inputs
     print --> advanced["advanced.js"]
+    print --> state
+    print --> analytics
+    print --> fields
+    ui --> fields
     ui --> state
     inputs --> fields["fields.js"]
     inputs --> analytics["analytics.js"]

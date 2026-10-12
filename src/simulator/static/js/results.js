@@ -131,7 +131,10 @@ function renderVerdict(data) {
   // A tie ignores the breakeven: a gap that ends at the tie can still
   // cross zero in the last month, which would name a winner.
   if (winner === "tie") breakevenEl.textContent = `Neither pulls ahead within ${horizonYears} years`;
-  else if (b != null) breakevenEl.textContent = `${name} pulls ahead if you stay ≥ ${Math.ceil(b)} years`;
+  else if (b != null) {
+    const n = Math.ceil(b);
+    breakevenEl.textContent = `${name} pulls ahead if you stay ≥ ${n} ${n === 1 ? "year" : "years"}`;
+  }
   else breakevenEl.textContent = `No breakeven within ${horizonYears} years`;
   document.getElementById("verdict-confidence").textContent = "";
   paintSheetVerdict();

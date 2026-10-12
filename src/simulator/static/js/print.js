@@ -39,9 +39,14 @@ function fillSummary(regions) {
     if (def.section !== "advanced") row(def.label, formatValue(def, cfg[def.key]));
   }
   // Only what differs from the region; with no region, every Advanced value.
+  // A field another field switches off is hidden on screen and does not
+  // count, so it is not printed either.
   const defaults = regionDefaults();
   const changed = INPUT_DEFS.filter(
-    (def) => def.section === "advanced" && (defaults === null || changedFromRegion(def, cfg, defaults)),
+    (def) =>
+      def.section === "advanced" &&
+      (!def.visibleWhen || def.visibleWhen(cfg)) &&
+      (defaults === null || changedFromRegion(def, cfg, defaults)),
   );
   if (changed.length > 0) {
     const heading = document.createElement("dt");

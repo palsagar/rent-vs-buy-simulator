@@ -80,9 +80,11 @@ function reason(err) {
 }
 
 // Monte Carlo alone is re-run for its own failure: the simulate result for
-// the live config is already on screen.
+// the live config is already on screen. A simulate retry re-runs Monte
+// Carlo too, so its failure is cleared as well.
 function retry(source) {
   errors[source] = null;
+  if (source === "simulate") errors.monteCarlo = null;
   syncBanner();
   syncBusy();
   if (source === "simulate") runSimulate().then(runMonteCarlo);

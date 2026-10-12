@@ -170,3 +170,8 @@ test('when a drag fails in both requests, the verdict keeps the confidence besid
   );
   await expect(confidence).toHaveText(shownConfidence);
 });
+
+test('a breakeven after one year reads in the singular', async ({ page }) => {
+  await load(page, '?propertyPrice=200000&monthlyRent=8000&propertyAppreciationAnnual=0.06&r=us&v=3');
+  await expect(page.locator('#verdict-breakeven')).toHaveText(/pulls ahead if you stay ≥ 1 year$/);
+});

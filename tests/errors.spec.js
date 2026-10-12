@@ -178,6 +178,24 @@ for (const button of ['#error-dismiss', '#error-retry']) {
   });
 }
 
+test('trying an update again clears the Monte Carlo failure it will re-run', async ({ page }) => {
+  await load(page);
+  await page.route('**/api/simulate', (route) => route.fulfill(BOOM));
+  await page.route('**/api/monte-carlo', (route) => route.fulfill(BOOM));
+  await dragPrice(page, 1295000);
+  await expect(banner(page)).toHaveText(/Couldn't update the results: boom/);
+  await page.waitForResponse('**/api/monte-carlo');
+
+  // The retried update stays pending: nothing should take the banner's place.
+  await page.unroute('**/api/simulate');
+  await page.unroute('**/api/monte-carlo');
+  await page.route('**/api/simulate', () => {});
+  await page.locator('#error-retry').click();
+  await expect(banner(page)).toBeHidden();
+  await page.waitForTimeout(300);
+  expect(await banner(page).isVisible()).toBe(false);
+});
+
 test('a dismissed banner comes back on the next failure', async ({ page }) => {
   await load(page);
   await page.route('**/api/simulate', (route) => route.fulfill(BOOM));

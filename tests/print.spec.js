@@ -76,6 +76,18 @@ test('the summary lists the Advanced values that differ from the region', async 
   await expect(summary).toContainText('Selling costs (% of price)');
 });
 
+test('the summary leaves out an Advanced value that does not apply', async ({ page }) => {
+  await page.addInitScript(() => {
+    try { localStorage.setItem('rvb.tour.v1', 'done'); } catch (e) {}
+  });
+  // Mortgage insurance applies only below 20% down, so at 25% it is hidden.
+  await page.goto('/?downPaymentPct=25&mortgageInsuranceRatePct=1&r=us&v=3');
+  await page.waitForFunction(() => document.getElementById('verdict-confidence').textContent.length > 0);
+  await startPrint(page);
+  await expect(page.locator('#print-summary')).toBeVisible();
+  await expect(page.locator('#print-summary')).not.toContainText('Mortgage insurance');
+});
+
 test('the page prints to PDF', async ({ page, browserName }) => {
   test.skip(browserName !== 'chromium', 'page.pdf() is Chromium only');
   await load(page);
