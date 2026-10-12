@@ -7,11 +7,13 @@ import { MINUS, fmtMoney, getCurrencySymbol } from "./format.js";
 const BUY = "#f0883e";
 const RENT = "#58a6ff";
 const MUTED = "#8b949e";
+const TEXT = "#e6edf3";
 const GRID = "rgba(48,54,61,0.6)";
 
-// Tornado "assumption goes up" bars. Not the Rent blue: in this chart the
-// colour means a direction, not a strategy.
-const HIGHER = "#d2a8ff";
+// Tornado bars. Neutral on purpose: the tinted halves behind them carry
+// the Buy and Rent colours, and the tested value printed at each bar end
+// says which way the number moved, so the bar itself encodes nothing.
+const BAR = "#6e7681";
 
 // Below this chart width the tornado's category labels took half the plot,
 // so they move above their bars and the bars get the full width.
@@ -285,14 +287,15 @@ function fmtFieldValue(fieldKey, storedValue) {
   return def.fmt(storedValue * (def.scale ?? 1));
 }
 
-// The range hover needs four arrays the bars themselves do not. They are
+// The tested values need four arrays the bars themselves do not. They are
 // a strictly additive part of the payload, so a response that predates
 // them still has everything needed to draw the chart -- but spreading a
 // missing one throws, and the throw happens AFTER the fan chart has
 // already rendered, leaving the tornado showing the previous region's
 // bars with nothing on screen saying they are stale. Reachable during a
 // rolling deploy (new bundle, old container) or from a cached API
-// response. Degrade to the bar-only hover instead of stranding the chart.
+// response. Degrade to one ungrouped list under the server's own names
+// instead of stranding the chart.
 function tornadoRanges(tornado, count) {
   const arrays = [
     tornado.fields,
@@ -301,53 +304,215 @@ function tornadoRanges(tornado, count) {
     tornado.highInput,
   ];
   if (arrays.some((a) => !Array.isArray(a) || a.length !== count)) return null;
-  return arrays.map((a) => [...a].reverse());
+  return arrays;
+}
+
+// The tornado's two group headings. A bar's group is the input panel
+// section its field lives in: the outlook assumptions are guesses nobody
+// can check today, everything else is known (or negotiable) when you sign.
+const FUTURE_GROUP = "Guesses about the future";
+const YOURS_GROUP = "Your numbers";
+
+// Below this gap between a tested value and the current one, the side was
+// clamped at a slider limit and tested nothing. Absolute rather than
+// relative, because a clamped side equals the current value exactly and
+// every real test moves by a whole step, whatever the field's units.
+const SAME_INPUT_TOLERANCE = 1e-9;
+
+// One row per bar, widest first as the payload sends them. Each side
+// carries the verdict it produced and, when the payload has them, the
+// tested and current values formatted like their slider. A side clamped
+// at a slider limit is marked `untested`: there is no bar to draw for it.
+function tornadoRows(tornado) {
+  const ranges = tornadoRanges(tornado, tornado.params.length);
+  return tornado.params.map((name, i) => {
+    if (ranges === null) {
+      return {
+        label: name,
+        future: false,
+        current: null,
+        sides: [
+          { end: tornado.low[i], tested: null, untested: false, direction: "lower" },
+          { end: tornado.high[i], tested: null, untested: false, direction: "higher" },
+        ],
+      };
+    }
+    const [fields, baseIn, lowIn, highIn] = ranges;
+    const def = INPUT_DEFS.find((d) => d.key === fields[i]);
+    const untested = (v) => Math.abs(v - baseIn[i]) < SAME_INPUT_TOLERANCE;
+    return {
+      label: def?.label ?? name,
+      future: def?.section === "assumptions",
+      current: fmtFieldValue(fields[i], baseIn[i]),
+      sides: [
+        { end: tornado.low[i], tested: fmtFieldValue(fields[i], lowIn[i]), untested: untested(lowIn[i]), direction: "lower" },
+        { end: tornado.high[i], tested: fmtFieldValue(fields[i], highIn[i]), untested: untested(highIn[i]), direction: "higher" },
+      ],
+    };
+  });
+}
+
+function aheadBy(diff) {
+  return diff > 0 ? `Buying ahead by ${fmtMoney(diff)}` : `Renting ahead by ${fmtMoney(-diff)}`;
+}
+
+function lowerFirst(text) {
+  return text.charAt(0).toLowerCase() + text.slice(1);
+}
+
+// What one side tested, as the start of a sentence: "Equity growth (CAGR)
+// at 11.7% instead of 7.0%", or "Higher equity growth" when the payload
+// predates the tested values. The hover uses it as is, the summary
+// lower-cases its first letter.
+function testedPhrase(row, side) {
+  if (side.tested === null) {
+    return `${side.direction.charAt(0).toUpperCase()}${side.direction.slice(1)} ${lowerFirst(row.label)}`;
+  }
+  return `${row.label} at ${side.tested} instead of ${row.current}`;
+}
+
+const COUNT_WORDS = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"];
+
+// Bars named in the summary when more than this many flip the answer.
+const MAX_NAMED_FLIPS = 3;
+
+// "a, b, or c" / "a, b, and c".
+function listPhrase(items, conjunction) {
+  return items.length === 1 ? items[0] : `${items.slice(0, -1).join(", ")}, ${conjunction} ${items.at(-1)}`;
+}
+
+// The sentence above the tornado: which single changes would flip the
+// answer. A side flips it when its verdict lands on the other side of the
+// tie from yours. The winner follows the server's own rule (buy only when
+// Buy - Rent is above zero), and a toss-up gets its own line, decided by
+// the same flag as the headline, so the two never disagree.
+export function tornadoSummary(tornado, tossUp) {
+  if (tossUp) return "The answer is too close to call, so small changes can tip it either way.";
+  const buyAhead = tornado.base > 0;
+  const flips = tornadoRows(tornado).flatMap((row) => {
+    const side = row.sides.find((s) => !s.untested && s.end > 0 !== buyAhead);
+    // The tested value already carries the unit, so the sentence drops a
+    // label's bracketed qualifier: "property levy at 1.70%", not
+    // "property levy (% of value per year) at 1.70%".
+    const named = { ...row, label: row.label.replace(/\s*\(.*\)$/, "") };
+    return side === undefined ? [] : [lowerFirst(testedPhrase(named, side))];
+  });
+  if (flips.length === 0) {
+    return `No single change here flips the answer. ${buyAhead ? "Buying" : "Renting"} stays ahead in every test.`;
+  }
+  const count = COUNT_WORDS[flips.length - 1] ?? String(flips.length);
+  const lead = `${count} of these could flip the answer to ${buyAhead ? "renting" : "buying"} on ${flips.length === 1 ? "its" : "their"} own`;
+  if (flips.length > MAX_NAMED_FLIPS) {
+    return `${lead}. The biggest are ${listPhrase(flips.slice(0, MAX_NAMED_FLIPS), "and")}.`;
+  }
+  return `${lead}: ${listPhrase(flips, "or")}.`;
+}
+
+// An empty side of the axis is extended by this fraction of the data
+// span, which keeps the tie line at least a quarter of the way in from
+// either edge. Each tinted half then has room for its label even when
+// every bar lies on one side.
+const MIN_HALF_FRACTION = 1 / 3;
+
+// Room past the outermost bar ends for the tested values printed there.
+const END_LABEL_PAD = 0.14;
+
+// Behind the tornado, each half of the axis is tinted with the colour of
+// the strategy that is ahead there.
+const HALF_TINT_ALPHA = 0.1;
+
+function tint(hex, alpha) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${alpha})`;
+}
+
+// One side of one row as Plotly needs it. Headings and untested sides
+// draw nothing: no bar, no end label, no hover.
+function sideCell(slot, k, base) {
+  const side = slot.heading ? null : slot.sides[k];
+  if (side === null || side.untested) return { x: null, text: "", hover: "" };
+  return {
+    x: side.end - base,
+    text: side.tested ?? "",
+    hover: `${testedPhrase(slot, side)}<br>${aheadBy(side.end)}`,
+  };
 }
 
 export function renderTornadoChart(el, tornado) {
-  const params = [...tornado.params].reverse();
   const base = tornado.base;
-  const low = [...tornado.low].reverse().map((v) => v - base);
-  const high = [...tornado.high].reverse().map((v) => v - base);
-  // A bar's width says how much the outcome moves but never what was
-  // changed, and the width of the three stochastic bars additionally
-  // varies with the horizon (the delta is a standard error). Both are
-  // invisible without stating the assumption's own before/after.
-  const ranges = tornadoRanges(tornado, params.length);
-  const [fields, baseIn, lowIn, highIn] = ranges ?? [[], [], [], []];
-  // Bars are drawn as IMPACT (verdict - base) around a zero pivot, NOT
-  // as absolute verdicts around a `base` pivot. Both render identically
-  // -- same widths, same pivot position -- but only one agrees with the
-  // axis title, and the difference is visible the moment a number is
-  // read off. With a trace `base`, Plotly resolves %{x} to base + size,
-  // so the tick labels and the hover reported the absolute verdict on an
-  // axis titled "Impact": a bar sitting well left of the zero tick could
-  // hover as a positive number, the two disagreeing by the whole base.
-  // customdata is [range, impact] per bar. The impact is pre-formatted
-  // like every other hover; the range is empty when the payload predates
-  // it, and the template then omits that line entirely.
-  const hoverData = (values, impacts) => {
-    const money = moneyHover(impacts);
-    return money.map((m, i) =>
-      ranges === null
-        ? ["", m]
-        : [`${fmtFieldValue(fields[i], baseIn[i])} → ${fmtFieldValue(fields[i], values[i])}`, m],
-    );
+  const rows = tornadoRows(tornado);
+  // Top to bottom: guesses about the future, then your numbers, each
+  // still widest first. Headings only when the payload says which is
+  // which; an older payload gets one ungrouped list.
+  const future = rows.filter((r) => r.future);
+  const yours = rows.filter((r) => !r.future);
+  const heading = (label) => ({ label, heading: true });
+  const order =
+    future.length > 0
+      ? [heading(FUTURE_GROUP), ...future, ...(yours.length > 0 ? [heading(YOURS_GROUP), ...yours] : [])]
+      : rows;
+  // Plotly draws the first category at the bottom.
+  const slots = [...order].reverse();
+  const categories = slots.map((s) => s.label);
+
+  // The axis is the verdict itself, Buy - Rent, the same quantity as the
+  // fan chart above, so $0 is the tie in both. Each bar runs from your
+  // verdict to the verdict under one tested value; a bar that crosses $0
+  // flips the answer on its own.
+  const sideTrace = (k) => {
+    const cells = slots.map((s) => sideCell(s, k, base));
+    return {
+      type: "bar",
+      orientation: "h",
+      y: categories,
+      base,
+      x: cells.map((c) => c.x),
+      marker: { color: BAR },
+      text: cells.map((c) => c.text),
+      textposition: "outside",
+      cliponaxis: false,
+      textfont: { color: MUTED, size: 11 },
+      customdata: cells.map((c) => c.hover),
+      hovertemplate: "%{customdata}<extra></extra>",
+    };
   };
-  const tpl = (side) =>
-    ranges === null
-      ? `%{y} ${side}<br>%{customdata[1]}<extra></extra>`
-      : `%{y} ${side}<br>%{customdata[0]}<br>%{customdata[1]}<extra></extra>`;
-  const traces = [
-    { type: "bar", orientation: "h", y: params, x: low, marker: { color: MUTED }, customdata: hoverData(lowIn, low), hovertemplate: tpl("lower") },
-    { type: "bar", orientation: "h", y: params, x: high, marker: { color: HIGHER }, customdata: hoverData(highIn, high), hovertemplate: tpl("higher") },
-  ];
-  const layout = baseLayout("Impact on Buy − Rent difference");
+  const traces = [sideTrace(0), sideTrace(1)];
+
+  const ends = [0, base, ...rows.flatMap((r) => r.sides.map((s) => s.end))];
+  let lo = Math.min(...ends);
+  let hi = Math.max(...ends);
+  const span = hi - lo || 1;
+  lo = Math.min(lo, -span * MIN_HALF_FRACTION);
+  hi = Math.max(hi, span * MIN_HALF_FRACTION);
+  const pad = (hi - lo) * END_LABEL_PAD;
+  const range = [lo - pad, hi + pad];
+
+  const layout = baseLayout("Buy − Rent");
   moveCurrencyToXAxis(layout);
+  layout.hovermode = "closest";
   layout.barmode = "overlay";
-  layout.yaxis.automargin = true; // grow the left margin to fit parameter labels
+  layout.margin = { ...layout.margin, t: 44 };
+  layout.xaxis.range = range;
+  layout.xaxis.zeroline = false; // the tie line below replaces it
+  layout.yaxis.categoryorder = "array";
+  layout.yaxis.categoryarray = categories;
+  layout.yaxis.automargin = true; // grow the left margin to fit row labels
+  // Headings in the text colour, bars' names in the muted one.
+  layout.yaxis.tickmode = "array";
+  layout.yaxis.tickvals = categories;
+  layout.yaxis.ticktext = slots.map((s) => (s.heading ? `<b style="color:${TEXT}">${s.label}</b>` : s.label));
   layout.shapes = [
-    { type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1, line: { color: "#e6edf3", width: 1 } },
+    { type: "rect", layer: "below", x0: range[0], x1: 0, yref: "paper", y0: 0, y1: 1, fillcolor: tint(RENT, HALF_TINT_ALPHA), line: { width: 0 } },
+    { type: "rect", layer: "below", x0: 0, x1: range[1], yref: "paper", y0: 0, y1: 1, fillcolor: tint(BUY, HALF_TINT_ALPHA), line: { width: 0 } },
+    { type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1, line: { color: "#484f58", width: 1 } },
+    { type: "line", name: "you-are-here", x0: base, x1: base, yref: "paper", y0: 0, y1: 1, line: { color: TEXT, width: 1.5 } },
+  ];
+  // Two rows above the plot: your verdict's label on top, the direction
+  // of each half underneath, both pinned to the line they describe.
+  layout.annotations = [
+    { x: base, yref: "paper", y: 1, yanchor: "bottom", yshift: 18, text: "You are here", showarrow: false, font: { color: TEXT, size: 11 } },
+    { x: 0, xanchor: "right", xshift: -6, yref: "paper", y: 1, yanchor: "bottom", text: "← Renting ahead", showarrow: false, font: { color: RENT, size: 11 } },
+    { x: 0, xanchor: "left", xshift: 6, yref: "paper", y: 1, yanchor: "bottom", text: "Buying ahead →", showarrow: false, font: { color: BUY, size: 11 } },
   ];
   if (el.clientWidth < NARROW_CHART_PX) {
     layout.yaxis.showticklabels = false;
@@ -356,19 +521,23 @@ export function renderTornadoChart(el, tornado) {
     layout.margin = { ...layout.margin, l: 16, r: 24 };
     layout.bargap = 0.5;
     // Each label's bottom edge sits on its bar's top edge: a bar fills
-    // (1 - bargap) of its category slot, centred on the category.
-    const slotPx = plotHeight(el, layout) / params.length;
-    layout.annotations = params.map((p) => ({
-      xref: "paper",
-      x: 0,
-      xanchor: "left",
-      y: p,
-      yanchor: "bottom",
-      yshift: (slotPx * (1 - layout.bargap)) / 2,
-      text: p,
-      showarrow: false,
-      font: { color: MUTED, size: 11 },
-    }));
+    // (1 - bargap) of its category slot, centred on the category. A
+    // heading has no bar, so it sits centred in its slot.
+    const slotPx = plotHeight(el, layout) / slots.length;
+    layout.annotations.push(
+      ...slots.map((s) => ({
+        name: "row-label",
+        xref: "paper",
+        x: 0,
+        xanchor: "left",
+        y: s.label,
+        yanchor: s.heading ? "middle" : "bottom",
+        yshift: s.heading ? 0 : (slotPx * (1 - layout.bargap)) / 2,
+        text: s.heading ? `<b>${s.label}</b>` : s.label,
+        showarrow: false,
+        font: { color: s.heading ? TEXT : MUTED, size: 11 },
+      })),
+    );
   }
   Plotly.react(el, traces, layout, PLOT_CONFIG);
 }

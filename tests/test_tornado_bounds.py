@@ -332,3 +332,75 @@ class TestEveryBarCanBeFormatted:
         sens = _compute_sensitivity(config)
         assert "Property Levy (flat)" in sens.params
         assert {_camel(f) for f in sens.fields} <= _formatted_field_keys()
+
+
+_INDEX_HTML = Path(__file__).parent.parent / "src/simulator/static/index.html"
+
+
+def _note_step(pattern: str) -> float:
+    """A step size stated in the tornado's "How are the test values chosen?" note.
+
+    Parameters
+    ----------
+    pattern : str
+        Regex with one group capturing the number, e.g. ``home price by ([\\d,]+)``.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        assert _note_step(r"home price by ([\\d,]+)") == 100_000
+
+    """
+    note = re.search(
+        r'<details id="tornado-note">(?P<body>.*?)</details>',
+        _INDEX_HTML.read_text(encoding="utf-8"),
+        re.S,
+    )
+    assert note, "the tornado note was not found in index.html"
+    match = re.search(pattern, " ".join(note.group("body").split()))
+    assert match, f"the tornado note does not state {pattern!r}"
+    return float(match.group(1).replace(",", ""))
+
+
+class TestTheNoteStatesTheRealSteps:
+    """The note's step sizes are copied by hand from _compute_sensitivity.
+
+    The engine cannot read the page, so this measures the steps the
+    engine actually takes on a mid-range config, where no slider limit
+    clamps them, and compares each to the number the note prints.
+    """
+
+    def test_every_fixed_step_matches_the_engine(self):
+        config = SimulationConfig(
+            horizon_years=10,
+            property_price=500_000,
+            down_payment_pct=20,
+            mortgage_rate_annual=6.5,
+            property_appreciation_annual=3.0,
+            equity_growth_annual=7.0,
+            monthly_rent=2400,
+            property_tax_rate=1.2,
+        )
+        sens = _compute_sensitivity(config)
+        step = {
+            field: sens.high_input[i] - sens.base_input[i]
+            for i, field in enumerate(sens.fields)
+        }
+        stated = {
+            "property_price": _note_step(r"home price by ([\d,]+)"),
+            "monthly_rent": _note_step(r"monthly rent by ([\d,]+)"),
+            "mortgage_rate_annual": _note_step(r"mortgage rate by (\d+) point"),
+            "down_payment_pct": _note_step(r"down payment by (\d+) points"),
+        }
+        for field, value in stated.items():
+            assert abs(step[field] - value) < 1e-9, (
+                f"the note says {field} moves by {value}, the engine uses {step[field]}"
+            )
+        # The levy is a relative step, and the note rounds it ("about").
+        levy_pct = step["property_tax_rate"] / config.property_tax_rate * 100
+        stated_levy = _note_step(r"property levy by about (\d+)%")
+        assert abs(levy_pct - stated_levy) <= 5, (
+            f"the note says the levy moves by about {stated_levy}%, "
+            f"the engine uses {levy_pct:.1f}%"
+        )

@@ -215,25 +215,26 @@ def _tornado_body() -> str:
 
 
 class TestTornadoRangeHover:
-    """Each bar's hover states the assumption's own before and after.
+    """Each bar states its own tested values and its own outcome.
 
-    The payload arrives sorted by descending impact and is drawn
-    bottom-up, so every array is reversed. A single missed reverse
-    attaches one bar's range to another bar's outcome -- both still
-    render, and nothing else fails.
+    The payload is a set of parallel arrays sorted by descending impact,
+    and the chart regroups and redraws them bottom-up. Reordering any one
+    array on its own attaches one bar's tested values to another bar's
+    outcome -- both still render, and nothing else fails.
     """
 
-    def test_every_payload_array_is_reversed_together(self):
-        # params, fields, baseInput, lowInput, highInput and the two
-        # outcome arrays all index the same bar. Reversing some and not
-        # others silently mislabels every hover. The four range arrays
-        # are reversed together in tornadoRanges, the rest in the
-        # renderer, so both bodies are searched.
+    def test_payload_arrays_are_zipped_into_rows_before_any_reordering(self):
+        # tornadoRows reads every array at the same index, so a bar's
+        # name, fields, tested values and outcomes travel as one row.
+        # Reordering is only safe on those rows: a per-array reverse or
+        # sort of the payload is the shape that desyncs them.
         live = _strip_comments(_source())
-        for key in ("params", "low", "high"):
-            assert re.search(rf"\[\.\.\.tornado\.{key}\]\.reverse\(\)", live), (
-                f"tornado.{key} is not reversed with the others"
-            )
+        payload_array = (
+            r"tornado\.(params|fields|low|high|baseInput|lowInput|highInput)\b"
+        )
+        assert not re.search(payload_array + r"[^;]*?\.(reverse|sort)\(", live), (
+            "a payload array is reordered on its own, outside its row"
+        )
         guard = re.search(
             r"function tornadoRanges\(tornado, count\)\s*\{(?P<body>.*?)\n\}",
             live,
@@ -244,41 +245,38 @@ class TestTornadoRangeHover:
             assert f"tornado.{key}" in guard.group("body"), (
                 f"tornado.{key} is not gathered with the other range arrays"
             )
-        assert re.search(r"arrays\.map\(\(a\) => \[\.\.\.a\]\.reverse\(\)\)", live), (
-            "the range arrays are not all reversed together"
-        )
-
-    def test_the_lower_bar_gets_the_low_range_and_the_higher_the_high(self):
-        # Swapping these renders a "lower" bar whose stated range is an
-        # increase -- the hover contradicting its own label.
-        body = _tornado_body()
         assert re.search(
-            r"x:\s*low,.*?customdata:\s*hoverData\(lowIn,\s*low\).*?tpl\(\"lower\"\)",
-            body,
-            re.S,
-        ), "the lower bar is not paired with the low range"
-        assert re.search(
-            r"x:\s*high,.*?customdata:\s*hoverData\(highIn,\s*high\).*?tpl\(\"higher\"\)",
-            body,
-            re.S,
-        ), "the higher bar is not paired with the high range"
+            r"const slots\s*=\s*\[\.\.\.order\]\.reverse\(\)", _tornado_body()
+        ), "the rows are not reversed as whole rows"
 
-    def test_bars_are_drawn_as_impact_so_the_axis_matches_its_title(self):
-        # The axis is titled "Impact on Buy - Rent difference" and the
-        # hover reads %{x}. Both are only true while the bars carry NO
-        # trace `base`: with one, Plotly resolves %{x} to base + size and
-        # both the tick labels and the hover silently become absolute
-        # verdicts, so a bar drawn left of the zero tick can report a
-        # positive number.
+    def test_the_lower_side_gets_the_low_range_and_the_higher_the_high(self):
+        # Swapping these renders a "lower" side whose tested value is an
+        # increase -- the end label and hover contradicting each other.
+        live = _strip_comments(_source())
+        for side, arr in (("lower", "low"), ("higher", "high")):
+            assert re.search(
+                rf"end:\s*tornado\.{arr}\[i\],"
+                rf"\s*tested:\s*fmtFieldValue\(fields\[i\],\s*{arr}In\[i\]\),"
+                rf"\s*untested:\s*untested\({arr}In\[i\]\),"
+                rf"\s*direction:\s*\"{side}\"",
+                live,
+            ), f"the {side} side is not paired with the {arr} range"
+
+    def test_bars_are_drawn_as_the_verdict_so_the_axis_matches_its_title(self):
+        # The axis is the verdict itself, Buy - Rent, titled like the fan
+        # chart's, so $0 is the tie in both. That holds only while each
+        # bar pivots on the trace `base` (your verdict) and the hover
+        # reads its own pre-formatted text: %{x} on a based bar resolves
+        # to base + size, which is easy to misread as a change.
         body = _tornado_body()
-        assert re.search(r"\.map\(\(v\) => v - base\)", body), (
-            "bars are not drawn relative to the base"
+        assert 'baseLayout("Buy − Rent")' in body, (
+            "the tornado axis is not titled as the Buy - Rent verdict"
         )
-        assert not re.search(r"\bbase,\s*marker:", body), (
-            "a trace carries `base`, which makes %{x} the absolute verdict"
-        )
-        assert re.search(r"x0:\s*0,\s*x1:\s*0", body), (
-            "the pivot line is not at zero impact"
+        assert re.search(r"\bbase,\s*x:", body), "the bars do not pivot on your verdict"
+        assert "%{x}" not in body, "the hover reads %{x} instead of its own text"
+        assert re.search(r"x0:\s*0,\s*x1:\s*0", body), "the tie line is not at $0"
+        assert re.search(r"x0:\s*base,\s*x1:\s*base", body), (
+            "your verdict is not marked at the base"
         )
 
     def test_the_range_is_rendered_in_display_units(self):

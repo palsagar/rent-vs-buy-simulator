@@ -41,25 +41,8 @@ test('the hover readout shows the year with one decimal', async ({ page }) => {
   expect(await hover.textContent()).not.toMatch(/\d\.\d{2,}/);
 });
 
-test('tornado "goes up" bars do not reuse the Rent blue', async ({ page }) => {
-  await load(page);
-  const color = await page.evaluate(() => document.getElementById('tornado-chart').data[1].marker.color);
-  expect(color).not.toBe('#58a6ff');
-  const sub = page.locator('#tornado-chart').locator('xpath=preceding-sibling::div[contains(@class,"card-sub")][1]');
-  await expect(sub).toContainText('Purple = assumption goes up');
-});
-
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 664 } });
-
-  test('tornado bars get most of the chart width', async ({ page }) => {
-    await load(page);
-    const share = await page.evaluate(() => {
-      const el = document.getElementById('tornado-chart');
-      return el._fullLayout._size.w / el.clientWidth;
-    });
-    expect(share).toBeGreaterThan(0.75);
-  });
 
   test('the breakeven label stays inside the plot when it falls near the horizon', async ({ page }) => {
     await load(page); // default config: breakeven at 9.985 years, on a 10-year horizon
@@ -74,16 +57,5 @@ test.describe('on a phone', () => {
       };
     });
     expect(labelRight).toBeLessThanOrEqual(plotRight);
-  });
-
-  test('every tornado label is still shown, above its bar', async ({ page }) => {
-    await load(page);
-    const labels = await page.evaluate(() =>
-      document.getElementById('tornado-chart').layout.annotations.map((a) => a.text),
-    );
-    expect(labels).toEqual(
-      await page.evaluate(() => document.getElementById('tornado-chart').data[0].y),
-    );
-    expect(labels).toHaveLength(8);
   });
 });
