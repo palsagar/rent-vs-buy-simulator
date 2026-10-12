@@ -28,7 +28,7 @@ uv run ruff check --fix src/ tests/   # lint + autofix
 uv run ruff format src/ tests/        # format
 
 # Setup
-uv venv --seed && uv pip install -e .
+uv sync
 ```
 
 ## Architecture

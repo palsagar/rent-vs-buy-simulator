@@ -21,8 +21,6 @@ jobs:
         # 3.12 is the minimum (requires-python) and the Docker image; 3.14 has
         # numpy/pandas wheels in uv.lock and the suite passes on it.
         python-version: ["3.12", "3.13", "3.14"]
-    env:
-      UV_PYTHON: ${{ matrix.python-version }}
 
     steps:
       - name: Checkout code
@@ -31,10 +29,14 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
+          # Also part of the cache key, so each matrix leg caches separately.
+          python-version: ${{ matrix.python-version }}
           enable-cache: true
 
+      # --locked fails if uv.lock is out of date with pyproject.toml
+      # (--frozen would install the stale lock and pass).
       - name: Install dependencies
-        run: uv sync --frozen
+        run: uv sync --locked
 
       - name: Run tests with coverage
         run: |
@@ -56,4 +58,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: htmlcov/
+          path: coverage_html/

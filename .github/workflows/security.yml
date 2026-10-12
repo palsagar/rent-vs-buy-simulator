@@ -28,9 +28,9 @@ jobs:
       # Audit exactly what uv.lock pins for production (no dev group), so a
       # finding here is something users of the app or the PyPI package run.
       - name: Export locked runtime dependencies
-        run: uv export --frozen --no-dev --no-emit-project --no-hashes -o requirements-audit.txt
+        run: uv export --locked --no-dev --no-emit-project --no-hashes -o requirements-audit.txt
 
       # --no-deps: the export is already fully resolved. --disable-pip: audit the
       # file as written instead of building a throwaway environment.
       - name: Audit against the PyPI advisory database
-        run: uvx pip-audit -r requirements-audit.txt --no-deps --disable-pip
+        run: uvx pip-audit==2.10.1 -r requirements-audit.txt --no-deps --disable-pip

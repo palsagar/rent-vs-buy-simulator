@@ -5,8 +5,8 @@ Thanks for helping. This guide covers how to set up, run, test and submit change
 
 ## Set up
 
-You need [uv](https://docs.astral.sh/uv/) (it installs the right Python for you), Python 3.12 or newer, and Node.js 22 or newer
-for the browser tests.
+You need [uv](https://docs.astral.sh/uv/) (it installs the right Python for you), Python 3.12 or newer, and Node.js for the
+browser tests (CI uses Node 24; any current LTS release works).
 
 ```bash
 git clone https://github.com/palsagar/rent-vs-buy-simulator.git
@@ -66,12 +66,15 @@ it does not run tests.
 |---|---|
 | `feat:` | minor version bump, listed under Features |
 | `fix:` | patch version bump, listed under Bug Fixes |
-| `perf:`, `revert:` | listed in the changelog |
+| `perf:`, `revert:` | patch version bump, listed in the changelog |
 | `feat!:` or `fix!:` (the `!`) | major version bump |
 | `docs:`, `chore:`, `ci:`, `test:`, `refactor:`, `style:`, `build:` | no release, hidden from the changelog |
 
 Merging the release pull request tags the version, creates the GitHub Release and publishes to PyPI. Dependabot pull requests use
-`chore(deps)` and `ci(deps)` titles, so they do not trigger a release on their own.
+`chore(deps)`, `chore(deps-dev)` and `ci(deps)` titles, so they do not trigger a release on their own.
+
+release-please opens its pull request with the default `GITHUB_TOKEN`, and GitHub does not start workflows for pull requests
+opened that way. No checks run on the release pull request, so do not make any check required in branch protection.
 
 ## Changing the financial model
 
@@ -81,7 +84,7 @@ The numbers are the product, so changes to them need more care:
 2. If you change a modeling convention (how net value is measured, how a tax is treated, what a strategy includes), add a decision record
    in [docs/adr/](docs/adr/README.md): copy the shape of an existing one, use the next number, and add it to the table in `docs/adr/README.md`.
 3. Add a test that checks the result against a hand calculation. Put the arithmetic in a comment or docstring so a reader can
-   redo it. Use a tolerance for floats, never `==` (`_FLOAT_TOLERANCE = 1e-9` in the tests).
+   redo it. Use a tolerance for floats, never `==` (`_FLOAT_TOLERANCE = 1e-9` in `src/simulator/engine.py`).
 4. Test the edges: 0% rates, a down payment of 100%, a one-year horizon, region limits.
 5. Use the terms in [CONTEXT.md](CONTEXT.md) in code, UI text and docs.
 
@@ -107,8 +110,12 @@ package in editable mode for you), or run `uv sync` and activate `.venv`. If you
 
 **Charts are empty or the page looks unstyled offline.** Plotly.js comes from a CDN. Connect to the internet; the Playwright tests need it too.
 
-**CI fails on `uv sync --frozen` or on the lockfile.** You changed dependencies in `pyproject.toml` without updating `uv.lock`.
+**CI fails on `uv sync --locked` or on the lockfile.** You changed dependencies in `pyproject.toml` without updating `uv.lock`.
 Run `uv lock` and commit the result.
+
+**Checking the Docker image.** Production builds from the `Dockerfile`. Build and run it with
+`docker build -t rent-vs-buy . && docker run --rm -p 8501:8501 rent-vs-buy`, then open http://localhost:8501.
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the environment variables.
 
 **pre-commit changed files and the commit stopped.** That is intended: the hooks fixed formatting or whitespace. Review the changes,
 `git add` them and commit again. Skip once with `git commit --no-verify` only if you must; CI runs the same ruff checks.

@@ -13,7 +13,8 @@ permissions:
 
 concurrency:
   group: e2e-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel superseded PR runs only; every push to main keeps its own run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   playwright:
@@ -21,10 +22,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      # playwright.config.js starts `uv run uvicorn ...`; keep that from
-      # re-resolving or touching the lockfile, and match the Docker image's Python.
-      UV_FROZEN: "1"
-      UV_PYTHON: "3.12"
+      # playwright.config.js starts `uv run uvicorn ...`; fail instead of
+      # re-resolving if uv.lock is stale.
+      UV_LOCKED: "1"
 
     steps:
       - name: Checkout code
@@ -33,6 +33,8 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
+          # Match the Docker image's Python.
+          python-version: "3.12"
           enable-cache: true
 
       - name: Install Python dependencies
@@ -69,7 +71,7 @@ jobs:
         run: npx playwright test
 
       - name: Upload Playwright report
-        if: failure()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
