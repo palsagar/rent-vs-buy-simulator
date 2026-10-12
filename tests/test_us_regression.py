@@ -73,6 +73,11 @@ GOLDENS = {
 # justify every value that moves: an engine change should move nothing
 # here, and a deliberate perturbation change should move exactly the
 # fields it redefines.
+#
+# REGENERATED again, deliberately, when home price and monthly rent moved
+# from fixed steps (100k, 500) to 20% of their own value. At the US preset
+# the price step is still exactly 100k, so only Monthly Rent moves (its
+# step goes from 500 to 480), and the rank order holds.
 TORNADO_NAMES = [
     "Equity Growth",
     "Property Appreciation",
@@ -86,7 +91,7 @@ TORNADO_NAMES = [
 TORNADO_LOW = [
     108315.2700715856,
     -123364.65793813154,
-    -93421.86072197475,
+    -89635.06653487147,
     88181.87658442234,
     43093.40687027981,
     33706.69579412212,
@@ -96,7 +101,7 @@ TORNADO_LOW = [
 TORNADO_HIGH = [
     -163200.45114455867,
     145428.83590766793,
-    95917.84863319725,
+    92131.0544460938,
     -85685.88867319992,
     -41503.53846349695,
     -31976.807946117828,
@@ -130,7 +135,9 @@ class TestUsPresetUnchanged:
 class TestUsTornadoUnchanged:
     """Pins the 8 tornado bars so T9's proportional-delta change is
     provably US-inert. The proportional delta is exactly 0.5 at the US
-    base of 1.2, so these hold bit-for-bit (plan ambiguity A7)."""
+    base of 1.2, so these hold bit-for-bit (plan ambiguity A7). The 20%
+    price step is exactly 100k at the US price of 500k, so Property Price
+    holds too; only Monthly Rent was regenerated."""
 
     def test_names_and_order(self):
         sens = _compute_sensitivity(SimulationConfig(**US_PRESET))

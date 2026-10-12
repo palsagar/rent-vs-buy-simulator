@@ -35,6 +35,13 @@ _POSITIVE_FIELD_FLOOR = 0.001
 # absolute delta of exactly 0.5.
 _LEVY_RELATIVE_DELTA = 0.5 / 1.2
 
+# Share of its own value by which the tornado moves the home price and
+# the monthly rent. A fixed amount in local currency tested a rent of
+# EUR 812 by 62% and a rent of $2,400 by 21%, so bar widths -- and the
+# ranking -- followed the size of the number rather than its importance.
+# At the US defaults this is still exactly a 100k price step.
+_PRICE_RENT_RELATIVE_DELTA = 0.2
+
 # Fraction of the verdict below which a tornado swing is float noise
 # rather than signal. Well above IEEE-754 double precision (~1e-16
 # relative) and far below any swing a user could read off the chart.
@@ -55,9 +62,9 @@ _NEGLIGIBLE_SWING_RATIO = 1e-6
 # of the chart combined. The standard error at that horizon is 3.2pp, not
 # 15pp.
 #
-# The remaining perturbations are fixed absolute steps (a 100k price
-# move, 5pp of down payment), not standard deviations, so sqrt(horizon)
-# does not apply to them.
+# The remaining perturbations are steps (20% of the home price, 5pp of
+# down payment), not standard deviations, so sqrt(horizon) does not apply
+# to them.
 _STOCHASTIC_FIELDS = frozenset(
     {
         "property_appreciation_annual",
@@ -95,9 +102,9 @@ _UI_MAXIMUM = {
 # which pins that. Their floor is -99.0, just above where the monthly
 # compounding factor would turn non-positive.
 #
-# The quantities below have no such reading. property_price takes a fixed
-# 100k step, so every home price in the 50k-100k band drove its low side
-# to _POSITIVE_FIELD_FLOOR -- and since price is usually the widest bar,
+# The quantities below have no such reading. property_price once took a
+# fixed 100k step, so every home price in the 50k-100k band drove its low
+# side to _POSITIVE_FIELD_FLOOR -- and since price is usually the widest bar,
 # the top bar of the chart claimed to have modelled a free house. The
 # perturbed-range hover states that outright ("$50k -> $0"), which is how
 # it was found. Flooring here keeps the tornado inside the configuration
@@ -321,9 +328,11 @@ def _compute_sensitivity(  # noqa: C901
     """Compute one-at-a-time sensitivity for tornado chart.
 
     Uses the EXISTING deterministic ``calculate_scenarios`` engine
-    (not the MC path simulator). Perturbs 9 candidate parameters by
-    +/- 1 standard deviation and measures the effect on the Verdict
-    (``final_difference``, i.e. net_buy - net_rent).
+    (not the MC path simulator). Perturbs 9 candidate parameters, each
+    by its own test step (a standard error for the growth rates, a share
+    of the value for price, rent and the levy, a fixed number of points
+    for down payment and mortgage rate), and measures the effect on the
+    Verdict (``final_difference``, i.e. net_buy - net_rent).
 
     Fewer than 9 bars are returned in general. The two levy fields --
     ad-valorem ``property_tax_rate`` and flat ``annual_property_levy``
@@ -382,7 +391,10 @@ def _compute_sensitivity(  # noqa: C901
     base_value = _run_with_override()
 
     # Parameters to perturb: (display_name, config_field, delta)
-    # Delta is +-1 "standard deviation" in the same units as the field.
+    # Each delta is in the field's own units. Home price and rent take a
+    # share of their own base, worked out here. The two levy entries are
+    # placeholders: the loop below replaces each with a share of the
+    # levy's own base.
     # The first three deltas mirror the fixed MC calibration so there is a
     # single source of truth (stds are in percentage points; rent_inflation_rate
     # is a decimal, hence /100).
@@ -395,9 +407,17 @@ def _compute_sensitivity(  # noqa: C901
         ),
         ("Equity Growth", "equity_growth_annual", mc_defaults.equity_growth_std),
         ("Rent Inflation", "rent_inflation_rate", mc_defaults.rent_inflation_std / 100),
-        ("Property Price", "property_price", 100000),
+        (
+            "Property Price",
+            "property_price",
+            base_config.property_price * _PRICE_RENT_RELATIVE_DELTA,
+        ),
         ("Down Payment %", "down_payment_pct", 5.0),
-        ("Monthly Rent", "monthly_rent", 500),
+        (
+            "Monthly Rent",
+            "monthly_rent",
+            base_config.monthly_rent * _PRICE_RENT_RELATIVE_DELTA,
+        ),
         ("Property Levy (% of value)", "property_tax_rate", 0.5),
         # Both are skipped at a zero base, so a region gets whichever one
         # its bundle actually uses and never two levy bars at once.

@@ -20,7 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from simulator.api import _camel
-from simulator.engine import calculate_scenarios
+from simulator.engine import _FLOAT_TOLERANCE, calculate_scenarios
 from simulator.models import MonteCarloConfig, SimulationConfig
 from simulator.monte_carlo import (
     _UI_MAXIMUM,
@@ -343,13 +343,14 @@ def _note_step(pattern: str) -> float:
     Parameters
     ----------
     pattern : str
-        Regex with one group capturing the number, e.g. ``home price by ([\\d,]+)``.
+        Regex with one group capturing the number, e.g.
+        ``down payment by (\\d+) points``.
 
     Examples
     --------
     .. code-block:: python
 
-        assert _note_step(r"home price by ([\\d,]+)") == 100_000
+        assert _note_step(r"down payment by (\\d+) points") == 5
 
     """
     note = re.search(
@@ -371,7 +372,7 @@ class TestTheNoteStatesTheRealSteps:
     clamps them, and compares each to the number the note prints.
     """
 
-    def test_every_fixed_step_matches_the_engine(self):
+    def test_every_step_matches_the_engine(self):
         config = SimulationConfig(
             horizon_years=10,
             property_price=500_000,
@@ -387,9 +388,17 @@ class TestTheNoteStatesTheRealSteps:
             field: sens.high_input[i] - sens.base_input[i]
             for i, field in enumerate(sens.fields)
         }
+        # Home price and rent move by a share of their own value.
+        stated_share = _note_step(r"home price and monthly rent by (\d+)%")
+        for field in ("property_price", "monthly_rent"):
+            base = getattr(config, field)
+            share = step[field] / base * 100
+            assert abs(share - stated_share) < _FLOAT_TOLERANCE, (
+                f"the note says {field} moves by {stated_share}%, "
+                f"the engine uses {share}%"
+            )
+        # Down payment and mortgage rate move by fixed points.
         stated = {
-            "property_price": _note_step(r"home price by ([\d,]+)"),
-            "monthly_rent": _note_step(r"monthly rent by ([\d,]+)"),
             "mortgage_rate_annual": _note_step(r"mortgage rate by (\d+) point"),
             "down_payment_pct": _note_step(r"down payment by (\d+) points"),
         }

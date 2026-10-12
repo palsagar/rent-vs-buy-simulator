@@ -437,7 +437,8 @@ The perturbation width differs by parameter kind:
 |---|---|
 | Stochastic drivers (property appreciation, equity growth, rent inflation) | `σ / √horizon` |
 | Property levy, either representation | `± 41.7%` of its own base |
-| Everything else (price, down payment, rent, mortgage rate) | a fixed absolute step |
+| Home price and monthly rent | `± 20%` of its own base |
+| Down payment and mortgage rate | `± 5` and `± 1` percentage points |
 
 The `√horizon` matters. `σ` is the *annual* standard deviation, which is
 what the Monte Carlo needs — it redraws every year, so year-to-year
@@ -451,17 +452,18 @@ which over 22 years compounded a €150k outlay into roughly €17M and
 produced a bar an order of magnitude wider than the rest of the chart
 combined.
 
-A high perturbation is additionally capped at the parameter's slider
-maximum, so the chart never measures a configuration the app cannot be
-set to. That cap is one-sided: the low side may fall below the slider
-minimum, because a crash is a real outcome the model has to represent
-even though the UI will not let you type a negative growth rate. The cap
-never pulls the high side below the base — the engine accepts bases above
-the slider maximum, and clamping alone put the "higher" bar below the
-"lower" one.
+A high perturbation is capped at the parameter's slider maximum, so the
+chart never measures a configuration the app cannot be set to. Home
+price, monthly rent, down payment and mortgage rate are floored at their
+slider minimum in the same way. Property appreciation and equity growth
+are not: their low side may go below the slider's 0%, because a crash is
+a real outcome the model has to represent even though the UI will not let
+you type a negative growth rate. The cap never pulls the high side below
+the base — the engine accepts bases above the slider maximum, and
+clamping alone put the "higher" bar below the "lower" one.
 
 Symmetrically, no floor may pull the low side **above** the base. Growth
-rates floor just above −100%, and positive-only fields at 0.001, but rent
+rates floor just above −100%, and the levy fields at 0.001, but rent
 inflation floors at exactly **0** because a flat rent is a real setting
 its slider can reach. At a zero base the 0.001 floor put the low side
 above the base, so the bar labelled "lower" showed an *increase* — the
@@ -484,3 +486,10 @@ clamp against the positive-only floor and so misrepresent its own
 direction, and — for the flat levy — when the swing is negligible against
 the Verdict, which happens exactly when the levy is occupier-borne and
 therefore cancels between the two arms.
+
+Home price and monthly rent take a relative step for the same reason as
+the levy. A fixed step in local currency (it used to be 100,000 and 500)
+moved a €812 Lyon rent by 62% and a $2,400 US rent by 21%, so a bar's
+width followed the size of the number in its currency rather than how
+much the Verdict depends on it. At the US defaults the 20% price step is
+still exactly 100,000.
