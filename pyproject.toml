@@ -16,6 +16,8 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
 requires-python = ">=3.12"
 dependencies = [
@@ -57,7 +59,7 @@ line-length = 88
 [tool.ruff.lint]
 # Enable flake8-bugbear (`B`) and Ruff-specific rules (`RUF`)
 # Plus isort (`I`), pycodestyle (`E`), and more common rulesets
-select = ["E", "F", "B", "I", "C90", "N", "UP", "RUF"]
+select = ["E", "F", "B", "I", "C90", "N", "UP", "RUF", "S"]
 
 # Ignore specific rules
 ignore = [
@@ -69,6 +71,10 @@ ignore = [
 # Allow autofix for all enabled rules
 fixable = ["ALL"]
 unfixable = []
+
+[tool.ruff.lint.per-file-ignores]
+# pytest asserts are the test mechanism; S101 is noise there.
+"tests/**" = ["S101"]
 
 [tool.ruff.format]
 # Quote style
