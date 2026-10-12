@@ -88,17 +88,17 @@ graph TB
         API[REST API]
         CLI[CLI Interface]
     end
-    
+
     subgraph "Business Logic Layer"
         Service[Service Layer]
         Domain[Domain Models]
     end
-    
+
     subgraph "Data Access Layer"
         Repo[Repository]
         ORM[ORM Models]
     end
-    
+
     API --> Service
     CLI --> Service
     Service --> Domain
@@ -286,7 +286,7 @@ Before finalizing, ensure the documentation:
 ### [Component 1]: [Name]
 **Purpose**: [What it does]
 **Location**: `path/to/component`
-**Key Classes**: 
+**Key Classes**:
 - `ClassName1`: [Brief description]
 - `ClassName2`: [Brief description]
 
@@ -318,4 +318,4 @@ Use the conversation naturally—don't ask all questions upfront, but clarify as
 
 ## Output Location
 
-Save the final documentation  `system-architecture.md` in the root directory of the project. 
+Save the final documentation  `system-architecture.md` in the root directory of the project.
