@@ -1,3 +1,4 @@
+import dataclasses
 import itertools
 import json
 import re
@@ -8,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from simulator.api import (
     _validate_value,
+    _winner,
     config_from_dict,
     config_to_dict,
     monte_carlo_payload,
@@ -47,8 +49,48 @@ def test_simulate_endpoint_happy_path() -> None:
     response = client.post("/api/simulate", json=config_to_dict(make_config()))
     assert response.status_code == 200
     body = response.json()
-    assert body["verdict"]["winner"] in ("buy", "rent")
+    assert body["verdict"]["winner"] in ("buy", "rent", "tie")
     assert len(body["series"]["netBuy"]) == 121
+
+
+class TestTie:
+    """A gap under half a unit of currency names no winner (ADR-0010)."""
+
+    def test_winner_is_a_tie_within_half_a_unit(self) -> None:
+        # Below 0.5 every surface would print the gap as "~$0".
+        for difference in (0.0, 0.49, -0.49):
+            assert _winner(difference) == "tie", difference
+        assert _winner(0.5) == "buy"
+        assert _winner(-0.5) == "rent"
+        assert _winner(1e6) == "buy"
+        assert _winner(-1e6) == "rent"
+
+    def test_a_non_finite_verdict_is_an_error_not_a_winner(self) -> None:
+        # NaN compares False to everything, so "> 0" used to call it Rent.
+        for difference in (float("nan"), float("inf"), float("-inf")):
+            with pytest.raises(RuntimeError, match="finite"):
+                _winner(difference)
+
+    def test_simulate_payload_raises_on_a_nan_verdict(self, monkeypatch) -> None:
+        real = calculate_scenarios(make_config())
+        monkeypatch.setattr(
+            "simulator.api.calculate_scenarios",
+            lambda config: dataclasses.replace(real, final_difference=float("nan")),
+        )
+        with pytest.raises(RuntimeError, match="finite"):
+            simulate_payload(make_config())
+
+    def test_simulate_endpoint_returns_500_on_a_nan_verdict(self, monkeypatch) -> None:
+        # A NaN from valid input is a server bug, not invalid input: it
+        # must not read as a 422 or reach the page as a verdict.
+        real = calculate_scenarios(make_config())
+        monkeypatch.setattr(
+            "simulator.api.calculate_scenarios",
+            lambda config: dataclasses.replace(real, final_difference=float("nan")),
+        )
+        quiet = TestClient(app, raise_server_exceptions=False)
+        response = quiet.post("/api/simulate", json=config_to_dict(make_config()))
+        assert response.status_code == 500
 
 
 def test_simulate_endpoint_validation_error_is_422() -> None:
@@ -109,8 +151,7 @@ def test_simulate_payload_matches_engine_truth() -> None:
     results = calculate_scenarios(config)
 
     assert payload["verdict"]["difference"] == results.final_difference
-    expected_winner = "buy" if results.final_difference > 0 else "rent"
-    assert payload["verdict"]["winner"] == expected_winner
+    assert payload["verdict"]["winner"] == _winner(results.final_difference)
     assert payload["verdict"]["horizonYears"] == config.horizon_years
     assert payload["breakevenYear"] == results.breakeven_year
     assert payload["monthlyMortgagePayment"] == results.monthly_mortgage_payment
@@ -301,6 +342,18 @@ class TestNewPrimitivesOnTheWire:
         payload = {**config_to_dict(make_config()), "levyPaidByOccupier": "yes"}
         with pytest.raises(ValueError, match="levy_paid_by_occupier"):
             config_from_dict(payload)
+
+    def test_mortgage_insurance_round_trips(self):
+        payload = {**config_to_dict(make_config()), "mortgageInsuranceRatePct": 1.0}
+        config = config_from_dict(payload)
+        assert config.mortgage_insurance_rate_pct == 1.0
+        assert config_to_dict(config)["mortgageInsuranceRatePct"] == 1.0
+
+    def test_mortgage_insurance_total_is_on_the_wire(self):
+        config = make_config(down_payment_pct=10)
+        paid = simulate_payload(config)["totals"]["mortgageInsurancePaid"]
+        assert paid > 0
+        assert paid == calculate_scenarios(config).total_mortgage_insurance_paid
 
     def test_all_six_primitives_serialize_with_camel_case_keys(self):
         payload = config_to_dict(make_config())

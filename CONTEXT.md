@@ -7,11 +7,11 @@ A public web app that answers one question for one person: "should I buy this ho
 ## Language
 
 **Verdict**:
-The single headline answer the app produces for a given set of inputs: which strategy leaves you wealthier at the horizon, and by how much. When the Confidence is between 40% and 60%, the headline reads as a toss-up instead of naming a winner; the winner and the difference themselves are unchanged (ADR-0010).
+The single headline answer the app produces for a given set of inputs: which strategy leaves you wealthier at the horizon, and by how much. When the Confidence is between 40% and 60%, the headline reads as a toss-up instead of naming a winner; the winner and the difference themselves are unchanged (ADR-0010). When the gap is below half a unit of currency, the Verdict is a tie and names no winner.
 _Avoid_: Winner, difference, result
 
 **Net Value**:
-The wealth you would walk away with if you exited a strategy at year t, minus all cash you put in through t. Exit is priced fully and symmetrically: for Buy, home value − mortgage balance − seller closing costs − capital-gains tax on the home gain under the region's sale-CG regime (exempt amount, exempt after N years, or fully exempt) + accrued tax savings; for Rent, portfolio value − capital-gains tax on gains − cumulative rent. One formula, applied at every t, used by the verdict, the charts, the breakeven, and Monte Carlo alike.
+The wealth you would walk away with if you exited a strategy at year t, minus all cash you put in through t. Exit is priced fully and symmetrically: for Buy, home value − mortgage balance − seller closing costs − capital-gains tax on the home's profit after buying and selling costs, under the region's sale-CG regime (exempt amount, exempt after N years, or fully exempt) + the buyer's portfolio (any monthly surplus and the yearly tax refunds, invested as they arrive) − capital-gains tax on its gains; for Rent, portfolio value − capital-gains tax on gains − cumulative rent. One formula, applied at every t, used by the verdict, the charts, the breakeven, and Monte Carlo alike.
 _Avoid_: Net worth, equity, asset value minus outflows
 
 **Breakeven**:
@@ -22,7 +22,7 @@ The number of years the person expects to stay before exiting the strategy.
 _Avoid_: Duration, simulation period
 
 **Buy strategy**:
-Purchase the home with a mortgage. Monthly cost is mortgage + property levy + insurance + maintenance. When buying is the cheaper side in a given month, the surplus is invested in equities within this strategy.
+Purchase the home with a mortgage. Monthly cost is mortgage + property levy + insurance + maintenance, plus mortgage insurance on a down payment under 20%. When buying is the cheaper side in a given month, the surplus is invested in equities within this strategy, and so is each year's tax refund where interest is deductible (ADR-0013).
 _Avoid_: Scenario A
 
 **Rent strategy**:
@@ -54,7 +54,7 @@ A named bundle of trustworthy defaults — currency formatting plus tax-primitiv
 _Avoid_: Country mode, locale
 
 **Tax primitives**:
-The neutral, scalar parameters through which every region's rules are expressed: buyer transaction costs (a percentage of price **plus a fixed amount, which may be negative where a transfer tax has a zero-rate band**), seller transaction costs, annual property levy (**ad-valorem, plus a flat cost-indexed amount, plus a flag for whether the occupier rather than the owner bears it**), maintenance (**a percentage of value or a flat cost-indexed amount, whichever unit the region's own evidence is collected in**), mortgage-interest deductibility (on/off + rate + a cap where 0 means "not deductible" and None means uncapped), capital-gains treatment at each exit (exemption amount, exempt-after-N-years, or fully exempt; plus a portfolio gains rate), and **annual portfolio drag** — a tax on portfolio *value* rather than on realised gains, applied symmetrically to both strategies, expressed as a deemed return plus a rate and charged on the **lesser of that deemed return and the actual return, floored at nil** (NL box 3).
+The neutral, scalar parameters through which every region's rules are expressed: buyer transaction costs (a percentage of price **plus a fixed amount, which may be negative where a transfer tax has a zero-rate band**), seller transaction costs, annual property levy (**ad-valorem, plus a flat cost-indexed amount, plus a flag for whether the occupier rather than the owner bears it**), maintenance (**a percentage of value or a flat cost-indexed amount, whichever unit the region's own evidence is collected in**), mortgage insurance (a yearly percentage of the original loan, charged on a down payment under 20% until the balance reaches 78% of the price; non-zero in the US only), mortgage-interest deductibility (on/off + rate + a cap where 0 means "not deductible" and None means uncapped), capital-gains treatment at each exit (exemption amount, exempt-after-N-years, or fully exempt; plus a portfolio gains rate), and **annual portfolio drag** — a tax on portfolio *value* rather than on realised gains, applied symmetrically to both strategies, expressed as a deemed return plus a rate and charged on the **lesser of that deemed return and the actual return, floored at nil** (NL box 3).
 _Avoid_: per-country logic, effective-rate fudges
 
 **Property levy**:

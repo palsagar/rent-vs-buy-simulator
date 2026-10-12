@@ -21,6 +21,30 @@ exiting — it is **not** the mortgage term (ADR-0004). The two are separate
 inputs: a 10-year Horizon with a 30-year mortgage term is the common case,
 and the mortgage may be paid off before or still outstanding at the Horizon.
 
+### Yearly rates become monthly rates (ADR-0011)
+
+Every rate is entered per year, and the engine runs per month. How a
+yearly figure becomes a monthly one depends on what it is:
+
+| Input | Kind | Monthly form |
+|---|---|---|
+| Property appreciation, equity growth, rent inflation | Growth rate | `(1 + r)^(1/12) − 1` |
+| Cost inflation | Growth rate | `cost_index(t) = (1 + r)^((t − 1)/12)` (§3) |
+| Mortgage rate | Nominal yearly rate | `r / 12` (§2) |
+| Property levy, insurance, maintenance, mortgage insurance, box-3 drag | Yearly charge | one twelfth each month |
+
+A growth rate goes through `monthly_rate_from_annual` in `engine.py`:
+
+```
+rate_monthly = (1 + annual)^(1/12) − 1        annual floored at −99%
+```
+
+Twelve such months compound back to exactly the yearly rate, so a 7% input
+is worth exactly 7% after one year. Dividing by 12 instead compounds to
+7.23%, and the overstatement grows with the rate: over 40 years at 15% it
+grows money 388.7 times instead of 267.9 times. The floor only matters for
+a Monte Carlo draw below −99%, where the twelfth root is undefined.
+
 ## 2. Mortgage
 
 ### Initial values
@@ -35,6 +59,10 @@ L = property_price - down_payment         # loan amount
 r = (mortgage_rate_annual / 100) / 12     # monthly rate
 n_term = mortgage_term_years × 12         # amortization term, in months
 ```
+
+The mortgage rate stays a nominal yearly rate divided by 12, unlike the
+growth rates: lenders quote it that way, and `npf.pmt` and the closed-form
+balance below both expect it.
 
 `closing_cost_buyer_amount` may be **negative**: a transfer tax with a
 zero-rate band has a negative intercept. UK SDLT is exactly linear over
@@ -94,6 +122,11 @@ home_growth(t) = ∏_{m=1}^{t} (1 + prop_rate_monthly[m])
 home_value(t)  = property_price × home_growth(t)
 ```
 
+In the deterministic engine every month has the same rate,
+`prop_rate_monthly[m] = (1 + property_appreciation_annual / 100)^(1/12) − 1`,
+so `home_value(12y) = property_price × (1 + property_appreciation_annual / 100)^y`
+exactly.
+
 ### Ownership costs (buyer)
 
 Levy, insurance, and maintenance are all costs *paid during* month t
@@ -102,7 +135,7 @@ month's home value — the value base a bill for month t would actually be
 computed against:
 
 ```
-cost_index(t)  = (1 + cost_inflation_rate / 12)^(t-1)              t ≥ 1
+cost_index(t)  = (1 + cost_inflation_rate)^((t-1)/12)              t ≥ 1
 
 levy(t)        = home_value(t-1) × (property_tax_rate / 100) / 12
                  + (annual_property_levy / 12) × cost_index(t)
@@ -112,8 +145,29 @@ insurance(t)   = (annual_home_insurance / 12) × cost_index(t)
 maintenance(t) = home_value(t-1) × (annual_maintenance_pct / 100) / 12
                  + (annual_maintenance_amount / 12) × cost_index(t)
 
+mortgage_insurance(t) = L × (mortgage_insurance_rate_pct / 100) / 12
+                            if down_payment_pct < 20 and B(t-1) > 0.78 × property_price
+                        0   otherwise
+
 housing_cost_buy(t) = payment(t) + levy(t) + insurance(t) + maintenance(t)
+                      + mortgage_insurance(t)
 ```
+
+`cost_index` makes month 13's bill exactly one year's cost inflation above
+month 1's.
+
+**Mortgage insurance** is a yearly percentage of the *original* loan `L`,
+billed monthly, so it stays the same each month. It applies only to a down
+payment under 20% (CFPB: lenders require it on a conventional loan with
+less than 20% down), and only while the scheduled balance a month starts
+with is above 78% of the price, which is where the US Homeowners Protection
+Act ends it automatically (12 U.S.C. 4901(18): the date the balance is
+"first scheduled to reach 78 percent of the original value"). The Act's
+other end date, the midpoint of the loan term, is not modelled: at every
+slider setting the 78% point comes first, by at least two months. The US
+bundle charges 0.5% a year, inside Freddie Mac's quoted "$30 to $70 per
+month for every $100,000 you borrowed"; the other regions charge 0 (see
+their notes). It is not deductible (§6), and it has no tornado bar (§8).
 
 The **flat** components are cost-indexed rather than tied to the
 appreciating home value, because no shipped region's flat-levy base tracks
@@ -221,8 +275,8 @@ The Netherlands (box 3, Wet IB 2001 art. 5.25) assesses the taxpayer on the
 is evaluated per year against that year's own return:
 
 ```
-R(y)       = Σ_{m in year y} eq_rate_monthly[m]        # arithmetic SUM
-taxable(y) = max( min(deemed_rate, R(y)), 0 )          # art. 5.25 lid 1 + lid 2
+R(y)       = ∏_{m in year y} (1 + eq_rate_monthly[m]) − 1   # the compounded year
+taxable(y) = max( min(deemed_rate, R(y)), 0 )               # art. 5.25 lid 1 + lid 2
 d_m(y)     = taxable(y) × (portfolio_drag_rate_pct / 100) / 12
 
 G(0) = 1
@@ -231,10 +285,11 @@ G(t) = ∏_{m=1}^{t} (1 + eq_rate_monthly[m] − d_m(year of m))
 
 Four things this form depends on:
 
-- **`R(y)` is a sum, not a compound.** The engine feeds arithmetic
-  `annual / 100 / 12` monthly rates, so twelve of them sum back to the
-  annual figure exactly. Compounding them would return 7.229% for a 7%
-  input and silently shift the `min` against a 6% deemed return.
+- **`R(y)` is the compounded year, which is exactly the yearly rate.** Both
+  callers convert yearly rates with `monthly_rate_from_annual` (ADR-0011),
+  so the twelve monthly factors multiply back to the yearly input or draw.
+  Summing the twelve instead would fall short of it (5.94% for a 6.1%
+  input) and could move the `min` below a 6% deemed return.
 - **Both operands of the `min` are proportional to wealth**, so the
   comparison reduces to a comparison of *rates* and `G(t)` stays a pure
   cumulative product — no month loop and no wealth-feedback term. This
@@ -250,13 +305,14 @@ The drag applies symmetrically to both portfolios; any asymmetry between
 the two strategies emerges from their different sizes, not from a branch.
 
 Applied with `eq_rate_monthly` as the rate and `c = contrib_rent` /
-`contrib_buy`:
+`contrib_buy + refund`, where `refund(m)` is the tax refund the buyer
+receives in month m (§6, ADR-0013):
 
 ```
 eq_growth(t)     = G(t) using eq_rate_monthly
 
 rent_portfolio(t) = eq_growth(t) × ( initial_outlay + Σ_{m=1}^{t} contrib_rent(m) / eq_growth(m) )
-buy_portfolio(t)  = eq_growth(t) × Σ_{m=1}^{t} contrib_buy(m) / eq_growth(m)
+buy_portfolio(t)  = eq_growth(t) × Σ_{m=1}^{t} (contrib_buy(m) + refund(m)) / eq_growth(m)
 ```
 
 (`rent_portfolio` starts with `V0 = initial_outlay`; `buy_portfolio` starts
@@ -267,7 +323,7 @@ is the un-discounted running total of contributions:
 
 ```
 basis_rent(t) = initial_outlay + Σ_{m=1}^{t} contrib_rent(m)
-basis_buy(t)  = Σ_{m=1}^{t} contrib_buy(m)
+basis_buy(t)  = Σ_{m=1}^{t} (contrib_buy(m) + refund(m))
 ```
 
 ## 6. Taxes
@@ -299,6 +355,34 @@ cum_tax_savings(t) = cum_by_year(t // 12)
 the 12 months of a year and jumps once, at the year boundary, by that
 year's full savings.
 
+**Invested as they arrive (ADR-0013).** Each year's savings come back as a
+refund in the month that closes the year, and the buyer invests it:
+
+```
+refund(t) = yearly_savings(y)    if t = 12 × y for a year y = 1..horizon_years
+            0                    otherwise
+```
+
+`refund` joins the buyer's portfolio in §5, so it grows at the equity rate,
+pays the box-3 drag where there is one, and its gain is taxed at
+`portfolio_cg_rate_pct` when the portfolio is cashed in (§6, ADR-0001). The
+refund is money coming back, not a lower cost: no housing cost, outflow or
+`cash_committed` changes. `cum_tax_savings(t)` still records the refunds
+received, at face value. It is reported (`totals.taxSavings`, the "Tax
+savings (offset)" bar) but not added to Net Value, because the refunds are
+inside `buy_portfolio`. The last year's refund arrives at the Horizon and
+counts at face value, having had no time to grow.
+
+Netting each refund against the buyer's cost in that month instead, so that
+cash-flow matching does the investing, gives the same Verdict: when buying
+is the dearer side the renter invests that much less, and when it is the
+cheaper side the buyer invests that much more, and both portfolio taxes are
+proportional to the money invested. It was not chosen because it would show
+a refund as a cost: a negative buyer cost in the month that closes each
+year (−$4,096 at the US defaults) and a lower "Buy cost · yr 1" (ADR-0013).
+Mortgage insurance (§3) is not deductible, so it never enters
+`yearly_savings`.
+
 `yearly_levy(y)` sums the **whole** `levy(t)` term, so the deduction base
 includes both the ad-valorem component and the flat `annual_property_levy`.
 The cap has three distinct settings:
@@ -314,10 +398,15 @@ On the client a **negative** value encodes "uncapped" and is sent as
 
 ### Sale capital gains (buyer, at exit)
 
-Taxable gain depends on the region's `sale_cg_regime` (ADR-0007):
+The taxed profit is what the sale brings in over what the home cost
+(ADR-0012), and the region's `sale_cg_regime` (ADR-0007) then decides how
+much of it is taxed:
 
 ```
-home_gain(t) = max(home_value(t) - property_price, 0)
+seller_cost(t)     = home_value(t) × (closing_cost_seller_pct / 100)
+amount_realised(t) = home_value(t) − seller_cost(t)
+cost_basis         = property_price + buyer_closing
+home_gain(t)       = max(amount_realised(t) − cost_basis, 0)
 
 fully_exempt:        taxable_gain(t) = 0
 exempt_amount:       taxable_gain(t) = max(home_gain(t) - sale_cg_exempt_amount, 0)
@@ -326,6 +415,17 @@ exempt_after_years:   taxable_gain(t) = 0            if t ≥ sale_cg_exempt_aft
 
 sale_cg_tax(t) = taxable_gain(t) × (sale_cg_rate_pct / 100)
 ```
+
+`buyer_closing` is the clamped amount from §2, so the cost basis is never
+below the price paid. At t = 0 the amount realised is the price less the
+selling costs, below the cost basis by both fees, so an instant resale is a
+loss and never a taxed gain. This is the rule of every regime the app
+ships (ADR-0012 cites each), and the counterpart of the portfolio rule
+below, which taxes value over what was paid in: both exits tax what comes
+out over what went in. The portfolio has no transaction costs modelled, so
+there is nothing more to subtract on that side. `seller_cost(t)` is paid
+out of the sale in §7 as well; that is not double counting, because the
+cost both lowers the taxed profit and is money the seller pays.
 
 ### Portfolio capital gains (both strategies, at exit)
 
@@ -344,11 +444,10 @@ t, minus all cash committed through t. Exit is priced fully at every t —
 this is what makes it liquidation-based (ADR-0001):
 
 ```
-seller_cost(t) = home_value(t) × (closing_cost_seller_pct / 100)
+seller_cost(t) = home_value(t) × (closing_cost_seller_pct / 100)       # as in §6
 
 Net_Buy(t) = home_value(t) - B(t) - seller_cost(t) - sale_cg_tax(t)
-             + buy_portfolio(t) - portfolio_tax_buy(t)
-             + cum_tax_savings(t)
+             + buy_portfolio(t) - portfolio_tax_buy(t)                # holds the refunds (§6)
              - cash_committed(t)
 
 Net_Rent(t) = rent_portfolio(t) - portfolio_tax_rent(t) - cash_committed(t)
@@ -360,7 +459,11 @@ The **Verdict** is simply this same series read at the Horizon:
 Verdict = Net_Buy(H) - Net_Rent(H)
 ```
 
-`Verdict > 0` means Buy wins; `Verdict < 0` means Rent wins.
+`Verdict > 0` means Buy wins; `Verdict < 0` means Rent wins, except that a
+Verdict within half a unit of currency of zero is a **tie** and names no
+winner (`|Verdict| < TIE_TOLERANCE = 0.5`, ADR-0010): every surface would
+print it as "~$0". A Verdict that is not a finite number is an error
+(HTTP 500), never a winner.
 
 The **Breakeven** is the year where the two series cross — computed from
 the identical `Net_Buy`/`Net_Rent` arrays used for the Verdict and the
@@ -414,17 +517,28 @@ rent_annual(y) = max(rent_annual(y), 0)
 
 Each annual percentage draw is held constant across its 12 months and
 converted to a monthly decimal rate before being handed to
-`_net_value_series`:
+`_net_value_series`, with the same helper as the deterministic engine
+(§1, ADR-0011):
 
 ```
-rate_monthly[m] = annual_draw(y) / 100 / 12    for every month m in year y
+rate_monthly[m] = (1 + annual_draw(y) / 100)^(1/12) − 1    for every month m in year y
+                                                           (draw floored at −99%)
 ```
+
+Twelve such months compound back to exactly the year's draw. Under the old
+`annual_draw / 100 / 12` a year drawn at `r` grew by about `r + (11/24) r²`,
+a bonus that rose with the spread of the draws: about 1.26% a year on
+average for equity (σ = 15), against 0.22% for a steady 7%. It favoured
+the renter's simulated portfolio most, so removing it raised buying's share
+of simulated futures at every region's defaults (US: 46.4% to 49.0%).
 
 `net_buy`/`net_rent` for that simulation path are exactly the Section 7
 series computed with these month-varying rates in place of the
 deterministic engine's constant ones. Percentiles and the buy-win share
 derive from these same per-path Net Value series — never a separately
-defined metric.
+defined metric. In the buy-win share a tied path (`|Verdict| < 0.5`,
+§7) counts half for each side, so buying's share and renting's add up to
+100%.
 
 The tornado chart does not. It is one-at-a-time sensitivity on the
 *deterministic* engine: for each candidate parameter it re-runs
@@ -486,6 +600,12 @@ clamp against the positive-only floor and so misrepresent its own
 direction, and — for the flat levy — when the swing is negligible against
 the Verdict, which happens exactly when the levy is occupier-borne and
 therefore cancels between the two arms.
+
+Mortgage insurance has no bar. It is zero in four regions and at the US
+default 20% down, so a bar would come and go with the down-payment
+slider; the Down Payment bar already measures it, because its lower test
+crosses the 20% line at the US default; and a premium is a quote, not a
+guess about the future.
 
 Home price and monthly rent take a relative step for the same reason as
 the levy. A fixed step in local currency (it used to be 100,000 and 500)

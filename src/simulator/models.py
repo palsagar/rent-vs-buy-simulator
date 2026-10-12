@@ -100,6 +100,12 @@ class SimulationConfig:
     portfolio_cg_rate_pct : float, optional
         Tax rate applied to capital gains on the equity portfolio, as a
         percentage. Default is 15.0.
+    mortgage_insurance_rate_pct : float, optional
+        Yearly mortgage insurance as a percentage of the original loan,
+        billed monthly. Charged only when the down payment is below 20%,
+        and only while the scheduled balance is above 78% of the
+        purchase price, where US policies end automatically. Not
+        tax-deductible. Default is 0.5.
 
     Raises
     ------
@@ -159,6 +165,8 @@ class SimulationConfig:
     sale_cg_exempt_after_years: int = 10
     sale_cg_rate_pct: float = 15.0
     portfolio_cg_rate_pct: float = 15.0
+    # Mirrors the US bundle, like the defaults above; inert at 20% down.
+    mortgage_insurance_rate_pct: float = 0.5
 
     def __post_init__(self) -> None:  # noqa: C901
         """Validate input parameters.
@@ -394,6 +402,14 @@ class SimulationConfig:
                 f"(got {self.portfolio_cg_rate_pct})."
             )
 
+        # Validate mortgage_insurance_rate_pct. A generous sanity cap:
+        # quoted US premiums sit well under 2% of the loan a year.
+        if not (0 <= self.mortgage_insurance_rate_pct <= 5):
+            raise ValueError(
+                "mortgage_insurance_rate_pct must be between 0 and 5 "
+                f"(got {self.mortgage_insurance_rate_pct})."
+            )
+
 
 @dataclass
 class SimulationResults:
@@ -431,6 +447,9 @@ class SimulationResults:
         Total mortgage interest accrued over the horizon.
     total_tax_savings : float
         Total tax savings from mortgage interest / levy deductions.
+    total_mortgage_insurance_paid : float
+        Total mortgage insurance paid over the horizon (zero at a down
+        payment of 20% or more).
 
     Examples
     --------
@@ -465,6 +484,7 @@ class SimulationResults:
             total_maintenance_paid=5000,
             total_mortgage_interest_paid=140000,
             total_tax_savings=8000,
+            total_mortgage_insurance_paid=0,
         )
 
     """
@@ -484,6 +504,7 @@ class SimulationResults:
     total_maintenance_paid: float
     total_mortgage_interest_paid: float
     total_tax_savings: float
+    total_mortgage_insurance_paid: float
 
 
 @dataclass
@@ -692,7 +713,9 @@ class MonteCarloResults:
         Percentiles of differences over time. Shape:
         (len(percentile_levels), n_months+1).
     buy_wins_pct : float
-        Percentage of simulations where buying wins (0-100).
+        Percentage of simulations where buying wins (0-100). A tied
+        simulation (a gap under half a unit of currency) counts half for
+        each side.
     median_difference : float
         Median final difference across simulations.
     p5_difference : float

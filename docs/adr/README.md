@@ -10,10 +10,13 @@ Each ADR records one load-bearing decision and why the alternatives lost. "Imple
 | [0004](0004-horizon-decoupled-from-mortgage-term.md) | Horizon is decoupled from mortgage term | Accepted | Yes |
 | [0005](0005-results-page-verdict-narrative.md) | Results page is a verdict narrative, not a dashboard | Accepted | Yes |
 | [0006](0006-stay-on-streamlit-for-redesign.md) | The redesign ships on Streamlit; a client-side rewrite is deferred, not rejected | Superseded by [0008](0008-fastapi-static-frontend.md) | No — the deferred path arrived as a FastAPI + static-JS stack |
-| [0007](0007-multi-region-via-tax-primitives.md) | Multi-region support via parameterized tax primitives, not per-country logic | Accepted, amended by the [multi-region spec](../multi-region-spec.md) | Yes |
+| [0007](0007-multi-region-via-tax-primitives.md) | Multi-region support via parameterized tax primitives, not per-country logic | Accepted, amended by the [multi-region spec](../multi-region-spec.md) and in 2026-10 (mortgage insurance; the sale profit per [0012](0012-home-sale-gain-uses-adjusted-basis.md)) | Yes |
 | [0008](0008-fastapi-static-frontend.md) | The frontend migrates from Streamlit to a FastAPI + static JavaScript stack | Accepted | Yes (supersedes [0006](0006-stay-on-streamlit-for-redesign.md)) |
 | [0009](0009-portfolio-tax-wrappers-out-of-scope.md) | Portfolio tax wrappers are out of scope; every region models a plain taxable account | Accepted | Yes |
-| [0010](0010-close-verdicts-read-as-toss-up.md) | Close verdicts read as a toss-up | Accepted | Yes |
+| [0010](0010-close-verdicts-read-as-toss-up.md) | Close verdicts read as a toss-up | Accepted, amended in 2026-10 (an exact tie) | Yes |
+| [0011](0011-growth-rates-are-effective-annual-rates.md) | Yearly growth rates compound as stated | Accepted | Yes |
+| [0012](0012-home-sale-gain-uses-adjusted-basis.md) | The taxed home-sale profit is net of buying and selling costs | Accepted | Yes |
+| [0013](0013-tax-relief-refunds-are-invested.md) | Tax-relief refunds are invested in the buyer's portfolio | Accepted | Yes |
 
 The vocabulary in [CONTEXT.md](../../CONTEXT.md) covers both shipped and target-state features. The one deliberate omission that remains a known bias — unsheltered portfolios understating after-tax returns in every region — is recorded in ADR-0009 and disclosed per region in `regions.py`'s `notes`.
 

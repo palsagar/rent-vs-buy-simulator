@@ -27,3 +27,14 @@ Two factual claims in the context paragraph above are wrong and are corrected he
 **The primitive list has grown.** "Five neutral primitives" is now six categories: buyer transaction costs **including a fixed component**, seller transaction costs, annual property levy **including a flat component, an incidence flag, and a maintenance amount**, interest deductibility + rate, CG treatment at exit including the portfolio gains rate, and **annual portfolio drag, expressed as a deemed return and a rate applied to the lesser of that and the actual return**. All remain scalar, and the "countries are data, not code" decision is unaffected — no per-country branch exists in the engine.
 
 See `docs/multi-region-spec.md` for the full derivation and `tests/test_regions.py` for the source-cited fixtures.
+
+## Amendment (2026-10): mortgage insurance, and the profit a home sale is taxed on
+
+**One more primitive: mortgage insurance** (`mortgage_insurance_rate_pct`). It is a yearly percentage of the original loan, billed monthly, on a down payment under 20%, while the scheduled balance a month starts with is above 78% of the price. Both thresholds follow US practice: the CFPB states the under-20% trigger, and the Homeowners Protection Act ends the insurance automatically on the date the balance is "first scheduled to reach 78 percent of the original value" (12 U.S.C. 4901(18)). The US ships 0.5%, inside Freddie Mac's "$30 to $70 per month for every $100,000 you borrowed" (0.36–0.84% a year). FR, DE, NL and UK ship 0, because their lenders price a small deposit another way (a one-off guarantee or a higher interest rate), and each region's notes say so.
+
+- It is part of the buyer's monthly cost, so cash-flow matching hands the renter the difference (ADR-0002).
+- It is not tax-deductible. US rules on deducting it have changed several times; modelling them would be a separate, sourced decision.
+- It has no tornado bar. It is zero in four regions and at the US default 20% down, so a bar would come and go with the down-payment slider; the Down Payment bar already measures it, because its lower test crosses the 20% line at the US default; and a premium is a quote, not a guess about the future.
+- The Act's other end date, the midpoint of the loan term, is not modelled: at every slider setting the 78% point comes first.
+
+**The home-sale gain is the profit after buying and selling costs** since ADR-0012. The capital-gains regimes and rates are unchanged.

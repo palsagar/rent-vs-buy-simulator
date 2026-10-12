@@ -8,6 +8,7 @@ import { trackEvent } from "./analytics.js";
 import { fmtMoney, parseTypedNumber, setCurrency } from "./format.js";
 import {
   DEFAULT_CONFIG,
+  KEYS_ADDED_IN_V3,
   applyPreset,
   debounce,
   getConfig,
@@ -16,6 +17,7 @@ import {
   setFtb,
   setParam,
   setRegionId,
+  urlOmitted,
 } from "./state.js";
 
 const OUTLOOK_PRESETS = {
@@ -426,11 +428,16 @@ function deriveSelectedRegion(regions) {
     if (named) return named;
   }
   const cfg = getConfig();
+  // A key the link was too old to carry still holds the US default, so it
+  // says nothing about the region and must not rule one out.
+  const carried = ([k]) => !urlOmitted(k);
   return (
     regions.find(
       (region) =>
         region.available &&
-        Object.entries(region.taxPrimitives).every(([k, v]) => cfg[k] === v),
+        Object.entries(region.taxPrimitives)
+          .filter(carried)
+          .every(([k, v]) => cfg[k] === v),
     ) ??
     // A config matching no bundle is legitimate -- a hand-edited or
     // FTB-modified share URL. Fall back to matching on the keys the FTB
@@ -440,10 +447,31 @@ function deriveSelectedRegion(regions) {
         region.available &&
         Object.entries(region.taxPrimitives)
           .filter(([k]) => !(k in region.firstTimeBuyerOverrides))
+          .filter(carried)
           .every(([k, v]) => cfg[k] === v),
     ) ??
     null
   );
+}
+
+/**
+ * Give each key the opening link was too old to carry the selected
+ * region's value, rather than the US default the config started from, or,
+ * when the link matches no region, the value it had before the key existed.
+ */
+function fillKeysTheLinkPredates() {
+  const cfg = getConfig();
+  const fill = {};
+  for (const [k, before] of Object.entries(KEYS_ADDED_IN_V3)) {
+    if (!urlOmitted(k)) continue;
+    // A link that matches no region has no bundle to ask. It was written
+    // before the key existed, so it gets the value that changes nothing:
+    // the scenario its sender saw. (The offline stand-in region has no
+    // values at all and keeps the default.)
+    const value = selectedRegion ? selectedRegion.taxPrimitives[k] : before;
+    if (value !== undefined && cfg[k] !== value) fill[k] = value;
+  }
+  if (Object.keys(fill).length > 0) applyPreset(fill);
 }
 
 /** Move ONLY the override keys. Never re-applies the whole bundle. */
@@ -593,6 +621,7 @@ function buildPresetPills(regions) {
   // may be any region's. Marking the first pill active regardless would
   // make the first FTB click apply the US delta to a UK config.
   selectedRegion = deriveSelectedRegion(regions);
+  fillKeysTheLinkPredates();
   // Persist whatever was derived, so a legacy link upgrades to a stored
   // id on first load and stops depending on the numbers matching. An `r`
   // that names no region is dropped, so a shared link never repeats it.

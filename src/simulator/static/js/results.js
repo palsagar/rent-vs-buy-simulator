@@ -80,6 +80,9 @@ function watchTornadoWidth() {
 }
 
 function headlineHtml({ winner, difference, horizonYears }) {
+  // A tie names no winner and no amount: the gap is under half a unit of
+  // currency and would print as "~$0" (ADR-0010 amendment).
+  if (winner === "tie") return `Buying and renting leave you equally well off after ${horizonYears} years`;
   const amount = `~${fmtMoney(Math.abs(difference))}`;
   if (tossUp) {
     // No Buy/Rent colour on the amount: either colour would imply a winner.
@@ -90,15 +93,16 @@ function headlineHtml({ winner, difference, horizonYears }) {
 }
 
 // The one-line verdict pinned at the top of the phone inputs sheet, so the
-// answer stays in view while the sheet covers the page. Same toss-up rule
-// as the headline.
+// answer stays in view while the sheet covers the page. Same tie and
+// toss-up rules as the headline.
 function paintSheetVerdict() {
   if (!lastVerdict) return;
   const { winner, difference, horizonYears } = lastVerdict;
   const amount = `~${fmtMoney(Math.abs(difference))}`;
-  const text = tossUp
-    ? `Too close to call · ${amount} apart after ${horizonYears} yrs`
-    : `${winner === "buy" ? "Buying" : "Renting"} ahead by ${amount} after ${horizonYears} yrs`;
+  let text;
+  if (winner === "tie") text = `Buying and renting end level after ${horizonYears} yrs`;
+  else if (tossUp) text = `Too close to call · ${amount} apart after ${horizonYears} yrs`;
+  else text = `${winner === "buy" ? "Buying" : "Renting"} ahead by ${amount} after ${horizonYears} yrs`;
   // The line is a live region: rewriting the same text would announce it again.
   const line = document.getElementById("sheet-verdict");
   if (line.textContent !== text) line.textContent = text;
@@ -112,10 +116,11 @@ function renderVerdict(data) {
 
   const breakevenEl = document.getElementById("verdict-breakeven");
   const b = data.breakevenYear;
-  breakevenEl.textContent =
-    b != null
-      ? `${name} pulls ahead if you stay ≥ ${Math.ceil(b)} years`
-      : `No breakeven within ${horizonYears} years`;
+  // A tie ignores the breakeven: a gap that ends at the tie can still
+  // cross zero in the last month, which would name a winner.
+  if (winner === "tie") breakevenEl.textContent = `Neither pulls ahead within ${horizonYears} years`;
+  else if (b != null) breakevenEl.textContent = `${name} pulls ahead if you stay ≥ ${Math.ceil(b)} years`;
+  else breakevenEl.textContent = `No breakeven within ${horizonYears} years`;
   document.getElementById("verdict-confidence").textContent = "";
   paintSheetVerdict();
 }
@@ -224,8 +229,9 @@ export function clearTossUp() {
 }
 
 export function renderMonteCarlo(mc, winner) {
-  const pct = winner === "buy" ? mc.buyWinsPct : 100 - mc.buyWinsPct;
-  const name = winner === "buy" ? "Buying" : "Renting";
+  // A tie has no winner whose share to show, so it shows buying's.
+  const pct = winner === "rent" ? 100 - mc.buyWinsPct : mc.buyWinsPct;
+  const name = winner === "rent" ? "Renting" : "Buying";
   // Decide on the rounded share, so the headline agrees with the number
   // printed beside it (60.4% prints as 60% and is a toss-up).
   const shownPct = Math.round(pct);
