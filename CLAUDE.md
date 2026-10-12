@@ -57,6 +57,13 @@ uv venv --seed && uv pip install -e .
   ```
 - **Check if already pushed:** `git push -u origin <branch>` is idempotent — safe to run even if the branch is already on remote
 
+## Releases
+
+- release-please (`.github/workflows/release.yml`) keeps one open "chore: release X.Y.Z" PR. That PR bumps `pyproject.toml` and `uv.lock` and writes `CHANGELOG.md` from the squash-commit subjects.
+- A `feat:` PR title gives a minor bump, `fix:` gives a patch bump, and a `!` after the type (for example `feat!:`) gives a major bump.
+- Approving and merging that PR tags `vX.Y.Z`, creates the GitHub Release, and publishes to PyPI through `publish.yml` (trusted publishing, `pypi` environment).
+- Never edit the version by hand. Keep the file name `release.yml`: PyPI's trusted publisher is registered against it.
+
 ## Code Conventions
 
 - **Type annotations** on all function/method signatures (use `typing` and `collections.abc`)
