@@ -8,6 +8,7 @@ import {
   renderFanChart,
   renderOutflowChart,
   renderTornadoChart,
+  tornadoSummary,
 } from "./charts.js";
 import { fmtMoney } from "./format.js";
 import { configHash, getConfig } from "./state.js";
@@ -175,5 +176,6 @@ export function renderMonteCarlo(mc, winner) {
   document.getElementById("verdict-confidence").textContent =
     ` · ${name} wins in ${shownPct}% of simulated futures`;
   renderFanChart(document.getElementById("fan-chart"), mc);
+  document.getElementById("tornado-summary").textContent = tornadoSummary(mc.tornado, tossUp);
   renderTornadoChart(document.getElementById("tornado-chart"), mc.tornado);
 }

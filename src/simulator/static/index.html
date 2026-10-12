@@ -129,8 +129,9 @@
     Instead of &ldquo;Buy wins by $142K,&rdquo; you see:
     <strong style="color: #e2e8f0;">&ldquo;Buying wins in 68% of
     simulations.&rdquo;</strong> The fan chart shows the range of
-    possible outcomes, and the tornado chart reveals which parameters
-    matter most.
+    possible outcomes, and the <strong style="color: #e2e8f0;">What could
+    change the answer?</strong> chart shows which single assumption could
+    flip the verdict.
 </p></div>
       </div>
       <div class="guide-footer">
@@ -209,9 +210,17 @@
         <h2>How sure is this?</h2>
         <div class="card-sub">500 simulated futures of the Buy − Rent difference. Bands: 50% and 90% of outcomes.</div>
         <div id="fan-chart" class="chart"></div>
-        <h2 style="margin-top:18px">Which assumption to stress-test hardest</h2>
-        <div class="card-sub">Wider bar = bigger swing in the outcome. Purple = assumption goes up, grey = goes down. Each assumption is moved by a realistic amount — for the growth and inflation rates, that amount shrinks as your horizon lengthens. Hover over or tap a bar to see its before and after.</div>
+        <h2 style="margin-top:18px">What could change the answer?</h2>
+        <div class="card-sub">Each bar tests one number at a time, set lower and higher than yours. A bar that crosses into the other colour flips the answer on its own.</div>
+        <p id="tornado-summary"></p>
         <div id="tornado-chart" class="chart"></div>
+        <details id="tornado-note">
+          <summary>How are the test values chosen?</summary>
+          <p>Each bar changes one number at a time and keeps everything else as you set it. The value tested is printed at each end of the bar.</p>
+          <p><strong>Guesses about the future</strong> (property appreciation, equity growth, rent inflation) move by a typical range for their average over your horizon. The range is narrower for longer stays, because good and bad years tend to even out.</p>
+          <p><strong>Your numbers</strong> move by fixed steps: home price by 100,000, monthly rent by 500 (both in your region's currency), mortgage rate by 1 point, down payment by 5 points, and the property levy by about 40% of its value.</p>
+          <p>A test never goes past the limits of its slider, so one side of a bar can be shorter than the other.</p>
+        </details>
       </section>
 
       <section class="card">

@@ -634,7 +634,7 @@ export const STEPS = [
     { target: '#core-inputs', title: 'Your situation', body: 'Price, down payment, mortgage rate, rent — drag any slider, or tap its value to type an exact number, and the charts recompute live. The URL updates too: the address bar is always a shareable link.', action: { type: 'change' }, onLeave: () => { document.getElementById('input-panel')?.classList.remove('visible'); document.getElementById('drawer-scrim')?.classList.add('hidden'); } },
     { target: '#verdict-hero', title: 'The verdict', body: 'The headline: which strategy leaves you wealthier at your horizon, by how much, the breakeven year, and the Monte Carlo confidence. Four stat cards break down year-1 costs.' },
     { target: '#decision-chart', title: 'Net value over time', body: 'What you’d walk away with minus everything you put in, at every year — hover or tap for exact figures. Where the orange line crosses the blue is your breakeven.' },
-    { target: '#fan-chart', title: 'How sure is this?', body: '500 simulated futures with randomized year-by-year returns. The fan shows the range of outcomes; the tornado below ranks which assumptions swing the result most.' },
+    { target: '#fan-chart', title: 'How sure is this?', body: '500 simulated futures with randomized year-by-year returns. The fan shows the range of outcomes; the chart below shows which single change could flip the answer.' },
     { target: '#advanced-section', title: 'Advanced', body: 'Fine-tune the details: open a group to change buying costs, yearly costs and taxes. A dot marks anything you changed from the region default.', onLeave: () => {
         // On a phone the section lives in the inputs sheet, which the tour
         // opened to reach it; the next steps frame the results.

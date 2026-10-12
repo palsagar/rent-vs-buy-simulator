@@ -9,9 +9,10 @@ const RENT = "#58a6ff";
 const MUTED = "#8b949e";
 const GRID = "rgba(48,54,61,0.6)";
 
-// Tornado "assumption goes up" bars. Not the Rent blue: in this chart the
-// colour means a direction, not a strategy.
-const HIGHER = "#d2a8ff";
+// Tornado bars. Neutral on purpose: the tinted halves behind them carry
+// the Buy and Rent colours, and the tested value printed at each bar end
+// says which way the number moved, so the bar itself encodes nothing.
+const BAR = "#6e7681";
 
 // Below this chart width the tornado's category labels took half the plot,
 // so they move above their bars and the bars get the full width.
@@ -285,14 +286,15 @@ function fmtFieldValue(fieldKey, storedValue) {
   return def.fmt(storedValue * (def.scale ?? 1));
 }
 
-// The range hover needs four arrays the bars themselves do not. They are
+// The tested values need four arrays the bars themselves do not. They are
 // a strictly additive part of the payload, so a response that predates
 // them still has everything needed to draw the chart -- but spreading a
 // missing one throws, and the throw happens AFTER the fan chart has
 // already rendered, leaving the tornado showing the previous region's
 // bars with nothing on screen saying they are stale. Reachable during a
 // rolling deploy (new bundle, old container) or from a cached API
-// response. Degrade to the bar-only hover instead of stranding the chart.
+// response. Degrade to unnamed, ungrouped bars instead of stranding the
+// chart.
 function tornadoRanges(tornado, count) {
   const arrays = [
     tornado.fields,
@@ -301,53 +303,183 @@ function tornadoRanges(tornado, count) {
     tornado.highInput,
   ];
   if (arrays.some((a) => !Array.isArray(a) || a.length !== count)) return null;
-  return arrays.map((a) => [...a].reverse());
+  return arrays;
 }
 
+// The tornado's two group headings. A bar's group is the input panel
+// section its field lives in: the outlook assumptions are guesses nobody
+// can check today, everything else is known (or negotiable) when you sign.
+const FUTURE_GROUP = "Guesses about the future";
+const YOURS_GROUP = "Your numbers";
+
+// Below this gap between a tested value and the current one, the side was
+// clamped at a slider limit and tested nothing.
+const SAME_INPUT_TOLERANCE = 1e-9;
+
+// One row per bar, widest first as the payload sends them. Each side
+// carries the Buy - Rent result it produced and, when the payload has
+// them, the tested and current values formatted like their slider.
+function tornadoRows(tornado) {
+  const ranges = tornadoRanges(tornado, tornado.params.length);
+  return tornado.params.map((name, i) => {
+    if (ranges === null) {
+      return {
+        label: name,
+        future: false,
+        current: null,
+        sides: [
+          { end: tornado.low[i], tested: null, direction: "lower" },
+          { end: tornado.high[i], tested: null, direction: "higher" },
+        ],
+      };
+    }
+    const [fields, baseIn, lowIn, highIn] = ranges;
+    const def = INPUT_DEFS.find((d) => d.key === fields[i]);
+    const tested = (v) =>
+      Math.abs(v - baseIn[i]) < SAME_INPUT_TOLERANCE ? null : fmtFieldValue(fields[i], v);
+    return {
+      label: def?.label ?? name,
+      future: def?.section === "assumptions",
+      current: fmtFieldValue(fields[i], baseIn[i]),
+      sides: [
+        { end: tornado.low[i], tested: tested(lowIn[i]), direction: "lower" },
+        { end: tornado.high[i], tested: tested(highIn[i]), direction: "higher" },
+      ],
+    };
+  });
+}
+
+function aheadBy(diff) {
+  return diff >= 0 ? `Buying ahead by ${fmtMoney(diff)}` : `Renting ahead by ${fmtMoney(-diff)}`;
+}
+
+function lowerFirst(text) {
+  return text.charAt(0).toLowerCase() + text.slice(1);
+}
+
+// "equity growth (CAGR) at 11.7% instead of 7.0%", or "higher equity
+// growth" when the payload predates the tested values.
+function testedPhrase(row, side) {
+  return side.tested === null
+    ? `${side.direction} ${lowerFirst(row.label)}`
+    : `${lowerFirst(row.label)} at ${side.tested} instead of ${row.current}`;
+}
+
+const COUNT_WORDS = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"];
+
+// Bars named in the summary when more than this many flip the answer.
+const MAX_NAMED_FLIPS = 3;
+
+// The sentence above the tornado: which single changes would flip the
+// answer. A side flips it when its Buy - Rent result lands on the other
+// side of the tie from yours. A toss-up gets its own line, decided by
+// the same rule as the headline, so the two never disagree.
+export function tornadoSummary(tornado, tossUp) {
+  if (tossUp) return "Your result is too close to call, so small changes can tip it either way.";
+  const buyAhead = tornado.base >= 0;
+  const flips = tornadoRows(tornado).flatMap((row) => {
+    const side = row.sides.find((s) => s.end >= 0 !== buyAhead);
+    return side === undefined ? [] : [testedPhrase(row, side)];
+  });
+  if (flips.length === 0) {
+    return `No single change here flips the answer. ${buyAhead ? "Buying" : "Renting"} stays ahead in every test.`;
+  }
+  const count = COUNT_WORDS[flips.length] ?? String(flips.length);
+  const lead = `${count} of these could flip the answer to ${buyAhead ? "renting" : "buying"} on ${flips.length === 1 ? "its" : "their"} own`;
+  if (flips.length > MAX_NAMED_FLIPS) {
+    const [a, b, c] = flips;
+    return `${lead}. The biggest are ${a}, ${b}, and ${c}.`;
+  }
+  const list = flips.length === 1 ? flips[0] : `${flips.slice(0, -1).join(", ")}, or ${flips.at(-1)}`;
+  return `${lead}: ${list}.`;
+}
+
+// An empty side of the axis is extended by this fraction of the data
+// span, which keeps the tie line at least a quarter of the way in from
+// either edge. Each tinted half then has room for its label even when
+// every bar lies on one side.
+const MIN_HALF_FRACTION = 1 / 3;
+
+// Room past the outermost bar ends for the tested values printed there.
+const END_LABEL_PAD = 0.14;
+
 export function renderTornadoChart(el, tornado) {
-  const params = [...tornado.params].reverse();
   const base = tornado.base;
-  const low = [...tornado.low].reverse().map((v) => v - base);
-  const high = [...tornado.high].reverse().map((v) => v - base);
-  // A bar's width says how much the outcome moves but never what was
-  // changed, and the width of the three stochastic bars additionally
-  // varies with the horizon (the delta is a standard error). Both are
-  // invisible without stating the assumption's own before/after.
-  const ranges = tornadoRanges(tornado, params.length);
-  const [fields, baseIn, lowIn, highIn] = ranges ?? [[], [], [], []];
-  // Bars are drawn as IMPACT (verdict - base) around a zero pivot, NOT
-  // as absolute verdicts around a `base` pivot. Both render identically
-  // -- same widths, same pivot position -- but only one agrees with the
-  // axis title, and the difference is visible the moment a number is
-  // read off. With a trace `base`, Plotly resolves %{x} to base + size,
-  // so the tick labels and the hover reported the absolute verdict on an
-  // axis titled "Impact": a bar sitting well left of the zero tick could
-  // hover as a positive number, the two disagreeing by the whole base.
-  // customdata is [range, impact] per bar. The impact is pre-formatted
-  // like every other hover; the range is empty when the payload predates
-  // it, and the template then omits that line entirely.
-  const hoverData = (values, impacts) => {
-    const money = moneyHover(impacts);
-    return money.map((m, i) =>
-      ranges === null
-        ? ["", m]
-        : [`${fmtFieldValue(fields[i], baseIn[i])} → ${fmtFieldValue(fields[i], values[i])}`, m],
-    );
-  };
-  const tpl = (side) =>
-    ranges === null
-      ? `%{y} ${side}<br>%{customdata[1]}<extra></extra>`
-      : `%{y} ${side}<br>%{customdata[0]}<br>%{customdata[1]}<extra></extra>`;
-  const traces = [
-    { type: "bar", orientation: "h", y: params, x: low, marker: { color: MUTED }, customdata: hoverData(lowIn, low), hovertemplate: tpl("lower") },
-    { type: "bar", orientation: "h", y: params, x: high, marker: { color: HIGHER }, customdata: hoverData(highIn, high), hovertemplate: tpl("higher") },
-  ];
-  const layout = baseLayout("Impact on Buy − Rent difference");
+  const rows = tornadoRows(tornado);
+  // Top to bottom: guesses about the future, then your numbers, each
+  // still widest first. Headings only when the payload says which is
+  // which; an older payload gets one ungrouped list.
+  const future = rows.filter((r) => r.future);
+  const yours = rows.filter((r) => !r.future);
+  const grouped = future.length > 0;
+  const order = grouped
+    ? [FUTURE_GROUP, ...future, ...(yours.length > 0 ? [YOURS_GROUP, ...yours] : [])]
+    : rows;
+  // Plotly draws the first category at the bottom.
+  const slots = [...order].reverse();
+  const category = (slot) => (typeof slot === "string" ? slot : slot.label);
+  const categories = slots.map(category);
+
+  // The axis is the Buy - Rent result itself, the same quantity as the fan
+  // chart above, so $0 is the tie in both. Each bar runs from your result
+  // to the result of one tested value; a bar that crosses $0 flips the
+  // answer on its own.
+  const sideTrace = (k) => ({
+    type: "bar",
+    orientation: "h",
+    y: categories,
+    base,
+    x: slots.map((s) => (typeof s === "string" ? null : s.sides[k].end - base)),
+    marker: { color: BAR },
+    text: slots.map((s) => (typeof s === "string" ? "" : (s.sides[k].tested ?? ""))),
+    textposition: "outside",
+    cliponaxis: false,
+    textfont: { color: MUTED, size: 11 },
+    customdata: slots.map((s) => {
+      if (typeof s === "string") return "";
+      const side = s.sides[k];
+      const what = side.tested === null ? `${s.label}, ${side.direction}` : `${s.label} at ${side.tested} instead of ${s.current}`;
+      return `${what}<br>${aheadBy(side.end)}`;
+    }),
+    hovertemplate: "%{customdata}<extra></extra>",
+  });
+  const traces = [sideTrace(0), sideTrace(1)];
+
+  const ends = [0, base, ...rows.flatMap((r) => r.sides.map((s) => s.end))];
+  let lo = Math.min(...ends);
+  let hi = Math.max(...ends);
+  const span = hi - lo || 1;
+  lo = Math.min(lo, -span * MIN_HALF_FRACTION);
+  hi = Math.max(hi, span * MIN_HALF_FRACTION);
+  const pad = (hi - lo) * END_LABEL_PAD;
+  const range = [lo - pad, hi + pad];
+
+  const layout = baseLayout("Buy − Rent");
   moveCurrencyToXAxis(layout);
+  layout.hovermode = "closest";
   layout.barmode = "overlay";
-  layout.yaxis.automargin = true; // grow the left margin to fit parameter labels
+  layout.margin = { ...layout.margin, t: 44 };
+  layout.xaxis.range = range;
+  layout.xaxis.zeroline = false; // the tie line below replaces it
+  layout.yaxis.categoryorder = "array";
+  layout.yaxis.categoryarray = categories;
+  layout.yaxis.automargin = true; // grow the left margin to fit row labels
+  // Headings in the text colour, bars' names in the muted one.
+  layout.yaxis.tickmode = "array";
+  layout.yaxis.tickvals = categories;
+  layout.yaxis.ticktext = slots.map((s) => (typeof s === "string" ? `<b style="color:#e6edf3">${s}</b>` : s.label));
   layout.shapes = [
-    { type: "line", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1, line: { color: "#e6edf3", width: 1 } },
+    { type: "rect", layer: "below", x0: range[0], x1: 0, yref: "paper", y0: 0, y1: 1, fillcolor: "rgba(88,166,255,0.1)", line: { width: 0 } },
+    { type: "rect", layer: "below", x0: 0, x1: range[1], yref: "paper", y0: 0, y1: 1, fillcolor: "rgba(240,136,62,0.1)", line: { width: 0 } },
+    { type: "line", name: "tie", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1, line: { color: "#484f58", width: 1 } },
+    { type: "line", name: "your-result", x0: base, x1: base, yref: "paper", y0: 0, y1: 1, line: { color: "#e6edf3", width: 1.5 } },
+  ];
+  // Two rows above the plot: your result's label on top, the direction of
+  // each half underneath, both pinned to the line they describe.
+  layout.annotations = [
+    { x: base, yref: "paper", y: 1, yanchor: "bottom", yshift: 18, text: "Your result", showarrow: false, font: { color: "#e6edf3", size: 11 } },
+    { x: 0, xanchor: "right", xshift: -6, yref: "paper", y: 1, yanchor: "bottom", text: "← Renting ahead", showarrow: false, font: { color: RENT, size: 11 } },
+    { x: 0, xanchor: "left", xshift: 6, yref: "paper", y: 1, yanchor: "bottom", text: "Buying ahead →", showarrow: false, font: { color: BUY, size: 11 } },
   ];
   if (el.clientWidth < NARROW_CHART_PX) {
     layout.yaxis.showticklabels = false;
@@ -356,19 +488,26 @@ export function renderTornadoChart(el, tornado) {
     layout.margin = { ...layout.margin, l: 16, r: 24 };
     layout.bargap = 0.5;
     // Each label's bottom edge sits on its bar's top edge: a bar fills
-    // (1 - bargap) of its category slot, centred on the category.
-    const slotPx = plotHeight(el, layout) / params.length;
-    layout.annotations = params.map((p) => ({
-      xref: "paper",
-      x: 0,
-      xanchor: "left",
-      y: p,
-      yanchor: "bottom",
-      yshift: (slotPx * (1 - layout.bargap)) / 2,
-      text: p,
-      showarrow: false,
-      font: { color: MUTED, size: 11 },
-    }));
+    // (1 - bargap) of its category slot, centred on the category. A
+    // heading has no bar, so it sits centred in its slot.
+    const slotPx = plotHeight(el, layout) / slots.length;
+    layout.annotations.push(
+      ...slots.map((s) => {
+        const heading = typeof s === "string";
+        return {
+          name: "row-label",
+          xref: "paper",
+          x: 0,
+          xanchor: "left",
+          y: category(s),
+          yanchor: heading ? "middle" : "bottom",
+          yshift: heading ? 0 : (slotPx * (1 - layout.bargap)) / 2,
+          text: heading ? `<b>${s}</b>` : s.label,
+          showarrow: false,
+          font: { color: heading ? "#e6edf3" : MUTED, size: 11 },
+        };
+      }),
+    );
   }
   Plotly.react(el, traces, layout, PLOT_CONFIG);
 }
