@@ -442,3 +442,36 @@ test.describe('phone: touch targets and text size', () => {
     expect(new Set(sizes)).toEqual(new Set(['16px']));
   });
 });
+
+test('a preset bar wider than the window fades at the edge it continues past', async ({ page }) => {
+  await page.setViewportSize({ width: 920, height: 700 });
+  const bar = page.locator('#preset-bar');
+  expect(await bar.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+  await expect(bar).toHaveClass(/fade-end/);
+  await expect(bar).not.toHaveClass(/fade-start/);
+  await bar.evaluate((el) => { el.scrollLeft = 1e4; });
+  await expect(bar).toHaveClass(/fade-start/);
+  await expect(bar).not.toHaveClass(/fade-end/);
+
+  await page.setViewportSize({ width: 1800, height: 900 });
+  if (await bar.evaluate((el) => el.scrollWidth <= el.clientWidth)) {
+    await expect(bar).not.toHaveClass(/fade-start|fade-end/);
+  }
+});
+
+test('on a very wide screen the results keep a readable width, centred', async ({ page }) => {
+  await page.setViewportSize({ width: 2560, height: 1300 });
+  const { width, left, right } = await page.evaluate(() => {
+    const results = document.getElementById('results');
+    const style = getComputedStyle(results);
+    const box = results.getBoundingClientRect();
+    const hero = document.getElementById('verdict-hero').getBoundingClientRect();
+    return {
+      width: hero.width,
+      left: hero.left - (box.left + parseFloat(style.paddingLeft)),
+      right: box.right - parseFloat(style.paddingRight) - results.offsetWidth + results.clientWidth - hero.right,
+    };
+  });
+  expect(width).toBeLessThanOrEqual(1200);
+  expect(Math.abs(left - right)).toBeLessThanOrEqual(2);
+});

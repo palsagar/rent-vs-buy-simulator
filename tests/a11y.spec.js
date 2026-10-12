@@ -269,3 +269,97 @@ for (const url of ['/', '/?propertyPrice=750000&r=us&v=2']) {
     expect(probe.tag).toBe('H1');
   });
 }
+
+async function waitForConfidence(page) {
+  await page.waitForFunction(
+    () => document.getElementById('verdict-confidence').textContent.length > 0,
+    null,
+    { timeout: 20_000 },
+  );
+}
+
+test('each slider is named by its label, described by its hint, and reads its value as shown', async ({ page }) => {
+  const price = page.getByRole('slider', { name: 'Home price' });
+  await expect(price).toHaveCount(1);
+  await expect(price).toHaveAccessibleDescription('Purchase price of the property');
+  await expect(price).toHaveAttribute('aria-valuetext', '$500k');
+  const unnamed = await page.evaluate(() =>
+    [...document.querySelectorAll('#input-panel input[type=range]')]
+      .filter((input) => {
+        const ids = (input.getAttribute('aria-labelledby') ?? '').split(' ').filter(Boolean);
+        return !ids.some((id) => document.getElementById(id)?.textContent.trim());
+      })
+      .map((input) => input.outerHTML),
+  );
+  expect(unnamed).toEqual([]);
+});
+
+test('the other controls are named by their labels too', async ({ page }) => {
+  await expect(page.getByRole('group', { name: 'Mortgage term' })).toHaveAccessibleDescription(
+    'Amortization period — independent of the horizon',
+  );
+  await page.locator('.adv-group summary', { hasText: 'Tax when you sell the home' }).click();
+  await expect(page.getByRole('combobox', { name: 'When is profit on the home taxed?' })).toBeVisible();
+});
+
+test('the verdict and its confidence are announced politely', async ({ page }) => {
+  await expect(page.locator('#verdict-line')).toHaveAttribute('aria-live', 'polite');
+  await expect(page.locator('#verdict-confidence')).toHaveAttribute('aria-live', 'polite');
+});
+
+test('a Monte Carlo result that changes nothing does not touch the announced verdict', async ({ page }) => {
+  await waitForConfidence(page);
+  const mutations = await page.evaluate(async () => {
+    const { getConfig } = await import('./js/state.js');
+    const { postMonteCarlo } = await import('./js/api.js');
+    const { renderMonteCarlo } = await import('./js/results.js');
+    const payload = await postMonteCarlo(getConfig());
+    const winner = document.getElementById('verdict-confidence').textContent.includes('Buying') ? 'buy' : 'rent';
+    let count = 0;
+    const observer = new MutationObserver((records) => { count += records.length; });
+    for (const id of ['verdict-line', 'verdict-confidence']) {
+      observer.observe(document.getElementById(id), { childList: true, characterData: true, subtree: true });
+    }
+    renderMonteCarlo(payload, winner);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    observer.disconnect();
+    return count;
+  });
+  expect(mutations).toBe(0);
+});
+
+test.describe('on a phone', () => {
+  test.use({ viewport: { width: 390, height: 664 }, hasTouch: true, isMobile: true });
+
+  test('the open inputs sheet speaks the verdict instead of the hero', async ({ page }) => {
+    await page.click('#inputs-btn');
+    await expect(page.locator('#verdict-line')).toHaveAttribute('aria-live', 'off');
+    await expect(page.locator('#verdict-confidence')).toHaveAttribute('aria-live', 'off');
+    await page.click('#sheet-done');
+    await expect(page.locator('#verdict-line')).toHaveAttribute('aria-live', 'polite');
+    await expect(page.locator('#verdict-confidence')).toHaveAttribute('aria-live', 'polite');
+  });
+});
+
+test('a link with values the calculator cannot use says which ones', async ({ page }) => {
+  const notice = page.locator('#link-notice');
+  await expect(notice).toBeHidden();
+
+  await page.goto('/?propertyPrice=99999999&mortgageRateAnnual=abc&interestDeductionEnabled=maybe&r=us&v=2');
+  await expect(notice).toBeVisible();
+  await expect(page.locator('#link-notice-text')).toHaveText(
+    'Some values in this link were outside what the calculator allows, so these use the starting values instead: Home price, Mortgage rate, Deduct mortgage interest from income tax.',
+  );
+  await page.locator('#link-notice-dismiss').click();
+  await expect(notice).toBeHidden();
+
+  await page.goto('/?ftb=maybe&r=uk&v=2');
+  await expect(page.locator('#link-notice-text')).toHaveText(
+    'One value in this link was outside what the calculator allows, so First-time buyer uses the starting value instead.',
+  );
+
+  await page.goto('/?propertyPrice=99999999&v=2');
+  await expect(page.locator('#link-notice-text')).toHaveText(
+    'One value in this link was outside what the calculator allows, so Home price uses the starting value instead.',
+  );
+});

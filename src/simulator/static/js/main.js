@@ -5,7 +5,7 @@
 import { initAdvanced } from "./advanced.js";
 import { getRegions, postMonteCarlo, postSimulate } from "./api.js";
 import { initInputs, syncInputs } from "./inputs.js";
-import { initPhoneLayout } from "./layout.js";
+import { initPhoneLayout, initPresetBarFade } from "./layout.js";
 import {
   clearTossUp,
   forgetTossUp,
@@ -22,7 +22,14 @@ import {
   setCached,
 } from "./state.js";
 import { Tour, STEPS } from "./tour.js";
-import { hideError, initErrorBanner, initUi, paintBusy, showError } from "./ui.js";
+import {
+  hideError,
+  initErrorBanner,
+  initUi,
+  paintBusy,
+  showError,
+  showLinkNotice,
+} from "./ui.js";
 
 let simAbort = null;
 let mcAbort = null;
@@ -227,9 +234,12 @@ async function init() {
     ];
   }
   initInputs(regions);
+  // After initInputs: the pills set the bar's width.
+  initPresetBarFade();
   // After initInputs: the groups reuse its builders and its region state.
   initAdvanced();
   initUi(tour, { sharedLink: link.shared });
+  if (link.dropped.length) showLinkNotice(link.dropped);
   syncInputs();
   onConfigChange((_cfg, { drag }) => {
     // Only a slider drag keeps the toss-up wording until Monte Carlo

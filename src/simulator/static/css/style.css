@@ -139,6 +139,19 @@ body {
   border-radius: 4px;
 }
 #preset-bar::-webkit-scrollbar-track { background: transparent; }
+/* Set by layout.js on the edges the bar continues past. */
+#preset-bar.fade-end {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+}
+#preset-bar.fade-start {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent);
+}
+#preset-bar.fade-start.fade-end {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+}
 .preset-label {
   font-size: 11px;
   color: var(--muted);
@@ -201,6 +214,9 @@ body {
    column gap), so showing it never moves the cards. The sticky offset
    counts from inside #results' 20px top padding: the chip's centre sits
    21px below the top of the visible results, its top edge 8px below. */
+/* A readable line length on very wide screens. Width 100%, because auto
+   side margins would otherwise stop the cards from stretching. */
+#results > * { width: 100%; max-width: 1200px; margin-inline: auto; }
 #results-spinner {
   position: sticky;
   top: 1px;
@@ -426,6 +442,27 @@ input[type="range"]::-moz-range-thumb {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
+}
+
+/* A gentle note on values a link carried that the calculator cannot use. */
+#link-notice {
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--raised);
+  border-left: 3px solid var(--accent-text);
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.text-btn {
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  color: var(--accent-text);
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 /* Verdict hero */
@@ -838,5 +875,10 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   /* Finger-sized. */
   #region-caveats { margin-top: 4px; }
   #region-caveats summary { padding-block: 13px; }
+  .text-btn { min-height: 44px; }
+  /* Dismiss on a row of its own, so the finger-sized button does not
+     stretch the last line of the text. */
+  #link-notice { padding-bottom: 0; }
+  #link-notice .text-btn { display: flex; align-items: center; }
   #error-dismiss { min-width: 44px; }
 }

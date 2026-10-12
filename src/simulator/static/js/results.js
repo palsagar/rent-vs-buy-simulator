@@ -109,11 +109,18 @@ function paintSheetVerdict() {
   if (line.textContent !== text) line.textContent = text;
 }
 
+// The headline is a live region: rewriting the same text would announce it again.
+function paintHeadline() {
+  const line = document.getElementById("verdict-line");
+  const html = headlineHtml(lastVerdict);
+  if (line.innerHTML !== html) line.innerHTML = html;
+}
+
 function renderVerdict(data) {
   lastVerdict = data.verdict;
   const { winner, horizonYears } = data.verdict;
   const name = winner === "buy" ? "Buying" : "Renting";
-  document.getElementById("verdict-line").innerHTML = headlineHtml(data.verdict);
+  paintHeadline();
 
   const breakevenEl = document.getElementById("verdict-breakeven");
   const b = data.breakevenYear;
@@ -234,7 +241,7 @@ export function forgetTossUp() {
 export function clearTossUp() {
   tossUp = false;
   clearTornadoSummary();
-  if (lastVerdict) document.getElementById("verdict-line").innerHTML = headlineHtml(lastVerdict);
+  if (lastVerdict) paintHeadline();
   paintSheetVerdict();
 }
 
@@ -246,10 +253,12 @@ export function renderMonteCarlo(mc, winner) {
   // printed beside it (60.4% prints as 60% and is a toss-up).
   const shownPct = Math.round(pct);
   tossUp = shownPct >= TOSS_UP_MIN_PCT && shownPct <= TOSS_UP_MAX_PCT;
-  if (lastVerdict) document.getElementById("verdict-line").innerHTML = headlineHtml(lastVerdict);
+  if (lastVerdict) paintHeadline();
   paintSheetVerdict();
-  document.getElementById("verdict-confidence").textContent =
-    ` · ${name} wins in ${shownPct}% of simulated futures`;
+  // A live region too, written only when its text changes.
+  const confidence = document.getElementById("verdict-confidence");
+  const confidenceText = ` · ${name} wins in ${shownPct}% of simulated futures`;
+  if (confidence.textContent !== confidenceText) confidence.textContent = confidenceText;
   renderFanChart(document.getElementById("fan-chart"), mc);
   document.getElementById("tornado-summary").textContent = tornadoSummary(mc.tornado, tossUp);
   tornado = mc.tornado;

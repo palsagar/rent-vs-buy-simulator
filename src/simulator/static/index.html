@@ -192,10 +192,11 @@
 
     <div id="results">
       <div id="results-spinner" aria-hidden="true"><span class="busy-chip"><span class="busy-dot"></span>Updating…</span></div>
+      <p id="link-notice" role="status" hidden><span id="link-notice-text"></span> <button type="button" id="link-notice-dismiss" class="text-btn">Dismiss</button></p>
 
       <section id="verdict-hero" data-result="simulate">
-        <p id="verdict-line"></p>
-        <div id="verdict-subline"><span id="verdict-breakeven"></span><span id="verdict-confidence"></span><span id="verdict-pending" hidden> · Checking how sure this is…</span></div>
+        <p id="verdict-line" aria-live="polite" aria-atomic="true"></p>
+        <div id="verdict-subline"><span id="verdict-breakeven"></span><span id="verdict-confidence" aria-live="polite"></span><span id="verdict-pending" hidden> · Checking how sure this is…</span></div>
         <div id="stat-row">
           <div class="stat-card buy"><div class="stat-label">Buy net value</div><div class="stat-value buy" id="stat-buy"></div></div>
           <div class="stat-card rent"><div class="stat-label">Rent net value</div><div class="stat-value rent" id="stat-rent"></div></div>

@@ -1,4 +1,4 @@
-// Phone layout. At or below the phone breakpoint (where the inputs panel
+// Phone layout, and the preset bar's overflow fade. At or below the phone breakpoint (where the inputs panel
 // becomes a bottom sheet) the preset controls move into the inputs panel,
 // next to the numbers they change, and the Guide button moves to the title
 // bar; above it everything returns to the preset bar.
@@ -43,4 +43,16 @@ export function initPhoneLayout() {
   };
   apply();
   media.addEventListener("change", apply);
+}
+
+// A preset bar wider than the window fades at each edge it continues past,
+// so the hidden pills read as "scroll for more".
+export function initPresetBarFade() {
+  const bar = document.getElementById("preset-bar");
+  const update = () => {
+    bar.classList.toggle("fade-start", bar.scrollLeft > 1);
+    bar.classList.toggle("fade-end", bar.scrollLeft + bar.clientWidth < bar.scrollWidth - 1);
+  };
+  bar.addEventListener("scroll", update, { passive: true });
+  new ResizeObserver(update).observe(bar);
 }

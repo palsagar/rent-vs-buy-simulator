@@ -5,6 +5,7 @@
 import { Tour, currentActiveTour } from "./tour.js";
 import { trackEvent } from "./analytics.js";
 import { moveFocusIn, restoreFocus, trapFocus } from "./focus.js";
+import { INPUT_DEFS } from "./fields.js";
 import { verdictIsCurrent } from "./results.js";
 import { shareUrl } from "./state.js";
 
@@ -177,6 +178,16 @@ export function initUi(tour, { sharedLink = false } = {}) {
     const s = scrim();
     if (s) s.classList.toggle("hidden", !open);
   };
+  // While the sheet is open its own live verdict line speaks, so the hero's
+  // would say the same thing twice. Watched, not set in setDrawer: the tour
+  // and the phone layout also open and close the sheet.
+  const syncHeroLive = () => {
+    const live = inputPanel.classList.contains("visible") ? "off" : "polite";
+    for (const id of ["verdict-line", "verdict-confidence"]) {
+      document.getElementById(id).setAttribute("aria-live", live);
+    }
+  };
+  new MutationObserver(syncHeroLive).observe(inputPanel, { attributes: true, attributeFilter: ["class"] });
   // Done, Esc and a tap outside close the phone inputs sheet. After Esc,
   // focus that was in the sheet goes to the button that reopens it, not
   // off-screen.
@@ -247,6 +258,23 @@ export function initUi(tour, { sharedLink = false } = {}) {
     shareLabelTimer = setTimeout(() => {
       shareBtn.textContent = shareLabel;
     }, 2000);
+  });
+}
+
+// A link value the calculator cannot use falls back to its starting value;
+// this says which ones did. `keys` are config keys, or `ftb`.
+export function showLinkNotice(keys) {
+  // `ftb` is not a field: it is the first-time-buyer pill.
+  const label = (key) => (key === "ftb" ? "First-time buyer" : INPUT_DEFS.find((d) => d.key === key)?.label ?? key);
+  const labels = [...new Set(keys.map(label))];
+  document.getElementById("link-notice-text").textContent =
+    labels.length === 1
+      ? `One value in this link was outside what the calculator allows, so ${labels[0]} uses the starting value instead.`
+      : `Some values in this link were outside what the calculator allows, so these use the starting values instead: ${labels.join(", ")}.`;
+  const notice = document.getElementById("link-notice");
+  notice.hidden = false;
+  document.getElementById("link-notice-dismiss").addEventListener("click", () => {
+    notice.hidden = true;
   });
 }
 

@@ -34,17 +34,23 @@ const SECTION_CONTAINERS = {
 const widgets = []; // { def, refresh() } — refresh re-reads state into the widget
 let regionsList = [];
 
+// Ids that tie a field's name and hint to its control for screen readers.
+// The levy cap's amount slider reuses its field's key, hence the counter.
+let fieldUid = 0;
+const uid = (key) => `f-${key}-${++fieldUid}`;
+
 function buildSlider(def, container) {
   const scale = def.scale ?? 1;
+  const id = uid(def.key);
   const row = document.createElement("div");
   row.className = "slider-row";
   row.innerHTML = `
     <div class="slider-header">
-      <span class="slider-name">${def.label}</span>
+      <span class="slider-name" id="${id}-name">${def.label}</span>
       <button type="button" class="slider-value"></button>
   </div>
-    <input type="range" min="${def.min}" max="${def.max}" step="${def.step}">
-    ${def.hint ? `<div class="slider-hint">${def.hint}</div>` : ""}
+    <input type="range" min="${def.min}" max="${def.max}" step="${def.step}" aria-labelledby="${id}-name"${def.hint ? ` aria-describedby="${id}-hint"` : ""}>
+    ${def.hint ? `<div class="slider-hint" id="${id}-hint">${def.hint}</div>` : ""}
   `;
   const input = row.querySelector("input");
   const value = row.querySelector(".slider-value");
@@ -54,6 +60,8 @@ function buildSlider(def, container) {
     const text = def.fmt(displayed);
     value.textContent = text;
     value.setAttribute("aria-label", `${def.label} ${text}, type an exact value`);
+    // The slider reads "$500k", as shown, rather than "500000".
+    input.setAttribute("aria-valuetext", text);
   };
   const refresh = () => {
     const stored = getConfig()[def.key];
@@ -160,6 +168,7 @@ function openTypedField(def, value, slider, shown, apply) {
 function buildSegmented(def, container) {
   const picker = document.createElement("div");
   picker.className = "seg-picker";
+  picker.setAttribute("role", "group");
   const buttons = def.options.map((option) => {
     const btn = document.createElement("button");
     btn.className = "seg-btn";
@@ -193,7 +202,13 @@ function buildCheckbox(def, container) {
   };
   input.addEventListener("change", () => setParam(def.key, input.checked));
   container.appendChild(row);
-  if (def.hint) container.appendChild(hintEl(def.hint));
+  // The wrapping label names the box; the hint describes it.
+  if (def.hint) {
+    const hint = hintEl(def.hint);
+    hint.id = `${uid(def.key)}-hint`;
+    input.setAttribute("aria-describedby", hint.id);
+    container.appendChild(hint);
+  }
   widgets.push({ refresh });
 }
 
@@ -212,7 +227,7 @@ function buildSelect(def, container) {
   const row = document.createElement("div");
   row.className = "select-row";
   row.appendChild(select);
-  container.appendChild(labeledRow(def, row));
+  container.appendChild(labeledRow(def, row, select));
   widgets.push({ refresh });
 }
 
@@ -283,18 +298,27 @@ function buildLevyCap(def, container) {
     }
     amount.hidden = choice !== "capped";
   };
-  container.appendChild(labeledRow(def, controls));
+  container.appendChild(labeledRow(def, controls, picker));
   widgets.push({ refresh });
 }
 
-function labeledRow(def, el) {
+// `control` is the element a screen reader announces: it takes the name
+// shown above it (unless it has its own) and the hint below it.
+function labeledRow(def, el, control = el) {
+  const id = uid(def.key);
   const wrap = document.createElement("div");
   const header = document.createElement("div");
   header.className = "slider-header";
-  header.innerHTML = `<span class="slider-name">${def.label}</span>`;
+  header.innerHTML = `<span class="slider-name" id="${id}-name">${def.label}</span>`;
   wrap.appendChild(header);
   wrap.appendChild(el);
-  if (def.hint) wrap.appendChild(hintEl(def.hint));
+  if (!control.hasAttribute("aria-label")) control.setAttribute("aria-labelledby", `${id}-name`);
+  if (def.hint) {
+    const hint = hintEl(def.hint);
+    hint.id = `${id}-hint`;
+    control.setAttribute("aria-describedby", hint.id);
+    wrap.appendChild(hint);
+  }
   return wrap;
 }
 
