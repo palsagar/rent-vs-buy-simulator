@@ -471,6 +471,15 @@ input[type="range"]::-moz-range-thumb {
 .stat-value.rent { color: var(--rent); }
 #net-note { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
 #share-btn { margin-top: 14px; }
+#region-caveats { margin-top: 12px; font-size: 12px; line-height: 1.5; color: var(--muted); }
+/* A drawn marker, so a summary that wraps keeps its text clear of it. */
+#region-caveats summary { position: relative; padding-left: 16px; list-style: none; cursor: pointer; color: var(--text-2); }
+#region-caveats summary::-webkit-details-marker { display: none; }
+#region-caveats summary::before { content: "▸"; position: absolute; left: 0; font-size: 11px; color: var(--muted); }
+#region-caveats[open] summary::before { content: "▾"; }
+#region-caveats summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#region-notes { margin: 8px 0 0; padding-left: 18px; }
+#region-notes li { margin-bottom: 4px; }
 
 /* Chart cards */
 .card {
@@ -527,9 +536,6 @@ input[type="range"]::-moz-range-thumb {
 /* Footer */
 footer { font-size: 12px; color: var(--muted); line-height: 1.7; padding: 8px 4px 24px; overflow-wrap: anywhere; }
 footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anywhere; }
-#region-notes { margin-top: 10px; }
-#region-notes ul { margin: 6px 0 0; padding-left: 18px; }
-#region-notes li { margin-bottom: 4px; }
 
 /* Overlays: welcome modal + guide (ported) */
 .overlay {
@@ -828,5 +834,8 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   .stat-label,
   .slider-hint { font-size: 12px; }
   #error-banner button { min-height: 44px; }
+  /* Finger-sized. */
+  #region-caveats { margin-top: 4px; }
+  #region-caveats summary { padding-block: 13px; }
   #error-dismiss { min-width: 44px; }
 }

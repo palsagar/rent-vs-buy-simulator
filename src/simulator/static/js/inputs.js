@@ -537,26 +537,25 @@ function selectRegionPill(regionPills, regions, region) {
 }
 
 // Every region's known simplifications are disclosed here rather than in
-// a doc nobody opens. Notes are authored in regions.py, so they travel
-// with the values they qualify.
+// a doc nobody opens: collapsed under the verdict they qualify. Notes are
+// authored in regions.py, so they travel with the values they qualify.
 function renderRegionNotes(region) {
-  const host = document.getElementById("region-notes");
-  if (!host) return;
+  const box = document.getElementById("region-caveats");
+  const list = document.getElementById("region-notes");
   // replaceChildren, not innerHTML: notes are authored data, but the
   // habit matters. Note text below goes in via textContent for the
   // same reason.
-  host.replaceChildren();
-  if (!region?.notes?.length) return;
-  const heading = document.createElement("strong");
-  heading.textContent = `${region.label} — modelling notes:`;
-  const list = document.createElement("ul");
-  for (const note of region.notes) {
+  list.replaceChildren();
+  const notes = region?.notes ?? [];
+  box.hidden = notes.length === 0;
+  if (notes.length === 0) return;
+  box.querySelector("summary").textContent =
+    `${notes.length} ${notes.length === 1 ? "thing" : "things"} to know about the ${region.label} numbers`;
+  for (const note of notes) {
     const item = document.createElement("li");
     item.textContent = note;
     list.appendChild(item);
   }
-  host.appendChild(heading);
-  host.appendChild(list);
 }
 
 function applySelectedRegion() {
