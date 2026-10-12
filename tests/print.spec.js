@@ -111,6 +111,27 @@ test('when the latest change failed, the page prints the numbers its results are
   await expect(page.locator('#print-stale')).toHaveText('These results are for the numbers below, not your latest change.');
 });
 
+test('the relief values of the printed scenario do not count as changes', async ({ page }) => {
+  await load(page);
+  await page.locator('#region-pills .preset-btn', { hasText: 'UK' }).click();
+  await expect(page.locator('#verdict-line')).toContainText('£');
+  await expect(page.locator('#verdict-hero')).not.toHaveClass(/stale/);
+  // £600k is above the relief's £500k ceiling; that result fails, so the
+  // printout is the £289k scenario, where the relief applies.
+  await page.route('**/api/simulate', (route) =>
+    route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ detail: 'boom' }) }),
+  );
+  await page.evaluate(() => {
+    const price = document.querySelector('#core-inputs input[type=range]');
+    price.value = 600000;
+    price.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect(page.locator('#error-banner')).toBeVisible();
+  await startPrint(page);
+  await expect(page.locator('#print-stale')).toBeVisible();
+  await expect(page.locator('#print-summary')).not.toContainText('Buying costs');
+});
+
 test('an up-to-date page prints no stale notice', async ({ page }) => {
   await load(page);
   await startPrint(page);

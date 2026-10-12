@@ -355,11 +355,11 @@ function hasRelief(region) {
 // outputs a single signed number that is enough to invert it -- the UK
 // verdict flips across roughly GBP610k-GBP710k. Relief must therefore be
 // a function of price, not a latched flag.
-/** Whether relief exists for this region AT this price. */
-function reliefApplies(region) {
+/** Whether relief exists for this region AT this price (`cfg`'s). */
+function reliefApplies(region, cfg = getConfig()) {
   if (!hasRelief(region)) return false;
   const cap = region.firstTimeBuyerMaxPrice;
-  return cap == null || getConfig().propertyPrice <= cap;
+  return cap == null || cfg.propertyPrice <= cap;
 }
 
 /**
@@ -430,14 +430,15 @@ function linkHoldsRelief(region) {
  * The selected region's value for every Advanced field, with the
  * first-time-buyer relief applied while it is in effect, or null when no
  * region is selected (a link whose numbers match no bundle). Cost
- * inflation is in no bundle, so its default is the app-wide one.
+ * inflation is in no bundle, so its default is the app-wide one. The price
+ * that decides the relief is `cfg`'s, the live config's by default.
  */
-export function regionDefaults() {
+export function regionDefaults(cfg = getConfig()) {
   if (!selectedRegion) return null;
   return {
     costInflationRate: DEFAULT_CONFIG.costInflationRate,
     ...selectedRegion.taxPrimitives,
-    ...(ftbOn && reliefApplies(selectedRegion) ? selectedRegion.firstTimeBuyerOverrides : {}),
+    ...(ftbOn && reliefApplies(selectedRegion, cfg) ? selectedRegion.firstTimeBuyerOverrides : {}),
   };
 }
 

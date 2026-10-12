@@ -53,7 +53,7 @@ function fillSummary(regions) {
   // count, so it is not printed either. The live region's defaults only
   // describe results computed in that region with that relief setting.
   const sameRegion = shown.regionId === getRegionId() && shown.ftb === getFtb();
-  const defaults = sameRegion ? regionDefaults() : null;
+  const defaults = sameRegion ? regionDefaults(cfg) : null;
   const changed = INPUT_DEFS.filter(
     (def) =>
       def.section === "advanced" &&
