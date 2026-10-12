@@ -101,12 +101,31 @@ export function setRegionId(id) {
   scheduleUrlWrite();
 }
 
+// Whether the first-time-buyer relief is on, while the selected region
+// enacts one; null otherwise. Like `regionId` it is state the numbers
+// cannot carry: once a relief value is edited, no config says whether
+// the relief was on (#51). Kept out of `config` for the same reason.
+// Adding it needed no new URL_SCHEMA_VERSION: no existing value changed
+// meaning, and a link without it is still read by inference (inputs.js).
+let ftb = null;
+
+export function getFtb() {
+  return ftb;
+}
+
+export function setFtb(on) {
+  ftb = on;
+  // Through the same delay as config changes, like setRegionId.
+  scheduleUrlWrite();
+}
+
 function currentQuery() {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(config)) {
     if (value !== DEFAULT_CONFIG[key]) params.set(key, value);
   }
   if (regionId) params.set("r", regionId);
+  if (ftb !== null) params.set("ftb", ftb ? "1" : "0");
   const qs = params.toString();
   return qs ? `?${qs}&v=${URL_SCHEMA_VERSION}` : "";
 }
@@ -162,6 +181,10 @@ export function readUrl() {
   // Validated against the real bundle list by inputs.js, which owns the
   // region data; an unknown id is dropped there.
   regionId = params.get("r");
+  // Only 1 or 0 counts; anything else is read as a link without the
+  // setting, so inputs.js infers it from the numbers.
+  const ftbRaw = params.get("ftb");
+  ftb = ftbRaw === "1" ? true : ftbRaw === "0" ? false : null;
   const restored = {};
   for (const [key, def] of Object.entries(DEFAULT_CONFIG)) {
     if (!params.has(key)) continue;

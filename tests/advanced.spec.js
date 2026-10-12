@@ -410,3 +410,155 @@ test.describe('phone text size', () => {
     expect(tiny).toEqual([]);
   });
 });
+
+test.describe('first-time-buyer relief in a shared link', () => {
+  const ftbPill = (page) => page.locator('#ftb-pill .preset-btn');
+  const uk = (page) => page.locator('#region-pills .preset-btn', { hasText: 'UK' }).click();
+  const shareLink = (page) =>
+    page.evaluate(async () => (await import('./js/state.js')).shareUrl());
+  const ftbParam = (link) => new URL(link).searchParams.get('ftb');
+
+  /** Type an exact home price into the core price field. */
+  async function typePrice(page, text) {
+    const price = page.locator('#core-inputs .slider-row', { hasText: 'Home price' });
+    await price.locator('.slider-value').click();
+    await price.locator('.slider-typed').fill(text);
+    await price.locator('.slider-typed').press('Enter');
+  }
+
+  test('an edited relief value opens with the relief still on (#51)', async ({ page }) => {
+    await boot(page);
+    await uk(page);
+    await openGroup(page, 'transaction');
+    await typeAdvanced(page, 'closingCostBuyerAmount', '4000');
+    await expect(ftbPill(page)).toHaveClass(/active/);
+    await expect(changedCount(page, 'transaction')).toHaveText(' · 1 changed');
+    await expect(summaries(page).first()).toHaveText('Buy 0% + £4,000 · Sell 1.75%');
+
+    const link = await shareLink(page);
+    await boot(page, link);
+    await expect(ftbPill(page)).toHaveClass(/active/);
+    await expect(changedCount(page, 'transaction')).toHaveText(' · 1 changed');
+    await expect(summaries(page).first()).toHaveText('Buy 0% + £4,000 · Sell 1.75%');
+    await openGroup(page, 'transaction');
+    await resetButton(page, 'transaction').click();
+    await expect(summaries(page).first()).toHaveText('Buy 0% + £3,100 · Sell 1.75%');
+    await expect(changedCount(page, 'transaction')).toHaveText('');
+    expect(ftbParam(link)).toBe('1');
+  });
+
+  test('a price move keeps an edited relief value until the price crosses the ceiling', async ({ page }) => {
+    await boot(page);
+    await uk(page);
+    await openGroup(page, 'transaction');
+    await typeAdvanced(page, 'closingCostBuyerAmount', '4000');
+    await typePrice(page, '400000');
+    await expect(summaries(page).first()).toHaveText('Buy 0% + £4,000 · Sell 1.75%');
+    // Above the ceiling the relief does not exist, so the base values apply.
+    await typePrice(page, '650000');
+    await expect(summaries(page).first()).toHaveText(`Buy 5% ${MINUS} £6,900 · Sell 1.75%`);
+    await expect(ftbPill(page)).toHaveClass(/disabled/);
+    // Back below it, the region's relief applies again, as a pill click would.
+    await typePrice(page, '400000');
+    await expect(summaries(page).first()).toHaveText('Buy 0% + £3,100 · Sell 1.75%');
+    await expect(ftbPill(page)).toHaveClass(/active/);
+  });
+
+  test('relief off travels, even when the numbers look like the relief', async ({ page }) => {
+    await boot(page);
+    await uk(page);
+    await ftbPill(page).click(); // relief off
+    await openGroup(page, 'transaction');
+    await typeAdvanced(page, 'closingCostBuyerPct', '0');
+    await typeAdvanced(page, 'closingCostBuyerAmount', '3100');
+    await expect(changedCount(page, 'transaction')).toHaveText(' · 2 changed');
+
+    const link = await shareLink(page);
+    await boot(page, link);
+    await expect(ftbPill(page)).not.toHaveClass(/active/);
+    await expect(changedCount(page, 'transaction')).toHaveText(' · 2 changed');
+    await openGroup(page, 'transaction');
+    await resetButton(page, 'transaction').click();
+    await expect(summaries(page).first()).toHaveText(`Buy 5% ${MINUS} £6,900 · Sell 1.75%`);
+    expect(ftbParam(link)).toBe('0');
+  });
+
+  test('a relief priced out by the ceiling still travels', async ({ page }) => {
+    await boot(page);
+    await uk(page);
+    await typePrice(page, '650000');
+    await expect(ftbPill(page)).toHaveClass(/disabled/);
+
+    const link = await shareLink(page);
+    await boot(page, link);
+    await typePrice(page, '400000');
+    await expect(ftbPill(page)).toHaveClass(/active/);
+    await expect(summaries(page).first()).toHaveText('Buy 0% + £3,100 · Sell 1.75%');
+    expect(ftbParam(link)).toBe('1');
+  });
+
+  test.describe('a link written before the setting was carried', () => {
+    const ftbInAddressBar = (page) => () => new URL(page.url()).searchParams.get('ftb');
+
+    test('infers the relief from the numbers and adds it to the address bar', async ({ page }) => {
+      await boot(page, '/?closingCostBuyerPct=0&closingCostBuyerAmount=3100&r=uk&v=2');
+      await expect(ftbPill(page)).toHaveClass(/active/);
+      await expect.poll(ftbInAddressBar(page)).toBe('1');
+    });
+
+    test('above the ceiling, withdraws the relief values it carries', async ({ page }) => {
+      await boot(page, '/?propertyPrice=650000&closingCostBuyerPct=0&closingCostBuyerAmount=3100&r=uk&v=2');
+      const cfg = await page.evaluate(async () => (await import('./js/state.js')).getConfig());
+      expect(cfg.closingCostBuyerPct).toBe(5);
+      expect(cfg.closingCostBuyerAmount).toBe(-6900);
+      await expect(ftbPill(page)).toHaveClass(/disabled/);
+    });
+
+    test('ignores a setting that is not 1 or 0', async ({ page }) => {
+      await boot(page, '/?closingCostBuyerPct=0&closingCostBuyerAmount=3100&r=uk&ftb=yes&v=2');
+      await expect(ftbPill(page)).toHaveClass(/active/);
+      await expect.poll(ftbInAddressBar(page)).toBe('1');
+    });
+  });
+
+  test('regions without a relief carry no setting', async ({ page }) => {
+    await boot(page);
+    await uk(page);
+    await page.locator('#region-pills .preset-btn', { hasText: 'US' }).click();
+    expect(ftbParam(await shareLink(page))).toBeNull();
+    await page.locator('#region-pills .preset-btn', { hasText: 'FR' }).click();
+    expect(ftbParam(await shareLink(page))).toBe('1');
+  });
+
+  test('the tour restore keeps an edited relief value', async ({ page }) => {
+    await boot(page);
+    await uk(page);
+    await openGroup(page, 'transaction');
+    await typeAdvanced(page, 'closingCostBuyerAmount', '4000');
+    await page.evaluate(async () => {
+      const { snapshotSettings } = await import('./js/inputs.js');
+      window.__snap = snapshotSettings();
+    });
+    await ftbPill(page).click(); // relief off
+    await ftbPill(page).click(); // relief on, back to the region's values
+    await page.evaluate(async () => {
+      const { restoreSettings } = await import('./js/inputs.js');
+      restoreSettings(window.__snap);
+    });
+    await expect(summaries(page).first()).toHaveText('Buy 0% + £4,000 · Sell 1.75%');
+    await expect(ftbPill(page)).toHaveClass(/active/);
+    await expect(changedCount(page, 'transaction')).toHaveText(' · 1 changed');
+  });
+
+  test.describe('phone', () => {
+    test.use(PHONE);
+
+    test('an edited relief value opens with the relief on in the inputs sheet', async ({ page }) => {
+      // The seller cost is the UK value, so only the edited relief value counts.
+      await boot(page, '/?closingCostBuyerPct=0&closingCostBuyerAmount=4000&closingCostSellerPct=1.75&r=uk&ftb=1&v=2');
+      await page.click('#inputs-btn');
+      await expect(page.locator('#input-panel #ftb-pill .preset-btn')).toHaveClass(/active/);
+      await expect(changedCount(page, 'transaction')).toHaveText(' · 1 changed');
+    });
+  });
+});

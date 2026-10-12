@@ -11,7 +11,9 @@ import {
   applyPreset,
   debounce,
   getConfig,
+  getFtb,
   getRegionId,
+  setFtb,
   setParam,
   setRegionId,
 } from "./state.js";
@@ -308,6 +310,11 @@ function hintEl(text) {
 // because a default-on relief with no visible cause is a trap.
 let selectedRegion = null;
 let ftbOn = true;
+// Whether the override keys hold the relief's values: as applied, or as
+// the user then edited them. After every sync it equals
+// `ftbOn && reliefApplies(selectedRegion)`, so the keys move only when
+// the relief changes state, never because a relief value was edited.
+let ftbInEffect = false;
 let ftbBtn = null;
 
 /** Whether this region enacts any first-time-buyer relief (US, DE: no). */
@@ -328,13 +335,47 @@ function reliefApplies(region) {
   return cap == null || getConfig().propertyPrice <= cap;
 }
 
-/** True when every override key currently holds its FTB value. */
+/**
+ * True when every override key currently holds its FTB value. Used only
+ * to infer the relief setting for a link written before `ftb` existed.
+ */
 function ftbMatchesConfig(region) {
   const overrides = region?.firstTimeBuyerOverrides ?? {};
   const keys = Object.keys(overrides);
   if (keys.length === 0) return false;
   const cfg = getConfig();
   return keys.every((k) => cfg[k] === overrides[k]);
+}
+
+/** Put the relief setting in the share link, for a region that has one. */
+function rememberFtb() {
+  setFtb(hasRelief(selectedRegion) ? ftbOn : null);
+}
+
+/**
+ * Set the relief flags for a config just read from a link or a tour
+ * snapshot. `stated` is the setting it carried, or null/undefined for a
+ * link written before `ftb` existed: the setting is then inferred from
+ * the numbers, which fails once a relief value has been edited (#51).
+ */
+function adoptFtb(stated) {
+  const matches = ftbMatchesConfig(selectedRegion);
+  if (stated == null) {
+    // Only derive the flag from a region that actually enacts relief.
+    // ftbMatchesConfig is false for an empty override set, so deriving it
+    // from US or DE would latch the flag OFF and the next region WITH
+    // relief would then load without it -- FTB must default ON.
+    ftbOn = hasRelief(selectedRegion) ? matches : true;
+    // Lets syncFtbToPrice withdraw relief values that an old link
+    // carries above the ceiling.
+    ftbInEffect = matches;
+  } else {
+    ftbOn = stated;
+    // A stated setting was written after syncFtbToPrice ran, so the keys
+    // hold what the relief at this price says, edits included.
+    ftbInEffect = stated && reliefApplies(selectedRegion);
+  }
+  rememberFtb();
 }
 
 /**
@@ -395,6 +436,7 @@ function applyFtb(region, on) {
       ]),
     ),
   );
+  ftbInEffect = on;
   syncInputs();
 }
 
@@ -422,11 +464,13 @@ function refreshFtbPill() {
 // The price slider can cross a relief ceiling, so the override keys must
 // be re-derived whenever the price moves -- not just when the pill is
 // clicked. ftbOn is preserved as the user's INTENT; whether it takes
-// effect is decided here.
+// effect is decided here. The keys move only when the relief changes
+// state, so an edited relief value stays while the relief stays in
+// effect (#51); crossing the ceiling swaps in the whole set, like the pill.
 function syncFtbToPrice() {
   if (!selectedRegion || !hasRelief(selectedRegion)) return;
   const shouldApply = ftbOn && reliefApplies(selectedRegion);
-  if (shouldApply !== ftbMatchesConfig(selectedRegion)) {
+  if (shouldApply !== ftbInEffect) {
     applyFtb(selectedRegion, shouldApply);
   }
   refreshFtbPill();
@@ -482,6 +526,8 @@ function applySelectedRegion() {
       ? selectedRegion.firstTimeBuyerOverrides
       : {}),
   });
+  // The price is now the bundle's typical one, judged above.
+  ftbInEffect = ftbOn && reliefApplies(selectedRegion);
   syncInputs();
   renderRegionNotes(selectedRegion);
 }
@@ -501,6 +547,7 @@ function buildPresetPills(regions) {
         setRegionId(region.id);
         selectRegionPill(regionPills, regions, region);
         applySelectedRegion();
+        rememberFtb();
         refreshFtbPill();
         if (e.isTrusted) trackEvent("region-changed", { region: region.id });
       });
@@ -514,6 +561,7 @@ function buildPresetPills(regions) {
   ftbBtn.addEventListener("click", (e) => {
     ftbOn = !ftbOn;
     applyFtb(selectedRegion, ftbOn);
+    rememberFtb();
     refreshFtbPill();
     if (e.isTrusted) trackEvent("ftb-toggled", { on: ftbOn });
   });
@@ -527,11 +575,7 @@ function buildPresetPills(regions) {
   // id on first load and stops depending on the numbers matching. An `r`
   // that names no region is dropped, so a shared link never repeats it.
   setRegionId(selectedRegion?.id ?? null);
-  // Only derive the flag from a region that actually enacts relief.
-  // ftbMatchesConfig is false for an empty override set, so deriving it
-  // from US or DE would latch the flag OFF and the next region WITH
-  // relief would then load without it -- FTB must default ON.
-  ftbOn = hasRelief(selectedRegion) ? ftbMatchesConfig(selectedRegion) : true;
+  adoptFtb(getFtb());
   if (selectedRegion) setCurrency(selectedRegion.currencySymbol);
   selectRegionPill(regionPills, regions, selectedRegion);
   // A link shared before relief was priced can carry the FTB buyer costs
@@ -608,7 +652,7 @@ export function restoreSettings(snapshot) {
   // Restores every config key, including any FTB override values.
   applyPreset(snapshot.config);
   setRegionId(snapshot.regionId);
-  ftbOn = snapshot.ftbOn ?? (hasRelief(region) ? ftbMatchesConfig(region) : true);
+  adoptFtb(snapshot.ftbOn);
   selectRegionPill(document.getElementById("region-pills"), regionsList, region);
   // Outlook pills have no authoritative match after restore; clear the chrome
   // rather than leave a stale highlight (the app already tolerates this
