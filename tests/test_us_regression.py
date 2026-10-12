@@ -109,6 +109,15 @@ RATE_INDEPENDENT_GOLDENS = {
 # to 12.40% a year, so its bar was the most inflated of the eight; it
 # narrows from 271.5k to 247.6k while Property Appreciation's narrows
 # from 268.8k to 261.1k.
+#
+# Moved once more, deliberately, for ADR-0012 (the taxed home-sale profit
+# is net of buying and selling costs): exactly ONE value, Property
+# Appreciation's higher side, 142,634.58 -> 152,592.99. Its 5.53% test
+# grows the home to ~$856k, a profit above the $250k exclusion, so the
+# sale is taxed; netting out the $15,000 paid to buy and the ~$51,389
+# paid to sell lowers that tax by 15% of $66,389 = $9,958. Every other
+# bar, the base and the summary GOLDENS stay bit-identical: at the US
+# default the profit is under the exclusion either way.
 TORNADO_NAMES = [
     "Property Appreciation",
     "Equity Growth",
@@ -130,7 +139,7 @@ TORNADO_LOW = [
     6236.65391019854,
 ]
 TORNADO_HIGH = [
-    142634.5791709717,
+    152592.98506998102,
     -141912.00960823428,
     93865.22144775564,
     -81275.04620029719,

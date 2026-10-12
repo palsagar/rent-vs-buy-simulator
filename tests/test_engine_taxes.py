@@ -1,5 +1,6 @@
 """Tests for tax primitives: deduction savings + symmetric capital gains."""
 
+import math
 import sys
 from pathlib import Path
 
@@ -7,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import numpy as np
 
+from simulator.models import SimulationConfig
 from tests.test_engine_core import run_flat, taxfree_config
 
 
@@ -48,9 +50,26 @@ class TestInterestDeduction:
         assert np.all(np.abs(s["cum_tax_savings"]) < 1e-9)
 
 
+def _taxed_sale(**overrides: object) -> SimulationConfig:
+    """taxfree_config with every pound of home-sale profit taxed at 20%."""
+    base = dict(
+        sale_cg_regime="exempt_amount",
+        sale_cg_exempt_amount=0.0,
+        sale_cg_rate_pct=20.0,
+    )
+    base.update(overrides)
+    return taxfree_config(**base)
+
+
 class TestSaleCapitalGains:
+    """The taxed profit is the sale price less selling costs, over the
+    price paid plus buying costs (ADR-0012). taxfree_config charges 2% to
+    buy (2,400 on 120,000) and 5% of the sale price to sell."""
+
     def test_exempt_amount_taxes_only_excess_gain(self):
-        # 12% flat annual appreciation for 2y on 120k: gain well over 10k
+        # 12% a year for 2 years on 120k: the home is worth 150,528. Net
+        # of 5% selling costs and the 122,400 paid in, the profit is
+        # 20,601.60, so 10,601.60 is taxed above the 10k exemption.
         cfg = taxfree_config(
             property_appreciation_annual=12.0,
             sale_cg_regime="exempt_amount",
@@ -61,9 +80,92 @@ class TestSaleCapitalGains:
         base = run_flat(
             taxfree_config(property_appreciation_annual=12.0)
         )  # fully_exempt
-        gain = s["home_value"][-1] - 120_000
+        gain = s["home_value"][-1] * 0.95 - (120_000 + 2_400)
         expected_tax = (gain - 10_000) * 0.20
+        assert expected_tax > 0
         assert abs((base["net_buy"][-1] - s["net_buy"][-1]) - expected_tax) < 1e-4
+
+    def test_gain_is_net_of_both_transaction_costs(self):
+        # Against a tax on the gross rise in value, the tax falls by
+        # exactly the rate times what was paid to buy and to sell.
+        taxed = run_flat(_taxed_sale(property_appreciation_annual=12.0))
+        exempt = run_flat(taxfree_config(property_appreciation_annual=12.0))
+        tax = exempt["net_buy"][-1] - taxed["net_buy"][-1]
+        home_value = taxed["home_value"][-1]
+        gross_rule_tax = (home_value - 120_000) * 0.20
+        costs = home_value * 0.05 + 120_000 * 0.02
+        assert abs((gross_rule_tax - tax) - costs * 0.20) < 1e-6
+
+    def test_instant_resale_is_never_taxed(self):
+        # At t=0 the sale recovers neither fee: a loss of exactly both.
+        s = run_flat(_taxed_sale())
+        assert abs(s["net_buy"][0] - -(120_000 * 0.02 + 120_000 * 0.05)) < 1e-6
+
+    def test_a_sale_that_does_not_cover_its_costs_is_not_taxed(self):
+        # 3% a year for 2 years: the home gains 7,308, less than the 2,400
+        # paid to buy plus the ~6,365 paid to sell, so there is no profit
+        # to tax in any month even with no exemption at all.
+        taxed = run_flat(_taxed_sale(property_appreciation_annual=3.0))
+        exempt = run_flat(taxfree_config(property_appreciation_annual=3.0))
+        np.testing.assert_allclose(taxed["net_buy"], exempt["net_buy"], atol=1e-6)
+
+    def test_exempt_after_years_taxes_the_net_gain_before_the_holding_period(self):
+        s = run_flat(
+            _taxed_sale(
+                property_appreciation_annual=12.0,
+                sale_cg_regime="exempt_after_years",
+                sale_cg_exempt_after_years=1,
+            )
+        )
+        exempt = run_flat(taxfree_config(property_appreciation_annual=12.0))
+        net_gain = s["home_value"][11] * 0.95 - (120_000 + 2_400)
+        assert net_gain > 0
+        tax = exempt["net_buy"][11] - s["net_buy"][11]
+        assert abs(tax - net_gain * 0.20) < 1e-6
+
+    def test_uk_pair_with_private_residence_relief_switched_off(self):
+        # The UK buying cost is 5% of the price less 6,900 (the stamp duty
+        # slice plus fees, clamped at zero) and selling costs 1.75%. With
+        # the relief off, every pound of profit is taxed at 24%.
+        price = 289_106
+        kwargs = dict(
+            horizon_years=20,
+            property_price=price,
+            property_appreciation_annual=3.0,
+            closing_cost_buyer_pct=5.0,
+            closing_cost_buyer_amount=-6900.0,
+            closing_cost_seller_pct=1.75,
+        )
+        taxed = run_flat(_taxed_sale(sale_cg_rate_pct=24.0, **kwargs))
+        exempt = run_flat(taxfree_config(**kwargs))
+        home_value = taxed["home_value"][-1]
+        cost = price + max(0.05 * price - 6900, 0)
+        expected = max(home_value * (1 - 0.0175) - cost, 0) * 0.24
+        assert expected > 0
+        tax = exempt["net_buy"][-1] - taxed["net_buy"][-1]
+        assert abs(tax - expected) < 1e-6
+
+    def test_home_and_portfolio_are_taxed_by_the_same_rule(self):
+        # ADR-0001: both exits tax what comes out over what went in. With
+        # no transaction costs an all-cash home and the renter's lump sum
+        # (the same 120,000) grow at the same 5%, so at the same rate the
+        # two taxes are equal. Holds with or without ADR-0012, whose cost
+        # adjustments are zero here; the tests above are what pin them.
+        kwargs = dict(
+            horizon_years=10,
+            down_payment_pct=100,
+            closing_cost_buyer_pct=0.0,
+            closing_cost_seller_pct=0.0,
+            property_appreciation_annual=5.0,
+            equity_growth_annual=5.0,
+        )
+        untaxed = run_flat(taxfree_config(**kwargs))
+        home_taxed = run_flat(_taxed_sale(**kwargs))
+        portfolio_taxed = run_flat(taxfree_config(portfolio_cg_rate_pct=20.0, **kwargs))
+        home_tax = untaxed["net_buy"][-1] - home_taxed["net_buy"][-1]
+        portfolio_tax = untaxed["net_rent"][-1] - portfolio_taxed["net_rent"][-1]
+        assert home_tax > 0
+        assert math.isclose(home_tax, portfolio_tax, rel_tol=1e-12)
 
     def test_exempt_after_years_boundary(self):
         kwargs = dict(

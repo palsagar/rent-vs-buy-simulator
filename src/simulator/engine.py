@@ -323,8 +323,15 @@ def _net_value_series(
         cum_by_year = np.concatenate([[0.0], np.cumsum(yearly_savings)])
         cum_tax_savings = cum_by_year[t_arr // 12]
 
-    # --- Sale capital gains: regime-dependent taxable gain (ADR-0007)
-    home_gain = np.maximum(home_value - config.property_price, 0.0)
+    # --- Sale capital gains: the profit after buying and selling costs
+    # (ADR-0012), then the region's regime (ADR-0007). What the sale
+    # brings in is the price less selling costs; what the home cost is
+    # the price paid plus buying costs. The two are equal at t=0 less
+    # both fees, so an instant resale is a loss and never a taxed gain.
+    seller_cost = home_value * (config.closing_cost_seller_pct / 100)
+    home_gain = np.maximum(
+        (home_value - seller_cost) - (config.property_price + buyer_closing), 0.0
+    )
     if config.sale_cg_regime == "fully_exempt":
         taxable_gain = np.zeros(h + 1)
     elif config.sale_cg_regime == "exempt_amount":
@@ -339,8 +346,9 @@ def _net_value_series(
     portfolio_tax_rent = np.maximum(rent_portfolio - basis_rent, 0.0) * portfolio_rate
     portfolio_tax_buy = np.maximum(buy_portfolio - basis_buy, 0.0) * portfolio_rate
 
-    # --- Liquidation-priced Net Value at every t (ADR-0001)
-    seller_cost = home_value * (config.closing_cost_seller_pct / 100)
+    # --- Liquidation-priced Net Value at every t (ADR-0001). Selling
+    # costs are paid out of the sale here and, above, reduce the taxed
+    # profit: both are real, so neither is counted twice.
     net_buy = (
         home_value
         - balance
