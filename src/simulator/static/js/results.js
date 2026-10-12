@@ -123,6 +123,28 @@ function paintHeadline() {
   if (line.innerHTML !== html) line.innerHTML = html;
 }
 
+// The gap under which Buy and Rent are level: the server's tie rule.
+const TIE_TOLERANCE = 0.5;
+
+// A tie is about the horizon only: in earlier years one side can lead.
+// The line names that side, and says nobody pulls ahead only when the two
+// stay level throughout.
+function tieBreakevenText(data) {
+  const { horizonYears } = data.verdict;
+  const { year, netBuy, netRent } = data.series;
+  const diff = netBuy.map((v, i) => v - netRent[i]);
+  const name = (d) => (d > 0 ? "Buying" : "Renting");
+  const b = data.breakevenYear;
+  // A crossing in the final year is the tie itself.
+  if (b != null && Math.ceil(b) < horizonYears) {
+    const after = diff[year.findIndex((y) => y > b)];
+    return `${name(after)} is ahead from year ${Math.ceil(b)} until the two end level at year ${horizonYears}`;
+  }
+  const lead = diff.reduce((a, d) => (Math.abs(d) > Math.abs(a) ? d : a), 0);
+  if (Math.abs(lead) < TIE_TOLERANCE) return `Neither pulls ahead within ${horizonYears} years`;
+  return `${name(lead)} is ahead until the two end level at year ${horizonYears}`;
+}
+
 function renderVerdict(data) {
   lastVerdict = data.verdict;
   const { winner, horizonYears } = data.verdict;
@@ -131,9 +153,7 @@ function renderVerdict(data) {
 
   const breakevenEl = document.getElementById("verdict-breakeven");
   const b = data.breakevenYear;
-  // A tie ignores the breakeven: a gap that ends at the tie can still
-  // cross zero in the last month, which would name a winner.
-  if (winner === "tie") breakevenEl.textContent = `Neither pulls ahead within ${horizonYears} years`;
+  if (winner === "tie") breakevenEl.textContent = tieBreakevenText(data);
   else if (b != null) {
     const n = Math.ceil(b);
     breakevenEl.textContent = `${name} pulls ahead if you stay ≥ ${n} ${n === 1 ? "year" : "years"}`;
