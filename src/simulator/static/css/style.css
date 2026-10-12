@@ -465,6 +465,9 @@ input[type="range"]::-moz-range-thumb {
   cursor: pointer;
 }
 
+/* Printed only (see the @media print block at the end). */
+#print-summary { display: none; }
+
 /* Verdict hero */
 #verdict-hero {
   background: var(--surface);
@@ -882,4 +885,56 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   #link-notice { padding-bottom: 0; }
   #link-notice .text-btn { display: flex; align-items: center; }
   #error-dismiss { min-width: 44px; }
+}
+
+/* Print: a light page with your numbers, the verdict and its caveats, and
+   the four chart cards. The cards restyle themselves through the colour
+   tokens; the dark Plotly charts are inverted, which keeps Buy orange and
+   Rent blue (a little darker) on white paper. */
+@media print {
+  :root {
+    --bg: #fff;
+    --surface: #fff;
+    --raised: #f6f8fa;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --text-2: #1f2328;
+    --muted: #59636e;
+    --buy: #bc4c00;
+    --rent: #0969da;
+    --green-text: #1a7f37;
+  }
+  body { overflow: visible; background: #fff; }
+  #app { height: auto; }
+  #main { display: block; overflow: visible; }
+  /* 1px each side, so the cards' side borders stay inside the page. */
+  #results { overflow: visible; padding: 0 1px; }
+  #preset-bar, #input-panel, #inputs-btn, #drawer-scrim, .overlay, .tour-dim, .tour-ring, .tour-tooltip,
+  #error-banner, #results-spinner, #share-btn, #csv-btn, #tornado-note, #tornado-detail, #numbers,
+  footer, #link-notice, .modebar-container, #title-bar .badge, #title-bar .author-link,
+  #title-bar .gh-pill, #guide-btn { display: none !important; }
+  #title-bar { background: none; border: none; padding: 0 0 8px; }
+  #print-summary { display: block; }
+  #print-summary dl {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 2px 16px;
+    margin: 8px 0;
+    font-size: 12px;
+    color: var(--text);
+  }
+  #print-summary dt { color: var(--muted); }
+  #print-summary dd { margin: 0; }
+  #print-summary .print-summary-heading { grid-column: 1 / -1; margin-top: 8px; font-weight: 600; color: var(--text); }
+  #print-summary-link { margin: 0; font-size: 11px; overflow-wrap: anywhere; color: var(--muted); }
+  .card, #verdict-hero { break-inside: avoid; border-color: var(--border); }
+  .chart {
+    filter: invert(1) hue-rotate(180deg);
+    break-inside: avoid;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .stat-card { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  /* A result still updating prints at full strength. */
+  [data-result].stale * { opacity: 1 !important; }
 }

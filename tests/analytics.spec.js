@@ -162,6 +162,12 @@ test('csv-downloaded fires when the CSV is downloaded', async ({ page }) => {
   await expect.poll(() => eventNames(page)).toContain('csv-downloaded');
 });
 
+test('page-printed fires when the page is printed', async ({ page }) => {
+  await loadTracked(page);
+  await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
+  await expect.poll(() => eventNames(page)).toContain('page-printed');
+});
+
 test('error-retried fires when Try again is clicked', async ({ page }) => {
   await loadTracked(page);
   await page.route('**/api/simulate', (route) =>

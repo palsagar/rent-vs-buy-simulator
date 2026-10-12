@@ -30,6 +30,10 @@ let tossUp = false;
 // The config the verdict on screen was computed for. Until the next
 // simulate result lands (or when it fails), it differs from the live config.
 let verdictHash = null;
+// The payloads on screen, so the charts can be drawn again at a new size.
+// The tornado's is `tornado`, below.
+let lastSim = null;
+let lastFan = null;
 
 // The tornado's layout depends on its width: the phone layout below
 // NARROW_CHART_PX, its margins, and the axis room that keeps its labels
@@ -200,6 +204,7 @@ export function downloadCsv(series, cfg) {
 
 export function renderSimulate(data, cfg) {
   verdictHash = configHash(cfg);
+  lastSim = { data, cfg };
   renderVerdict(data);
   renderStats(data);
   renderDecisionChart(document.getElementById("decision-chart"), data.series, data.breakevenYear);
@@ -246,6 +251,7 @@ export function clearTossUp() {
 }
 
 export function renderMonteCarlo(mc, winner) {
+  lastFan = mc;
   // A tie has no winner whose share to show, so it shows buying's.
   const pct = winner === "rent" ? 100 - mc.buyWinsPct : mc.buyWinsPct;
   const name = winner === "rent" ? "Renting" : "Buying";
@@ -267,4 +273,17 @@ export function renderMonteCarlo(mc, winner) {
   tornadoHash = verdictHash;
   drawTornado();
   watchTornadoWidth();
+}
+
+// Redraw every chart from the payloads on screen, at the charts' current
+// size; print.js uses it to lay them out at paper width and back.
+export function redrawCharts() {
+  if (lastSim) {
+    const { data, cfg } = lastSim;
+    renderDecisionChart(document.getElementById("decision-chart"), data.series, data.breakevenYear);
+    renderOutflowChart(document.getElementById("outflow-chart"), data.series);
+    renderBreakdownChart(document.getElementById("breakdown-chart"), data, cfg);
+  }
+  if (lastFan) renderFanChart(document.getElementById("fan-chart"), lastFan);
+  if (tornado) drawTornado();
 }

@@ -6,6 +6,7 @@ import { initAdvanced } from "./advanced.js";
 import { getRegions, postMonteCarlo, postSimulate } from "./api.js";
 import { initInputs, syncInputs } from "./inputs.js";
 import { initPhoneLayout, initPresetBarFade } from "./layout.js";
+import { initPrint } from "./print.js";
 import {
   clearTossUp,
   forgetTossUp,
@@ -240,6 +241,7 @@ async function init() {
   initAdvanced();
   initUi(tour, { sharedLink: link.shared });
   if (link.dropped.length) showLinkNotice(link.dropped);
+  initPrint(regions);
   syncInputs();
   onConfigChange((_cfg, { drag }) => {
     // Only a slider drag keeps the toss-up wording until Monte Carlo

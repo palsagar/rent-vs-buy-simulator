@@ -84,6 +84,20 @@ function differs(value, fallback) {
   return value !== fallback;
 }
 
+/**
+ * Whether a field differs from its region default. False when there is
+ * nothing to compare against: no region, or a key missing from the
+ * defaults (the offline fallback region has no bundle). print.js uses it.
+ */
+export function changedFromRegion(def, cfg, defaults) {
+  const asSetting = def.type === "levyCap" ? levyCapSetting : (v) => v;
+  return (
+    defaults !== null &&
+    def.key in defaults &&
+    differs(asSetting(cfg[def.key]), asSetting(defaults[def.key]))
+  );
+}
+
 /** A stored value as its own widget would show it. */
 function formatStored(def, stored) {
   if (def.type === "checkbox") return stored ? "on" : "off";
@@ -193,13 +207,7 @@ function refresh() {
     let any = false;
     for (const { def, el, dot, note } of fields) {
       const visible = def.visibleWhen ? def.visibleWhen(cfg) : true;
-      // A key missing from the defaults (the offline fallback region has
-      // no bundle) has nothing to compare against.
-      const asSetting = def.type === "levyCap" ? levyCapSetting : (v) => v;
-      const isChanged =
-        defaults !== null &&
-        def.key in defaults &&
-        differs(asSetting(cfg[def.key]), asSetting(defaults[def.key]));
+      const isChanged = changedFromRegion(def, cfg, defaults);
       el.hidden = !visible;
       dot.hidden = !isChanged;
       note.hidden = !isChanged;
