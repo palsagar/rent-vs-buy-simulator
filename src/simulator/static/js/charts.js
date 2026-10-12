@@ -522,9 +522,19 @@ function plotWidthEstimate(el, slots) {
   return el.clientWidth - baseLayout("").margin.r - longest * ROW_NAME_CHAR_PX;
 }
 
-// The share of the plot width a label beside a line needs.
-function sideLabelShare(label, plotPx) {
-  return Math.min(MAX_LABEL_SHARE, (label.text.length * SIDE_LABEL_CHAR_PX + SIDE_LABEL_GAP_PX) / plotPx);
+// The empty margin beside the plot that a label may run into. On a phone
+// both side margins are empty; on a wider chart the left one holds the row
+// names.
+function spareMargins(el) {
+  return el.clientWidth < NARROW_CHART_PX ? NARROW_MARGIN : { l: 0, r: baseLayout("").margin.r };
+}
+
+// The share of the plot width a label beside a line needs, after it uses
+// the empty margin on the side it runs to. A label anchored by its right
+// end runs left of its line.
+function sideLabelShare(label, plotPx, spare) {
+  const px = label.text.length * SIDE_LABEL_CHAR_PX + SIDE_LABEL_GAP_PX - (label.xanchor === "right" ? spare.l : spare.r);
+  return Math.min(MAX_LABEL_SHARE, Math.max(0, px) / plotPx);
 }
 
 // The share of the axis between a label's line and the edge it runs to.
@@ -600,16 +610,25 @@ export function renderTornadoChart(el, tornado) {
     { x: 0, xanchor: "right", xshift: -6, yref: "paper", y: 1, yanchor: "bottom", text: "← Renting ahead", showarrow: false, font: { color: RENT, size: 11 } },
     { x: 0, xanchor: "left", xshift: 6, yref: "paper", y: 1, yanchor: "bottom", text: "Buying ahead →", showarrow: false, font: { color: BUY, size: 11 } },
   ];
-  // A limit label starts at your verdict, so it needs room of its own when
-  // your verdict sits near an edge. Making that room squeezes the other
-  // side, so each direction label keeps the room it had, or what it needs
-  // if that is less. Without limit labels the axis stays as it was.
+  // A limit label starts at your verdict, and each tested value starts at
+  // its bar's end and runs outward, so each needs room of its own when it
+  // starts near an edge. Making that room squeezes the other side, so each
+  // direction label keeps the room it had, or what it needs if that is
+  // less. When every label already fits, the axis stays as it was.
   const limitLabels = limitAnnotations(slots, base);
+  const endLabels = slots.flatMap((slot) =>
+    slot.heading
+      ? []
+      : slot.sides
+          .filter((side) => !side.untested && side.tested !== null)
+          .map((side) => ({ x: side.end, xanchor: side.end > base ? "left" : "right", text: endLabel(side) })),
+  );
   const plotPx = plotWidthEstimate(el, slots);
+  const spare = spareMargins(el);
   const start = [lo - pad, hi + pad];
   const range = roomForLabels(start, [
-    ...limitLabels.map((a) => ({ ...a, share: sideLabelShare(a, plotPx) })),
-    ...directionLabels.map((a) => ({ ...a, share: Math.min(sideLabelShare(a, plotPx), roomBeside(a, start)) })),
+    ...[...limitLabels, ...endLabels].map((a) => ({ ...a, share: sideLabelShare(a, plotPx, spare) })),
+    ...directionLabels.map((a) => ({ ...a, share: Math.min(sideLabelShare(a, plotPx, spare), roomBeside(a, start)) })),
   ]);
 
   const layout = baseLayout("Buy − Rent");
