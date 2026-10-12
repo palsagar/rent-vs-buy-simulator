@@ -74,6 +74,22 @@ function labelsOutside(page) {
   });
 }
 
+/**
+ * Pairs of chart labels whose boxes overlap: bar ends, limit labels, row
+ * names on a phone, and the labels above the plot.
+ */
+function overlappingLabels(page) {
+  return page.evaluate(() => {
+    const el = document.getElementById('tornado-chart');
+    const labels = [...el.querySelectorAll('text.bartext'), ...el.querySelectorAll('.annotation')]
+      .map((t) => ({ text: t.textContent, r: t.getBoundingClientRect() }));
+    return labels.flatMap((a, i) => labels.slice(i + 1).flatMap((b) =>
+      a.r.left < b.r.right && b.r.left < a.r.right && a.r.top < b.r.bottom && b.r.top < a.r.bottom
+        ? [`${a.text} × ${b.text}`]
+        : []));
+  });
+}
+
 /** What the chart was laid out for: the parts that depend on its width. */
 function tornadoLayout(page) {
   return page.evaluate(() => {
@@ -187,6 +203,25 @@ test.describe('the chart', () => {
       return el.data.map((t) => t.text[row]);
     });
     expect(ends.sort()).toEqual(['$400k', '$600k']);
+  });
+
+  test('a bar whose two tests move the answer the same way prints both at its far end', async ({ page }) => {
+    await load(page); // at 20% down, 15% adds mortgage insurance and 25% ties up more cash
+    const sides = await page.evaluate(() => {
+      const el = document.getElementById('tornado-chart');
+      const row = el.data[0].y.indexOf('Down payment');
+      return el.data.map((t) => ({ text: t.text[row], hover: t.customdata[row] }));
+    });
+    expect(sides.map((s) => s.text)).toEqual(['15% · 25%', '']);
+    expect(sides[0].hover).toMatch(/^Down payment at 15% instead of 20%<br>/);
+    expect(sides[1].hover).toMatch(/^Down payment at 25% instead of 20%<br>/);
+  });
+
+  test('the note says when one end lists both values', async ({ page }) => {
+    await load(page);
+    const note = page.locator('#tornado-note');
+    await note.locator('summary').click();
+    await expect(note).toContainText('its end lists both values');
   });
 
   test('a side clamped at a slider limit says which limit', async ({ page }) => {
@@ -399,9 +434,69 @@ test.describe('on a phone', () => {
         outside: labels.filter((r) => r.left < box.left || r.right > box.right).length,
       };
     });
-    expect(out.count).toBe(16); // two ends on each of the 8 bars
+    // Two ends on each of 7 bars; the down payment's both cost buying, so
+    // its far end prints both.
+    expect(out.count).toBe(15);
     expect(out.outside).toBe(0);
   });
+});
+
+test.describe('no two labels overlap, and every label stays inside the chart', () => {
+  const WIDTHS = [360, 390, 540, 1280];
+  const CASES = [
+    { name: 'on the default page', query: '' }, // down payment: both tests cost buying
+    ...EDGE_CASES.map(({ name, query }) => ({ name: `when ${name}`, query })),
+    { name: 'when buying is far ahead', query: '?monthlyRent=3200' },
+  ];
+  for (const width of WIDTHS) {
+    for (const { name, query } of CASES) {
+      test(`at ${width} px ${name}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 800 });
+        await load(page, query);
+        expect(await overlappingLabels(page)).toEqual([]);
+        expect((await labelsOutside(page)).outside).toEqual([]);
+      });
+    }
+  }
+
+  // Bars of zero length, from a result edited in flight: a test that
+  // leaves your verdict exactly where it is.
+  const ZERO_LENGTH = [
+    {
+      name: 'every lower test leaves your verdict where it is',
+      query: '',
+      edit: (t) => { t.low = t.low.map(() => t.base); },
+    },
+    {
+      name: 'no test moves your verdict',
+      query: '',
+      edit: (t) => {
+        t.low = t.low.map(() => t.base);
+        t.high = t.high.map(() => t.base);
+      },
+    },
+    {
+      name: 'a side at its limit is beside one that leaves your verdict where it is',
+      query: '?downPaymentPct=50',
+      edit: (t) => { t.low[t.fields.indexOf('downPaymentPct')] = t.base; },
+    },
+  ];
+  for (const width of [390, 1280]) {
+    for (const { name, query, edit } of ZERO_LENGTH) {
+      test(`at ${width} px when ${name}`, async ({ page }) => {
+        await page.route('**/api/monte-carlo', async (route) => {
+          const response = await route.fetch();
+          const body = await response.json();
+          edit(body.tornado);
+          await route.fulfill({ response, json: body });
+        });
+        await page.setViewportSize({ width, height: 800 });
+        await load(page, query);
+        expect(await overlappingLabels(page)).toEqual([]);
+        expect((await labelsOutside(page)).outside).toEqual([]);
+      });
+    }
+  }
 });
 
 test.describe('after a width change', () => {
@@ -490,6 +585,15 @@ test.describe('after a width change', () => {
       const { width, drawnWidth, narrow, rowLabels } = await tornadoLayout(page);
       return !narrow && rowLabels === 0 && drawnWidth === width;
     }).toBe(true);
+  });
+
+  test('no two labels overlap after a desktop chart narrows to 360 px', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await load(page);
+    await page.setViewportSize({ width: 360, height: 800 });
+    await expect.poll(() => phoneLayoutAtItsWidth(page)).toBe(true);
+    expect(await overlappingLabels(page)).toEqual([]);
+    expect((await labelsOutside(page)).outside).toEqual([]);
   });
 
   test('a chart hidden during the change is laid out when it shows', async ({ page }) => {

@@ -509,6 +509,14 @@ const ROOM_ROUNDS = 10;
 // their bars instead of in the left margin.
 const NARROW_MARGIN = { l: 16, r: 24 };
 
+// Plotly prints a bar's outside label past the end the bar runs to, and a
+// zero-length bar's to the right. Every label placed beside a bar end asks
+// this of the same number Plotly is given, so none is set against Plotly's
+// own choice. A sign test on that exact value, not a float comparison.
+function runsRight(x) {
+  return x >= 0;
+}
+
 // Behind the tornado, each half of the axis is tinted with the colour of
 // the strategy that is ahead there.
 const HALF_TINT_ALPHA = 0.1;
@@ -518,29 +526,46 @@ function tint(hex, alpha) {
   return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${alpha})`;
 }
 
-// One side of one row as Plotly needs it. Headings and untested sides
-// draw no bar; an untested side at a slider limit gets a label of its own
-// from limitAnnotations instead.
-function sideCell(slot, k, base) {
+// Between the two tested values when one bar end prints both.
+const BOTH_ENDS_SEPARATOR = " · ";
+
+// The labels at a row's two bar ends. Each runs outward from its own end,
+// so when both run the same way (both tests move your verdict the same
+// way, or one leaves it where it is) the nearer would print into the
+// farther. The nearer end is hidden under the farther bar anyway (one
+// colour, overlaid), so the farther end prints both, lower test first.
+function endTexts(slot, base) {
+  const texts = slot.sides.map((side) => (side.untested ? "" : endLabel(side)));
+  if (texts.includes("")) return texts;
+  const [x0, x1] = slot.sides.map((side) => side.end - base);
+  if (runsRight(x0) !== runsRight(x1)) return texts;
+  const both = texts.join(BOTH_ENDS_SEPARATOR);
+  return Math.abs(x0) > Math.abs(x1) ? [both, ""] : ["", both];
+}
+
+// One side of one row as Plotly needs it, with the text endTexts gave it.
+// Headings and untested sides draw no bar; an untested side at a slider
+// limit gets a label of its own from limitAnnotations instead.
+function sideCell(slot, k, base, text) {
   const side = slot.heading ? null : slot.sides[k];
   if (side === null || side.untested) return { x: null, text: "", hover: "" };
   const atLimit = side.limit === null ? "" : ` (the slider ${LIMIT_WORDS[side.limit]})`;
   return {
     x: side.end - base,
-    text: endLabel(side),
+    text,
     hover: `${testedPhrase({ ...slot, label: shortLabel(slot.label) }, side)}${atLimit}<br>${aheadBy(side.end)}`,
   };
 }
 
 // A side already at its slider limit tests nothing, so it has no bar. A
 // label at your verdict says why that side is empty. It sits where the
-// bar would have gone: away from the other side's bar.
+// bar would have gone: away from the other side's bar and its label.
 function limitAnnotations(slots, base) {
   return slots.flatMap((slot) => {
     if (slot.heading) return [];
     return slot.sides.flatMap((side, k) => {
       if (!side.untested || side.limit === null) return [];
-      const otherGoesRight = slot.sides[1 - k].end > base;
+      const otherGoesRight = runsRight(slot.sides[1 - k].end - base);
       return [
         {
           name: "limit-label",
@@ -582,12 +607,6 @@ function sideLabelShare(label, plotPx, spare) {
   return Math.min(MAX_LABEL_SHARE, Math.max(0, px) / plotPx);
 }
 
-// The share of the axis between a label's line and the edge it runs to.
-// A label anchored by its right end runs left of its line.
-function roomBeside(label, [x0, x1]) {
-  return (label.xanchor === "right" ? label.x - x0 : x1 - label.x) / (x1 - x0);
-}
-
 // Each request asks for at least `share` of the axis between a label's
 // line and the edge the label runs to. The axis grows on that side until
 // it has it. Growing one edge narrows the room beside every other line,
@@ -624,23 +643,22 @@ export function renderTornadoChart(el, tornado) {
   // fan chart above, so $0 is the tie in both. Each bar runs from your
   // verdict to the verdict under one tested value; a bar that crosses $0
   // flips the answer on its own.
-  const sideTrace = (k) => {
-    const cells = slots.map((s) => sideCell(s, k, base));
-    return {
-      type: "bar",
-      orientation: "h",
-      y: categories,
-      base,
-      x: cells.map((c) => c.x),
-      marker: { color: BAR },
-      text: cells.map((c) => c.text),
-      textposition: "outside",
-      cliponaxis: false,
-      textfont: { color: MUTED, size: 11 },
-      customdata: cells.map((c) => c.hover),
-      hovertemplate: "%{customdata}<extra></extra>",
-    };
-  };
+  const texts = slots.map((s) => (s.heading ? ["", ""] : endTexts(s, base)));
+  const cells = [0, 1].map((k) => slots.map((s, i) => sideCell(s, k, base, texts[i][k])));
+  const sideTrace = (k) => ({
+    type: "bar",
+    orientation: "h",
+    y: categories,
+    base,
+    x: cells[k].map((c) => c.x),
+    marker: { color: BAR },
+    text: cells[k].map((c) => c.text),
+    textposition: "outside",
+    cliponaxis: false,
+    textfont: { color: MUTED, size: 11 },
+    customdata: cells[k].map((c) => c.hover),
+    hovertemplate: "%{customdata}<extra></extra>",
+  });
   const traces = [sideTrace(0), sideTrace(1)];
 
   const ends = [0, base, ...rows.flatMap((r) => r.sides.map((s) => s.end))];
@@ -655,26 +673,22 @@ export function renderTornadoChart(el, tornado) {
     { x: 0, xanchor: "right", xshift: -6, yref: "paper", y: 1, yanchor: "bottom", text: "← Renting ahead", showarrow: false, font: { color: RENT, size: 11 } },
     { x: 0, xanchor: "left", xshift: 6, yref: "paper", y: 1, yanchor: "bottom", text: "Buying ahead →", showarrow: false, font: { color: BUY, size: 11 } },
   ];
-  // A limit label starts at your verdict, and each tested value starts at
-  // its bar's end and runs outward, so each needs room of its own when it
-  // starts near an edge. Making that room squeezes the other side, so each
-  // direction label keeps the room it had, or what it needs if that is
-  // less. When every label already fits, the axis stays as it was.
+  // A limit label starts at your verdict, each tested value starts at its
+  // bar's end and runs outward, and each direction label starts at the tie
+  // line, so each needs room of its own when it starts near an edge. A row
+  // whose two labels run the same way prints them once, at its far end.
+  // When every label already fits, the axis stays as it was.
   const limitLabels = limitAnnotations(slots, base);
-  const endLabels = slots.flatMap((slot) =>
-    slot.heading
-      ? []
-      : slot.sides
-          .filter((side) => !side.untested && side.tested !== null)
-          .map((side) => ({ x: side.end, xanchor: side.end > base ? "left" : "right", text: endLabel(side) })),
-  );
+  const endLabels = cells
+    .flat()
+    .filter((c) => c.text !== "")
+    .map((c) => ({ x: base + c.x, xanchor: runsRight(c.x) ? "left" : "right", text: c.text }));
   const plotPx = plotWidthEstimate(el, slots);
   const spare = spareMargins(el);
-  const start = [lo - pad, hi + pad];
-  const range = roomForLabels(start, [
-    ...[...limitLabels, ...endLabels].map((a) => ({ ...a, share: sideLabelShare(a, plotPx, spare) })),
-    ...directionLabels.map((a) => ({ ...a, share: Math.min(sideLabelShare(a, plotPx, spare), roomBeside(a, start)) })),
-  ]);
+  const range = roomForLabels(
+    [lo - pad, hi + pad],
+    [...limitLabels, ...endLabels, ...directionLabels].map((a) => ({ ...a, share: sideLabelShare(a, plotPx, spare) })),
+  );
 
   const layout = baseLayout("Buy − Rent");
   moveCurrencyToXAxis(layout);
