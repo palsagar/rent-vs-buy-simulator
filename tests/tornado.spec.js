@@ -217,11 +217,22 @@ test.describe('the chart', () => {
     expect(sides[1].hover).toMatch(/^Down payment at 25% instead of 20%<br>/);
   });
 
-  test('the note says when one end lists both values', async ({ page }) => {
+  test('a far end that prints both values keeps a limit mark', async ({ page }) => {
+    await load(page, '?downPaymentPct=6'); // the lower test stops at the 5% minimum
+    const texts = await page.evaluate(() => {
+      const el = document.getElementById('tornado-chart');
+      const row = el.data[0].y.indexOf('Down payment');
+      return el.data.map((t) => t.text[row]);
+    });
+    expect(texts.filter((t) => t !== '')).toEqual(['5% (min) · 11%']);
+  });
+
+  test('the note says when the far end shows both values', async ({ page }) => {
     await load(page);
     const note = page.locator('#tornado-note');
     await note.locator('summary').click();
-    await expect(note).toContainText('its end lists both values');
+    await expect(note).toContainText('Each end of a bar shows the value tested there.');
+    await expect(note).toContainText('the far end shows both values, lower value first');
   });
 
   test('a side clamped at a slider limit says which limit', async ({ page }) => {
@@ -473,6 +484,24 @@ test.describe('no two labels overlap, and every label stays inside the chart', (
       edit: (t) => {
         t.low = t.low.map(() => t.base);
         t.high = t.high.map(() => t.base);
+      },
+    },
+    {
+      name: 'a test moves your verdict down by a hair and the other moves it up',
+      query: '',
+      edit: (t) => {
+        const i = t.fields.indexOf('propertyPrice');
+        t.low[i] = t.base - 1e-9;
+        t.high[i] = t.base + 100;
+      },
+    },
+    {
+      name: 'a test moves your verdict down by the smallest step a number can take',
+      query: '',
+      edit: (t) => {
+        const i = t.fields.indexOf('propertyPrice');
+        t.low[i] = t.base - Math.abs(t.base) * Number.EPSILON;
+        t.high[i] = t.base + 100;
       },
     },
     {

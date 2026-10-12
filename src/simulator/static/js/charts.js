@@ -517,6 +517,20 @@ function runsRight(x) {
   return x >= 0;
 }
 
+// A bar shorter than this share of the axis is given to Plotly as zero
+// length. Plotly places bar ends to the hundredth of a pixel, so a much
+// shorter bar can get both ends on one spot, and Plotly then prints its
+// label on the right whichever way it runs. A thousandth of the axis is
+// under a pixel on any of these charts, and far above that rounding.
+const ZERO_BAR_SHARE = 1e-3;
+
+// A side's bar as Plotly is given it: zero when it is shorter than
+// minLength, so runsRight and Plotly see the same number.
+function barLength(side, base, minLength) {
+  const x = side.end - base;
+  return Math.abs(x) < minLength ? 0 : x;
+}
+
 // Behind the tornado, each half of the axis is tinted with the colour of
 // the strategy that is ahead there.
 const HALF_TINT_ALPHA = 0.1;
@@ -534,10 +548,10 @@ const BOTH_ENDS_SEPARATOR = " · ";
 // way, or one leaves it where it is) the nearer would print into the
 // farther. The nearer end is hidden under the farther bar anyway (one
 // colour, overlaid), so the farther end prints both, lower test first.
-function endTexts(slot, base) {
+function endTexts(slot, base, minLength) {
   const texts = slot.sides.map((side) => (side.untested ? "" : endLabel(side)));
   if (texts.includes("")) return texts;
-  const [x0, x1] = slot.sides.map((side) => side.end - base);
+  const [x0, x1] = slot.sides.map((side) => barLength(side, base, minLength));
   if (runsRight(x0) !== runsRight(x1)) return texts;
   const both = texts.join(BOTH_ENDS_SEPARATOR);
   return Math.abs(x0) > Math.abs(x1) ? [both, ""] : ["", both];
@@ -546,12 +560,12 @@ function endTexts(slot, base) {
 // One side of one row as Plotly needs it, with the text endTexts gave it.
 // Headings and untested sides draw no bar; an untested side at a slider
 // limit gets a label of its own from limitAnnotations instead.
-function sideCell(slot, k, base, text) {
+function sideCell(slot, k, base, minLength, text) {
   const side = slot.heading ? null : slot.sides[k];
   if (side === null || side.untested) return { x: null, text: "", hover: "" };
   const atLimit = side.limit === null ? "" : ` (the slider ${LIMIT_WORDS[side.limit]})`;
   return {
-    x: side.end - base,
+    x: barLength(side, base, minLength),
     text,
     hover: `${testedPhrase({ ...slot, label: shortLabel(slot.label) }, side)}${atLimit}<br>${aheadBy(side.end)}`,
   };
@@ -560,12 +574,12 @@ function sideCell(slot, k, base, text) {
 // A side already at its slider limit tests nothing, so it has no bar. A
 // label at your verdict says why that side is empty. It sits where the
 // bar would have gone: away from the other side's bar and its label.
-function limitAnnotations(slots, base) {
+function limitAnnotations(slots, base, minLength) {
   return slots.flatMap((slot) => {
     if (slot.heading) return [];
     return slot.sides.flatMap((side, k) => {
       if (!side.untested || side.limit === null) return [];
-      const otherGoesRight = runsRight(slot.sides[1 - k].end - base);
+      const otherGoesRight = runsRight(barLength(slot.sides[1 - k], base, minLength));
       return [
         {
           name: "limit-label",
@@ -643,8 +657,17 @@ export function renderTornadoChart(el, tornado) {
   // fan chart above, so $0 is the tie in both. Each bar runs from your
   // verdict to the verdict under one tested value; a bar that crosses $0
   // flips the answer on its own.
-  const texts = slots.map((s) => (s.heading ? ["", ""] : endTexts(s, base)));
-  const cells = [0, 1].map((k) => slots.map((s, i) => sideCell(s, k, base, texts[i][k])));
+  const ends = [0, base, ...rows.flatMap((r) => r.sides.map((s) => s.end))];
+  let lo = Math.min(...ends);
+  let hi = Math.max(...ends);
+  const span = hi - lo || 1;
+  lo = Math.min(lo, -span * MIN_HALF_FRACTION);
+  hi = Math.max(hi, span * MIN_HALF_FRACTION);
+  const pad = (hi - lo) * END_LABEL_PAD;
+  const start = [lo - pad, hi + pad];
+  const minLength = (start[1] - start[0]) * ZERO_BAR_SHARE;
+  const texts = slots.map((s) => (s.heading ? ["", ""] : endTexts(s, base, minLength)));
+  const cells = [0, 1].map((k) => slots.map((s, i) => sideCell(s, k, base, minLength, texts[i][k])));
   const sideTrace = (k) => ({
     type: "bar",
     orientation: "h",
@@ -661,13 +684,6 @@ export function renderTornadoChart(el, tornado) {
   });
   const traces = [sideTrace(0), sideTrace(1)];
 
-  const ends = [0, base, ...rows.flatMap((r) => r.sides.map((s) => s.end))];
-  let lo = Math.min(...ends);
-  let hi = Math.max(...ends);
-  const span = hi - lo || 1;
-  lo = Math.min(lo, -span * MIN_HALF_FRACTION);
-  hi = Math.max(hi, span * MIN_HALF_FRACTION);
-  const pad = (hi - lo) * END_LABEL_PAD;
   // The direction of each half, pinned to the tie line.
   const directionLabels = [
     { x: 0, xanchor: "right", xshift: -6, yref: "paper", y: 1, yanchor: "bottom", text: "← Renting ahead", showarrow: false, font: { color: RENT, size: 11 } },
@@ -678,7 +694,7 @@ export function renderTornadoChart(el, tornado) {
   // line, so each needs room of its own when it starts near an edge. A row
   // whose two labels run the same way prints them once, at its far end.
   // When every label already fits, the axis stays as it was.
-  const limitLabels = limitAnnotations(slots, base);
+  const limitLabels = limitAnnotations(slots, base, minLength);
   const endLabels = cells
     .flat()
     .filter((c) => c.text !== "")
@@ -686,7 +702,7 @@ export function renderTornadoChart(el, tornado) {
   const plotPx = plotWidthEstimate(el, slots);
   const spare = spareMargins(el);
   const range = roomForLabels(
-    [lo - pad, hi + pad],
+    start,
     [...limitLabels, ...endLabels, ...directionLabels].map((a) => ({ ...a, share: sideLabelShare(a, plotPx, spare) })),
   );
 
