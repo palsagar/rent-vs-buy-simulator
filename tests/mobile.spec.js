@@ -223,9 +223,13 @@ test.describe('rotating a landscape phone to portrait', () => {
 
 test('tapping a chart still shows its values', async ({ page }) => {
   await page.evaluate(() => document.getElementById('decision-chart').scrollIntoView({ block: 'center' }));
-  const box = await page.locator('#decision-chart').boundingBox();
-  await page.touchscreen.tap(box.x + box.width * 0.4, box.y + box.height / 2);
-  await expect(page.locator('#decision-chart .hoverlayer')).toContainText('Buy');
+  // A tap that lands while Plotly is still settling (slower Linux runners) can be
+  // dropped, so measure and tap again until the values appear.
+  await expect(async () => {
+    const box = await page.locator('#decision-chart').boundingBox();
+    await page.touchscreen.tap(box.x + box.width * 0.4, box.y + box.height / 2);
+    await expect(page.locator('#decision-chart .hoverlayer')).toContainText('Buy', { timeout: 1_500 });
+  }).toPass({ timeout: 15_000 });
 });
 
 test('the phone-size slider thumb rule survives CSS parsing', async ({ page }) => {
