@@ -930,6 +930,7 @@ footer a { color: var(--accent-text); text-decoration: none; overflow-wrap: anyw
   #print-summary dt { color: var(--muted); }
   #print-summary dd { margin: 0; }
   #print-summary .print-summary-heading { grid-column: 1 / -1; margin-top: 8px; font-weight: 600; color: var(--text); }
+  #print-stale { margin: 4px 0 8px; font-size: 12px; font-weight: 600; color: var(--text); }
   #print-summary-link { margin: 0; font-size: 11px; overflow-wrap: anywhere; color: var(--muted); }
   .card, #verdict-hero { break-inside: avoid; border-color: var(--border); }
   .chart {

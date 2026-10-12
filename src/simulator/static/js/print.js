@@ -7,8 +7,8 @@ import { changedFromRegion } from "./advanced.js";
 import { trackEvent } from "./analytics.js";
 import { INPUT_DEFS } from "./fields.js";
 import { regionDefaults } from "./inputs.js";
-import { redrawCharts } from "./results.js";
-import { getConfig, getRegionId, shareUrl } from "./state.js";
+import { redrawCharts, shownScenario, verdictIsCurrent } from "./results.js";
+import { getConfig, getFtb, getRegionId, shareUrl } from "./state.js";
 
 // About the width of an A4 or Letter page inside the default margins, less
 // the card's padding.
@@ -22,8 +22,13 @@ function formatValue(def, stored) {
   return def.fmt(stored * (def.scale ?? 1));
 }
 
+// The printed numbers are the ones the printed results were computed for,
+// which differ from the live ones while a change is updating or after it
+// failed (the page then also says so).
 function fillSummary(regions) {
-  const cfg = getConfig();
+  const shown = shownScenario() ?? { cfg: getConfig(), regionId: getRegionId(), ftb: getFtb() };
+  const { cfg } = shown;
+  document.getElementById("print-stale").hidden = verdictIsCurrent();
   const list = document.getElementById("print-summary-list");
   list.replaceChildren();
   const row = (label, value) => {
@@ -33,15 +38,17 @@ function fillSummary(regions) {
     dd.textContent = value;
     list.append(dt, dd);
   };
-  const region = regions.find((r) => r.id === getRegionId());
+  const region = regions.find((r) => r.id === shown.regionId);
   if (region) row("Region", region.label);
   for (const def of INPUT_DEFS) {
     if (def.section !== "advanced") row(def.label, formatValue(def, cfg[def.key]));
   }
   // Only what differs from the region; with no region, every Advanced value.
   // A field another field switches off is hidden on screen and does not
-  // count, so it is not printed either.
-  const defaults = regionDefaults();
+  // count, so it is not printed either. The live region's defaults only
+  // describe results computed in that region with that relief setting.
+  const sameRegion = shown.regionId === getRegionId() && shown.ftb === getFtb();
+  const defaults = sameRegion ? regionDefaults() : null;
   const changed = INPUT_DEFS.filter(
     (def) =>
       def.section === "advanced" &&
@@ -55,7 +62,7 @@ function fillSummary(regions) {
     list.append(heading);
     for (const def of changed) row(def.label, formatValue(def, cfg[def.key]));
   }
-  document.getElementById("print-summary-link").textContent = `Open this scenario online: ${shareUrl()}`;
+  document.getElementById("print-summary-link").textContent = `Open this scenario online: ${shareUrl(shown)}`;
 }
 
 // Each chart at the given width ("" for its screen width), drawn again for

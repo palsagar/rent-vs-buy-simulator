@@ -226,6 +226,14 @@ export function renderSimulate(data, cfg) {
   };
 }
 
+/**
+ * The scenario the results on screen were computed for, as
+ * `{ cfg, regionId, ftb }`, or null before the first result.
+ */
+export function shownScenario() {
+  return lastSim && { cfg: lastSim.cfg, regionId: lastSim.regionId, ftb: lastSim.ftb };
+}
+
 // Whether the verdict on screen belongs to the live config, so Share
 // never pairs a link with the verdict of a different scenario.
 export function verdictIsCurrent() {

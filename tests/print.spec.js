@@ -70,6 +70,9 @@ test('the summary lists the Advanced values that differ from the region', async 
     input.value = 4;
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
+  // The summary prints the numbers the results are for, so wait for them.
+  await expect(page.locator('#verdict-hero')).toHaveClass(/stale/);
+  await expect(page.locator('#verdict-hero')).not.toHaveClass(/stale/);
   await startPrint(page);
   const summary = page.locator('#print-summary');
   await expect(summary).toContainText('Changed in Advanced');
@@ -86,6 +89,33 @@ test('the summary leaves out an Advanced value that does not apply', async ({ pa
   await startPrint(page);
   await expect(page.locator('#print-summary')).toBeVisible();
   await expect(page.locator('#print-summary')).not.toContainText('Mortgage insurance');
+});
+
+test('when the latest change failed, the page prints the numbers its results are for', async ({ page }) => {
+  await load(page);
+  await page.route('**/api/simulate', (route) =>
+    route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ detail: 'boom' }) }),
+  );
+  await page.evaluate(() => {
+    const price = document.querySelector('#core-inputs input[type=range]');
+    price.value = 750000;
+    price.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await expect(page.locator('#error-banner')).toBeVisible();
+  await startPrint(page);
+  const summary = page.locator('#print-summary');
+  await expect(summary).toContainText('$500k');
+  await expect(summary).not.toContainText('$750k');
+  await expect(page.locator('#print-summary-link')).not.toContainText('propertyPrice=750000');
+  await expect(page.locator('#print-stale')).toBeVisible();
+  await expect(page.locator('#print-stale')).toHaveText('These results are for the numbers below, not your latest change.');
+});
+
+test('an up-to-date page prints no stale notice', async ({ page }) => {
+  await load(page);
+  await startPrint(page);
+  await expect(page.locator('#print-summary')).toBeVisible();
+  await expect(page.locator('#print-stale')).toBeHidden();
 });
 
 test('the page prints to PDF', async ({ page, browserName }) => {

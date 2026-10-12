@@ -149,13 +149,13 @@ export function setFtb(on) {
   scheduleUrlWrite();
 }
 
-function currentQuery() {
+function currentQuery(cfg = config, region = regionId, relief = ftb) {
   const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(config)) {
+  for (const [key, value] of Object.entries(cfg)) {
     if (value !== DEFAULT_CONFIG[key]) params.set(key, value);
   }
-  if (regionId) params.set("r", regionId);
-  if (ftb !== null) params.set("ftb", ftb ? "1" : "0");
+  if (region) params.set("r", region);
+  if (relief !== null) params.set("ftb", relief ? "1" : "0");
   const qs = params.toString();
   return qs ? `?${qs}&v=${URL_SCHEMA_VERSION}` : "";
 }
@@ -172,9 +172,13 @@ function writeUrl() {
 /**
  * An absolute link to the current scenario. Built from the live config,
  * so it is current even while the debounced address-bar write is pending.
+ * Given a `{ cfg, regionId, ftb }` scenario, the link to that one instead.
  */
-export function shareUrl() {
-  return `${location.origin}${location.pathname}${currentQuery()}`;
+export function shareUrl(scenario) {
+  const query = scenario
+    ? currentQuery(scenario.cfg, scenario.regionId, scenario.ftb)
+    : currentQuery();
+  return `${location.origin}${location.pathname}${query}`;
 }
 
 // Per-field validation metadata derived from INPUT_DEFS (the single source
