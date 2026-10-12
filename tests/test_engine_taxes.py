@@ -14,6 +14,8 @@ from tests.test_engine_core import run_flat, taxfree_config
 
 class TestInterestDeduction:
     def test_savings_credited_after_each_completed_year(self):
+        # At face value and never invested: disclosed in formulas.md §6 and
+        # the US and NL notes, which test_regions.py checks.
         cfg = taxfree_config(
             interest_deduction_enabled=True,
             marginal_tax_rate_pct=25.0,
