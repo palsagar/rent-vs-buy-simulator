@@ -213,9 +213,7 @@ class TestBundleContract:
         # that makes the UI act on it.
         for region in _available():
             joined = " ".join(region["notes"]).lower()
-            describes_cliff = "cannot claim the relief" in joined or (
-                "startersvrijstelling" in joined and "or less" in joined
-            )
+            describes_cliff = "switches itself off above that price" in joined
             if describes_cliff:
                 assert region["firstTimeBuyerMaxPrice"] is not None, (
                     f"{region['id']}: notes describe a relief cliff but no "
@@ -675,7 +673,9 @@ class TestUnitedKingdom:
         notes = " ".join(self._uk()["notes"])
         assert "£500,000" in notes  # the FTB relief withdrawal cliff
         assert "£925,000" in notes  # the SDLT band divergence above the line
-        assert "council tax" in notes.lower()  # the rent-exclusivity premise
+        # The council-tax premise (rents exclusive of it) is kept in a
+        # regions.py comment, not a note: it shifts the monthly costs
+        # shown but cannot change the verdict.
 
 
 class TestAllRegionsShip:
