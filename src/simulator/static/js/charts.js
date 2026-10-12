@@ -461,6 +461,33 @@ function sideCell(slot, k, base) {
   };
 }
 
+// A side already at its slider limit tests nothing, so it has no bar. A
+// label at your verdict says why that side is empty. It sits where the
+// bar would have gone: away from the other side's bar.
+function limitAnnotations(slots, base) {
+  return slots.flatMap((slot) => {
+    if (slot.heading) return [];
+    return slot.sides.flatMap((side, k) => {
+      if (!side.untested || side.limit === null) return [];
+      const otherGoesRight = slot.sides[1 - k].end > base;
+      return [
+        {
+          name: "limit-label",
+          x: base,
+          y: slot.label,
+          xanchor: otherGoesRight ? "right" : "left",
+          xshift: otherGoesRight ? -4 : 4,
+          text: endLabel(side),
+          hovertext: `${slot.label} is already at its slider ${LIMIT_WORDS[side.limit]}, so it can't be tested ${side.direction}.`,
+          showarrow: false,
+          font: { color: MUTED, size: 11 },
+          hoverlabel: { bgcolor: BAR }, // the bars' own hover style
+        },
+      ];
+    });
+  });
+}
+
 export function renderTornadoChart(el, tornado) {
   const base = tornado.base;
   const rows = tornadoRows(tornado);
@@ -537,6 +564,7 @@ export function renderTornadoChart(el, tornado) {
     { x: 0, xanchor: "right", xshift: -6, yref: "paper", y: 1, yanchor: "bottom", text: "← Renting ahead", showarrow: false, font: { color: RENT, size: 11 } },
     { x: 0, xanchor: "left", xshift: 6, yref: "paper", y: 1, yanchor: "bottom", text: "Buying ahead →", showarrow: false, font: { color: BUY, size: 11 } },
   ];
+  layout.annotations.push(...limitAnnotations(slots, base));
   if (el.clientWidth < NARROW_CHART_PX) {
     layout.yaxis.showticklabels = false;
     layout.yaxis.automargin = false;

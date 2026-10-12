@@ -152,17 +152,71 @@ test.describe('the chart', () => {
       document.getElementById('tornado-chart').data.flatMap((t) => t.text),
     );
     expect(texts.filter((t) => /\((min|max)\)/.test(t))).toEqual([]);
+    expect(await page.evaluate(() =>
+      document.getElementById('tornado-chart').layout.annotations.filter((a) => a.name === 'limit-label').length,
+    )).toBe(0);
   });
 
-  test('a side stopped at its slider limit draws nothing', async ({ page }) => {
+  test('a side already at its slider limit is labelled at your verdict', async ({ page }) => {
     await load(page, '?downPaymentPct=50'); // the slider maximum: it can only go down
-    const sides = await page.evaluate(() => {
+    const { sides, labels, base } = await page.evaluate(() => {
       const el = document.getElementById('tornado-chart');
       const row = el.data[0].y.indexOf('Down payment');
-      return el.data.map((t) => ({ x: t.x[row], text: t.text[row], hover: t.customdata[row] }));
+      return {
+        sides: el.data.map((t) => ({ x: t.x[row], text: t.text[row], hover: t.customdata[row] })),
+        labels: el.layout.annotations.filter((a) => a.name === 'limit-label'),
+        base: el.data[0].base,
+      };
     });
     expect(sides[0].text).toBe('45%');
-    expect(sides[1]).toEqual({ x: null, text: '', hover: '' });
+    expect(sides[1]).toEqual({ x: null, text: '', hover: '' }); // still no bar
+    expect(labels).toHaveLength(1);
+    expect(labels[0]).toMatchObject({
+      y: 'Down payment',
+      x: base,
+      text: '50% (max)',
+      hovertext: "Down payment is already at its slider maximum, so it can't be tested higher.",
+    });
+    await expect(page.locator('#tornado-chart .annotation-text', { hasText: '50% (max)' })).toBeVisible();
+  });
+
+  test('a limit label hovers in the same style as the bars', async ({ page }) => {
+    await load(page, '?downPaymentPct=50');
+    const { label, bar } = await page.evaluate(() => {
+      const el = document.getElementById('tornado-chart');
+      return {
+        label: el.layout.annotations.find((a) => a.name === 'limit-label').hoverlabel?.bgcolor,
+        bar: el.data[0].marker.color,
+      };
+    });
+    expect(label).toBe(bar);
+  });
+
+  test('a side already at its slider minimum says so', async ({ page }) => {
+    await load(page, '?monthlyRent=500'); // the slider minimum: it can only go up
+    const labels = await page.evaluate(() =>
+      document.getElementById('tornado-chart').layout.annotations.filter((a) => a.name === 'limit-label'),
+    );
+    expect(labels).toHaveLength(1);
+    expect(labels[0]).toMatchObject({
+      y: 'Monthly rent',
+      text: '$500 (min)',
+      hovertext: "Monthly rent is already at its slider minimum, so it can't be tested lower.",
+    });
+  });
+
+  test('the summary never carries a limit mark', async ({ page }) => {
+    for (const query of ['?downPaymentPct=50', '?downPaymentPct=47', '?monthlyRent=500', '?propertyPrice=1900000']) {
+      await load(page, query);
+      await expect(page.locator('#tornado-summary')).not.toContainText(/\((min|max)\)/);
+    }
+  });
+
+  test('the note says how a limit is marked', async ({ page }) => {
+    await load(page);
+    const note = page.locator('#tornado-note');
+    await note.locator('summary').click();
+    await expect(note).toContainText('A side that stops at a limit is marked (min) or (max).');
   });
 
   test('both sides of a bar share one neutral colour', async ({ page }) => {
@@ -218,6 +272,19 @@ test.describe('on a phone', () => {
       };
     });
     expect([...labels].sort()).toEqual([...rows].sort());
+  });
+
+  test('a limit label stays inside the chart', async ({ page }) => {
+    await load(page, '?downPaymentPct=50');
+    const out = await page.evaluate(() => {
+      const el = document.getElementById('tornado-chart');
+      const box = el.getBoundingClientRect();
+      const label = [...el.querySelectorAll('.annotation-text')].find((t) => t.textContent === '50% (max)');
+      if (label === undefined) return { found: false, inside: false };
+      const r = label.getBoundingClientRect();
+      return { found: true, inside: r.left >= box.left && r.right <= box.right };
+    });
+    expect(out).toEqual({ found: true, inside: true });
   });
 
   test('the tested values at the bar ends stay inside the chart', async ({ page }) => {
